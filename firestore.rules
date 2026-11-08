@@ -1,0 +1,38 @@
+// =====================================================================
+//  Firestore 安全規則 — 專案 kb-forum(新版平台專用)
+//  貼上位置:Firebase 控制台 → Firestore Database → 規則 → 取代全部內容 → 發布
+//
+//  【說明】新版採「簡易帳號」:帳號與(加密後的)密碼存在資料庫裡,網頁不需要 Firebase 登入。
+//  因此規則只能限制「可以寫什麼格式、不能刪除」,無法限制「是誰在寫」。適合小型研究班級使用;
+//  日後若要對外公開或規模變大,請改用 Firebase Authentication。
+// =====================================================================
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 使用者、班級、組別、討論區、回收桶、設定、貼文(每 500 則一份文件)
+    match /kb_v2/{docId} {
+      allow read: if true;
+      allow create, update: if (docId in ['users', 'classes', 'groups', 'topics', 'trash', 'settings']
+                                || docId.matches('nodes__[A-Za-z0-9_-]+__[0-9]+'))
+        && request.resource.data.keys().hasOnly(['items', 'value'])
+        && (!('items' in request.resource.data) || (request.resource.data.items is map && request.resource.data.items.size() <= 2000));
+      allow delete: if false;
+    }
+
+    // 稽核紀錄:每天一份文件,只能新增與更新
+    match /kb_v2_audit/{day} {
+      allow read: if true;
+      allow create, update: if day.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && request.resource.data.keys().hasOnly(['items'])
+        && request.resource.data.items is map
+        && request.resource.data.items.size() <= 5000;
+      allow delete: if false;
+    }
+
+    // 其他所有路徑一律關閉
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

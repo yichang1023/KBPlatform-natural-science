@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的知識羅盤 | KB 知識建構平台</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%234f46e5%27/%3E%3Ctext x=%2732%27 y=%2743%27 font-family=%27sans-serif%27 font-size=%2728%27 font-weight=%27700%27 fill=%27white%27 text-anchor=%27middle%27%3EKB%3C/text%3E%3C/svg%3E">
+
+    <!-- 🔥 1. 引入 Firebase SDK -->
+        <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <script id="kb-net-player">
+/* 網絡圖「時間軸播放器」:依發文日期逐日重播關係網絡的形成過程(可暫停、拖曳時間軸、調整速度、自動播放) */
+(function () {
+  var SPEEDS = [0.5, 1, 2, 4, 8];
+  var players = {};
+  function lsGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function dayKey(ts) { var d = new Date(ts); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  // 依時間戳列表建立「發文日」時間軸
+  // 播放從「起點」開始(尚無任何互動,只有自己/空白),之後每個發文日再拆成 3 小步,連線依回覆的先後逐步長出來。
+  // 論壇只記錄「日期」沒有時分,所以同一天內的先後以討論串順序估計:先有主貼文,再有回應、回應的回應。
+  var SUB = 3;
+  window.kbMakeDays = function (timestamps) {
+    var seen = {}, labels = [];
+    timestamps.slice().sort(function (a, b) { return a - b; }).forEach(function (ts) {
+      var k = dayKey(ts);
+      if (seen[k] === undefined) { var d = new Date(ts); seen[k] = labels.length; labels.push((d.getMonth() + 1) + '/' + d.getDate()); }
+    });
+    var steps = [-1], stepLabels = ['起點'];
+    labels.forEach(function (lb, k) { for (var j = 1; j <= SUB; j++) { steps.push(k - 1 + j / SUB + 1e-9); stepLabels.push(j < SUB ? lb + ' (' + j + '/' + SUB + ')' : lb); } });
+    return {
+      labels: labels, steps: steps, stepLabels: stepLabels,
+      // index(ts):該日結束時的位置;index(ts, pos):該日內第 pos(0~1)的位置
+      index: function (ts, pos) { var v = seen[dayKey(ts)]; if (v === undefined) return 0; return pos === undefined ? v : v - 1 + pos; }
+    };
+  };
+  // 同一天內依討論串深度(先主貼文、後回應)排序,回傳每則貼文在當天的位置(0~1)
+  window.kbThreadPos = function (nodes, tsOf) {
+    var byId = {}, depth = {}, groups = {}, pos = {};
+    nodes.forEach(function (n) { byId[n.id] = n; });
+    function dep(n) { if (depth[n.id] !== undefined) return depth[n.id]; var d = 0, cur = n, g = 0; while (cur && cur.parentId && byId[cur.parentId] && g++ < 300) { d++; cur = byId[cur.parentId]; } return (depth[n.id] = d); }
+    nodes.forEach(function (n) { var k = dayKey(tsOf(n)); (groups[k] = groups[k] || []).push(n); });
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k].slice().sort(function (a, b) { return (dep(a) - dep(b)) || (String(a.id) < String(b.id) ? -1 : 1); });
+      g.forEach(function (n, i) { pos[n.id] = (i + 1) / g.length; });
+    });
+    return function (id) { var v = pos[id]; return v === undefined ? 1 : v; };
+  };
+  // 連線事件 → 逐日累積的連線(同一方向合併,線越粗代表次數越多)
+  window.kbEdgeFrames = function (events, colors) {
+    var cache = {};
+    return function (i) {
+      if (cache[i]) return cache[i];
+      var m = {};
+      events.forEach(function (e) {
+        if (e.d > i) return;
+        var k = e.from + '>' + e.to;
+        if (!m[k]) m[k] = { from: e.from, to: e.to, count: 0, types: {} };
+        m[k].count++; if (e.type) m[k].types[e.type] = (m[k].types[e.type] || 0) + 1;
+      });
+      cache[i] = Object.keys(m).map(function (k) {
+        var e = m[k], ed = { id: k, from: e.from, to: e.to, arrows: 'to', width: Math.min(6, 1 + e.count / 6), title: e.count + ' 次回應' };
+        if (colors) { var dom = Object.keys(e.types).sort(function (a, b) { return e.types[b] - e.types[a]; })[0]; if (dom && colors[dom]) ed.color = { color: colors[dom] }; }
+        return ed;
+      });
+      return cache[i];
+    };
+  };
+  window.kbAttachPlayer = function (o) {
+    if (window.__kbReplaying) return null;
+    if (players[o.id]) players[o.id].destroy();
+    var N = o.labels.length;
+    if (N < 2) return null;
+    var st = { i: N - 1, playing: false, timer: null, stopT: null, gone: false };
+    var speed = Number(lsGet('kb_net_speed', '1')); if (SPEEDS.indexOf(speed) < 0) speed = 1;
+    var auto = lsGet('kb_net_autoplay', '0') === '1';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-kbnet="' + o.id + '"]'), function (x) { x.remove(); });
+    var wrap = document.createElement('div');
+    wrap.setAttribute('data-kbnet', o.id);
+    wrap.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:11px;color:#334155';
+    wrap.innerHTML = '<button type="button" data-a="play" style="padding:3px 10px;border-radius:6px;background:#4f46e5;color:#fff;font-weight:700;white-space:nowrap">▶ 播放</button>' +
+      '<button type="button" data-a="sprev" title="回到上一步" style="padding:3px 9px;border-radius:6px;background:#e0e7ff;color:#3730a3;font-weight:700;white-space:nowrap">◀ 上一步</button><button type="button" data-a="snext" title="前進到下一步" style="padding:3px 9px;border-radius:6px;background:#e0e7ff;color:#3730a3;font-weight:700;white-space:nowrap">下一步 ▶</button>' +
+      '<input type="range" data-a="seek" min="0" max="' + (N - 1) + '" value="' + (N - 1) + '" style="flex:1;min-width:90px">' +
+      '<span data-a="label" style="min-width:44px;font-weight:700;text-align:center"></span>' +
+      '<label style="display:flex;align-items:center;gap:3px;white-space:nowrap">速度 <select data-a="speed" style="border:1px solid #cbd5e1;border-radius:4px;padding:1px 3px;background:#fff">' +
+      SPEEDS.map(function (s) { return '<option value="' + s + '"' + (s === speed ? ' selected' : '') + '>' + s + 'x</option>'; }).join('') + '</select></label>' +
+      '<label style="display:flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap"><input type="checkbox" data-a="auto"' + (auto ? ' checked' : '') + '> 自動播放</label>';
+    (o.anchor || o.container).insertAdjacentElement('afterend', wrap);
+    if (o.explainTitle && window.kbAddExplain) window.kbAddExplain(wrap, { title: o.explainTitle, table: function () { return window.kbNetworkTable(o); } }, o.id);
+    var guide = null;
+    var btn = wrap.querySelector('[data-a=play]'), seek = wrap.querySelector('[data-a=seek]'), label = wrap.querySelector('[data-a=label]');
+    var spSel = wrap.querySelector('[data-a=speed]'), autoCb = wrap.querySelector('[data-a=auto]');
+    try { guide = window.kbNetGuide ? window.kbNetGuide(wrap, Object.assign({}, o, { jump: function (k) { apply(k, true); } })) : null; } catch (e) { console.error(e); }
+
+    function alive() { return !st.gone && o.network && o.network.body && o.network.body.data; }
+    function physOn() { try { o.network.setOptions({ physics: { enabled: true, stabilization: false, barnesHut: { damping: 0.5 } } }); } catch (e) {} }
+    function physOffLater(ms) { clearTimeout(st.stopT); st.stopT = setTimeout(function () { try { if (alive()) o.network.setOptions({ physics: false }); } catch (e) {} }, ms); }
+    function apply(i, animate) {
+      if (!alive()) return;
+      st.i = i;
+      var f = o.build(o.steps ? o.steps[i] : i), ids, cur, rm;
+      ids = f.nodes.map(function (n) { return n.id; }); cur = o.nodesDS.getIds();
+      rm = cur.filter(function (id) { return ids.indexOf(id) < 0; }); if (rm.length) o.nodesDS.remove(rm);
+      o.nodesDS.update(f.nodes);
+      ids = f.edges.map(function (e) { return e.id; }); cur = o.edgesDS.getIds();
+      rm = cur.filter(function (id) { return ids.indexOf(id) < 0; }); if (rm.length) o.edgesDS.remove(rm);
+      o.edgesDS.update(f.edges);
+      seek.value = i; label.textContent = o.labels[i];
+      if (guide) guide.update(i);
+      if (animate) { physOn(); physOffLater(1500); }
+    }
+    function stopTimer() { clearTimeout(st.timer); st.timer = null; }
+    function setPlaying(p) { st.playing = p; btn.textContent = p ? '⏸ 暫停' : '▶ 播放'; if (!p) stopTimer(); }
+    function schedule() { stopTimer(); var dayEnd = st.i > 0 && !/\(/.test(String(o.labels[st.i])); st.timer = setTimeout(tick, (900 + (dayEnd ? 1400 : 0)) / speed); }
+    function tick() {
+      if (!st.playing || !alive()) { setPlaying(false); return; }
+      if (st.i >= N - 1) { setPlaying(false); physOffLater(1500); return; }
+      apply(st.i + 1, true);
+      if (st.i >= N - 1) { setPlaying(false); physOffLater(1800); } else schedule();
+    }
+    function play() {
+      if (!alive()) return;
+      if (st.i >= N - 1) apply(0, true);
+      setPlaying(true); schedule();
+    }
+    btn.onclick = function () { if (st.playing) setPlaying(false); else play(); };
+    seek.oninput = function () { setPlaying(false); apply(Number(seek.value), true); };
+    // 一步一步看:上一步 / 下一步(會先暫停播放)
+    wrap.querySelector('[data-a=sprev]').onclick = function () { setPlaying(false); apply(Math.max(0, st.i - 1), true); };
+    wrap.querySelector('[data-a=snext]').onclick = function () { setPlaying(false); apply(Math.min(N - 1, st.i + 1), true); };
+    spSel.onchange = function () { speed = Number(spSel.value); lsSet('kb_net_speed', String(speed)); if (st.playing) schedule(); };
+    autoCb.onchange = function () { lsSet('kb_net_autoplay', autoCb.checked ? '1' : '0'); if (autoCb.checked && !st.playing) { apply(0, true); play(); } };
+    label.textContent = o.labels[N - 1];
+    var api = { destroy: function () { st.gone = true; stopTimer(); clearTimeout(st.stopT); if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, play: play, state: st };
+    players[o.id] = api;
+    if (auto) setTimeout(function () { if (alive() && !st.playing && st.i >= N - 1) { apply(0, true); play(); } }, 700);
+    return api;
+  };
+  window.kbPlayers = players;
+})();
+</script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+<script src="kb-config.js"></script>
+<script src="kb-core.js"></script>
+<script src="kb-cloud.js"></script>
+    <script src="kb-ui.js"></script>
+<script src="kb-replay.js"></script>
+<script src="kb-ai-story.js"></script>
+<script src="kb-forest.js"></script>
+<script src="kb-concept.js?v=20261109b"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.6.1"></script>
+    <script src="https://unpkg.com/vis-network@10.1.4/standalone/umd/vis-network.min.js"></script>
+    <!-- Markdown for AI -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
+
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; padding-top: 28px; color: #334155; }
+
+        /* 現代化卡片設計 */
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid #f1f5f9;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        .card:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04); }
+
+        /* 自訂細緻捲軸 */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* 想法演化軌跡的連線樣式 */
+        .evolution-line {
+            position: absolute; left: 20px; top: 40px; bottom: 0; width: 2px;
+            background: linear-gradient(to bottom, #e2e8f0 80%, transparent); z-index: 0;
+        }
+        .evolution-item:last-child .evolution-line { display: none; }
+
+        /* 漣漪動畫效果 */
+        @keyframes ripple {
+            0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.3); }
+            100% { box-shadow: 0 0 0 15px rgba(79, 70, 229, 0); }
+        }
+        .ripple-effect { animation: ripple 2s infinite; }
+
+        .fade-in { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 標題共用樣式 */
+        .section-title { font-size: 0.875rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; display: flex; align-items: center;}
+
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 1rem; }
+        .modal-content { background-color: #ffffff; margin: auto; padding: 0; border-radius: 16px; width: 100%; max-width: 500px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;}
+        @keyframes modalFadeIn { from {opacity: 0; transform: scale(0.95) translateY(10px);} to {opacity: 1; transform: scale(1) translateY(0);} }
+        .modal-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; flex-shrink: 0; }
+        .modal-body { padding: 1.5rem; overflow-y: auto; }
+        .close { color: #94a3b8; font-size: 24px; cursor: pointer; transition: color 0.2s; }
+        .close:hover { color: #0f172a; }
+
+        /* Buttons */
+        .ref-btn { color: #94a3b8; background-color: transparent; padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; display: inline-flex; align-items: center; transition: all 0.2s; margin-left: auto; cursor: pointer; border: 1px solid #e2e8f0;}
+        .ref-btn:hover { color: #4f46e5; background-color: #e0e7ff; border-color: #c7d2fe;}
+        .ref-btn-mini { position: absolute; top: 8px; right: 8px; font-size: 0.65rem; padding: 2px 6px; color: #cbd5e1; background: transparent; cursor: pointer; transition: all 0.2s; border-radius: 4px;}
+        .ref-btn-mini:hover { color: #4f46e5; background: #f1f5f9; }
+
+        /* Legend & Tags */
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+        .word-tag { display: inline-block; padding: 4px 10px; border-radius: 999px; margin: 3px; font-weight: 500; transition: transform 0.2s;}
+        .word-tag:hover { transform: translateY(-1px); }
+
+        .eureka-chart-container { position: relative; height: 230px; width: 100%; }
+        .lineage-tree { border-left: 2px dashed #cbd5e1; margin-left: 12px; padding-left: 16px; }
+
+        /* 🔥 新增 AI 內容的 Markdown 渲染樣式 */
+        .ai-insight-content h3 { font-size: 0.75rem; font-weight: 900; color: #4f46e5; margin-top: 1rem; margin-bottom: 0.5rem; letter-spacing: 0.05em; display: flex; align-items: center; border-bottom: 1px solid #e0e7ff; padding-bottom: 4px;}
+        .ai-insight-content h3:first-child { margin-top: 0; }
+        .ai-insight-content h3::before { content: "✨"; margin-right: 6px; font-size: 1rem;}
+        .ai-insight-content p { margin-bottom: 0.75rem; font-size: 0.8125rem; font-weight: 500; color: #475569; line-height: 1.6;}
+        .ai-insight-content strong { color: #0f172a; background-color: #f1f5f9; padding: 0 4px; border-radius: 4px;}
+
+        /* 新增：櫻花花瓣飄落動畫 */
+        @keyframes falling-petal {
+            0% { transform: translateY(-10px) rotate(0deg) scale(0.8); opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { transform: translateY(60px) rotate(90deg) scale(1); opacity: 0; }
+        }
+        .sakura-petal {
+            position: absolute;
+            background: linear-gradient(135deg, #fbcfe8 0%, #f472b6 100%);
+            border-radius: 15px 2px 15px 2px;
+            width: 10px; height: 10px;
+            animation: falling-petal 3s infinite linear;
+            opacity: 0;
+            box-shadow: 0 2px 4px rgba(244, 114, 182, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Status Bar -->
+    <div class="fixed top-0 left-0 w-full bg-slate-900 text-white text-[10px] py-1.5 px-4 flex justify-between items-center z-[100] border-b border-slate-700 font-mono h-7 shadow-sm">
+        <div class="flex items-center gap-4">
+            <span class="flex items-center gap-1.5"><i class="fas fa-server text-emerald-400"></i> SYSTEM: <span class="text-emerald-400 font-bold">ONLINE</span></span>
+            <span class="hidden sm:flex items-center gap-1.5"><i class="fas fa-database text-amber-400"></i> DB: <span id="db-status-text" class="text-amber-400">CONNECTING...</span></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+            <i class="fas fa-robot text-slate-400"></i> AI Status: <span id="ai-status-indicator" class="text-slate-300">Checking...</span>
+        </div>
+    </div>
+
+    <!-- 頂部導航 -->
+    <nav class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white shadow-md sticky top-7 z-50">
+        <div class="container mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center space-x-3 w-full sm:w-auto justify-center sm:justify-start">
+
+
+
+                <div>
+                    <h1 class="text-lg font-bold tracking-wide">知識羅盤 <span class="font-normal opacity-80 text-sm">| 學習者洞察</span></h1>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4 w-full sm:w-auto justify-center sm:justify-end overflow-x-auto pb-1 sm:pb-0">
+                <div class="flex items-center gap-2 mr-2">
+                    <a href="index.html" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap"><i class="fas fa-home"></i> <span class="hidden sm:inline">首頁</span></a>
+<a href="Knowledge Building Forum.html?home=1" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap"><i class="fas fa-comments"></i> <span class="hidden sm:inline">論壇</span></a>
+                    <a href="ANALYTICS-teacher.html" id="nav-teacher-link" style="display:none" class="bg-amber-400/90 hover:bg-amber-400 text-slate-900 px-3 py-1.5 rounded-md text-xs font-bold transition items-center gap-1.5 whitespace-nowrap"><i class="fas fa-chart-line"></i> <span class="hidden sm:inline">老師分析</span></a>
+                    <a href="setup.html" id="nav-setup-link" style="display:none" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold transition items-center gap-1.5 whitespace-nowrap"><i class="fas fa-gear"></i> <span class="hidden sm:inline">設定中心</span></a>
+                    <button onclick="syncData()" id="sync-btn" class="bg-emerald-500/80 hover:bg-emerald-500 px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap"><i class="fas fa-sync-alt"></i> <span class="hidden sm:inline">更新資料</span></button>
+                </div>
+                <div class="text-right hidden md:block">
+                    <span class="block font-bold text-sm" id="user-name">訪客</span>
+                </div>
+                <img id="current-user-avatar" src="https://ui-avatars.com/api/?name=User&background=random" class="w-9 h-9 rounded-full border-2 border-indigo-300 flex-shrink-0 shadow-sm" alt="User Avatar">
+                <div id="nav-user-select-container"></div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要內容區 -->
+    <main class="container mx-auto px-4 sm:px-6 py-8 space-y-8 fade-in pb-20">
+
+        <!-- ==========================================
+             第一層：總覽與成就 (Hero Section)
+        =========================================== -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- 左側：角色身分卡 (佔 5 格) -->
+            <div class="card lg:col-span-5 bg-gradient-to-br from-white to-indigo-50/50 relative overflow-hidden flex flex-col justify-between">
+                <!-- 背景裝飾 -->
+                <div class="absolute -right-10 -top-10 w-48 h-48 bg-indigo-100 rounded-full opacity-30 blur-3xl pointer-events-none"></div>
+
+                <div class="relative z-10 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="section-title mb-0"><i class="fas fa-id-badge text-indigo-500 mr-2"></i> 我的知識角色</h2>
+                        <button onclick="openRefModal('roles')" class="ref-btn" title="了解角色定義"><i class="fas fa-info mr-1"></i> Ref.</button>
+                    </div>
+
+                    <div class="flex items-center gap-5 mt-2">
+                        <div class="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl shadow-lg ripple-effect flex-shrink-0 transform rotate-3">
+                            <div id="user-avatar-large" class="font-bold -rotate-3">?</div>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-extrabold text-slate-800 tracking-tight" id="role-title">探索者</h3>
+                            <p class="text-sm text-indigo-600 font-bold mb-2" id="role-subtitle">The Knowledge Explorer</p>
+                            <span id="radar-decision-text" class="text-xs bg-white/80 px-2 py-1 rounded text-slate-600 border border-slate-200 inline-block font-medium">分析中...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 角色四大核心能力 Bar -->
+                <div class="grid grid-cols-2 gap-x-4 gap-y-3 relative z-10 bg-white/60 p-4 rounded-xl border border-white">
+                    <div class="relative group cursor-pointer" onclick="openRefModal('initiator')">
+                        <div class="flex justify-between text-xs mb-1 font-bold"><span class="text-slate-600">開創力</span><span id="role-initiator-val" class="text-blue-600">--%</span></div>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-blue-500 h-1.5 rounded-full transition-all duration-1000" id="role-initiator-bar" style="width: 0%"></div></div>
+                    </div>
+                    <div class="relative group cursor-pointer" onclick="openRefModal('builder')">
+                        <div class="flex justify-between text-xs mb-1 font-bold"><span class="text-slate-600">連結力</span><span id="role-builder-val" class="text-indigo-600">--%</span></div>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-1000" id="role-builder-bar" style="width: 0%"></div></div>
+                    </div>
+                    <div class="relative group cursor-pointer" onclick="openRefModal('synthesizer')">
+                        <div class="flex justify-between text-xs mb-1 font-bold"><span class="text-slate-600">整合力</span><span id="role-synthesizer-val" class="text-purple-600">--%</span></div>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-purple-500 h-1.5 rounded-full transition-all duration-1000" id="role-synthesizer-bar" style="width: 0%"></div></div>
+                    </div>
+                    <div class="relative group cursor-pointer" onclick="openRefModal('sustainer')">
+                        <div class="flex justify-between text-xs mb-1 font-bold"><span class="text-slate-600">維護力</span><span id="role-sustainer-val" class="text-emerald-600">--%</span></div>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-emerald-500 h-1.5 rounded-full transition-all duration-1000" id="role-sustainer-bar" style="width: 0%"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側：四大數據網格 (佔 7 格) -->
+            <div class="lg:col-span-7 grid grid-cols-2 gap-4 sm:gap-6">
+                <div class="card p-5 border-l-4 border-l-blue-500 hover:-translate-y-1 transition-transform relative group">
+                    <button onclick="openRefModal('created')" class="ref-btn-mini"><i class="fas fa-info-circle"></i>Ref.</button>
+                    <h3 class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-pen-nib text-slate-300 mr-2"></i> 發文貢獻</h3>
+                    <div class="flex items-end gap-2"><span class="text-4xl font-black text-slate-800 leading-none" id="card-created-val">0</span><span class="text-sm text-slate-400 font-medium pb-1">篇</span></div>
+                </div>
+                <div class="card p-5 border-l-4 border-l-emerald-500 hover:-translate-y-1 transition-transform relative group">
+                    <button onclick="openRefModal('read')" class="ref-btn-mini"><i class="fas fa-info-circle"></i>Ref.</button>
+                    <h3 class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-book-reader text-slate-300 mr-2"></i> 閱讀他人</h3>
+                    <div class="flex items-end gap-2"><span class="text-4xl font-black text-slate-800 leading-none" id="card-read-val">0</span><span class="text-sm text-slate-400 font-medium pb-1">次</span></div>
+                    <div class="text-[10px] text-slate-400 mt-1">在論壇點開別人的想法、或回覆別人時累計(同一則只算一次)</div>
+                </div>
+                <div class="card p-5 border-l-4 border-l-purple-500 hover:-translate-y-1 transition-transform relative group">
+                    <button onclick="openRefModal('buildon')" class="ref-btn-mini"><i class="fas fa-info-circle"></i>Ref.</button>
+                    <h3 class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-link text-slate-300 mr-2"></i> 觀點連結 (Build-on)</h3>
+                    <div class="flex items-end gap-2"><span class="text-4xl font-black text-slate-800 leading-none" id="card-buildon-val">0</span><span class="text-sm text-slate-400 font-medium pb-1">次</span></div>
+                </div>
+                <div class="card p-5 border-l-4 border-l-amber-500 hover:-translate-y-1 transition-transform relative group bg-gradient-to-br from-white to-amber-50/30">
+                    <button onclick="openRefModal('impact')" class="ref-btn-mini"><i class="fas fa-info-circle"></i>Ref.</button>
+                    <h3 class="text-amber-600 text-xs font-bold uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-bullhorn text-amber-300 mr-2"></i> 社群影響力</h3>
+                    <div class="flex items-end gap-2"><span class="text-4xl font-black text-amber-600 leading-none" id="card-impact-val">0</span><span class="text-sm text-amber-400 font-medium pb-1">被回覆</span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             第二層：行為特徵 (Behavior)
+        =========================================== -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <!-- 知識五力分析 -->
+            <div class="card flex flex-col">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="section-title mb-0"><i class="fas fa-chart-radar text-indigo-500 mr-2"></i> 知識五力雷達</h3>
+                    <button onclick="openRefModal('radar')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                </div>
+                <div class="relative w-full h-[220px] flex items-center justify-center mt-auto mb-auto">
+                    <canvas id="studentRadarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 思考鷹架偏好 -->
+            <div class="card flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="section-title mb-0"><i class="fas fa-tools text-orange-500 mr-2"></i> 鷹架偏好</h3>
+                    <button onclick="openRefModal('scaffold')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                </div>
+                <div class="flex-1 flex items-end gap-3 pt-4 pb-2" id="scaffold-bars"></div>
+                <div class="flex justify-between text-[11px] font-bold text-slate-400 border-t border-slate-100 pt-2 px-1">
+                    <span class="w-full text-center">提問</span><span class="w-full text-center">延伸</span><span class="w-full text-center">改進</span><span class="w-full text-center">反駁</span><span class="w-full text-center">昇華</span>
+                </div>
+            </div>
+
+            <!-- AI 導師建議 -->
+            <div class="card border-l-4 border-l-indigo-500 bg-gradient-to-b from-white to-indigo-50/50 flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="section-title mb-0 text-indigo-800"><i class="fas fa-robot text-indigo-500 mr-2"></i> AI 導師洞察</h3>
+                    <button class="text-[10px] bg-indigo-100 px-2 py-1 rounded text-indigo-600 hover:bg-indigo-200 transition font-bold" onclick="triggerAIAnalysis('advice')"><i class="fas fa-sync-alt mr-1"></i>更新</button>
+                </div>
+                <div id="ai-feedback" class="flex-1 text-sm text-slate-700 leading-relaxed overflow-y-auto custom-scrollbar pr-2 min-h-[140px] max-h-[180px]">
+                    <div class="flex flex-col items-center justify-center h-full opacity-60 text-center">
+                        <i class="fas fa-magic text-2xl mb-2 text-indigo-300"></i>
+                        <p class="text-xs">點擊更新按鈕，獲取專屬學習建議<br>或產生備審自述草稿。</p>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-indigo-100/50">
+                    <button class="w-full py-2 text-xs bg-indigo-600 rounded-lg text-white hover:bg-indigo-700 transition font-bold shadow-sm" onclick="triggerAIAnalysis('portfolio')">
+                        <i class="fas fa-file-alt mr-1"></i> 自動生成備審自述草稿
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             第三層：軌跡與網絡 (Timeline & Network)
+        =========================================== -->
+        <section class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+            <!-- 最近思考軌跡 (Span 3) -->
+            <div class="card lg:col-span-3 flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                    <h3 class="section-title mb-0"><i class="fas fa-stream text-emerald-500 mr-2"></i> 思考演化軌跡</h3>
+                    <button onclick="openRefModal('evolution')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                </div>
+                <div class="relative pl-2 space-y-0 max-h-[400px] overflow-y-auto custom-scrollbar pr-4 py-2" id="evolution-timeline">
+                    <!-- 動態生成內容 -->
+                </div>
+                <div class="mt-3 text-center pt-3 border-t border-slate-50">
+     <a href="Knowledge Building Forum.html?home=1" class="text-xs text-indigo-500 hover:text-indigo-700 font-bold transition">前往論壇繼續討論 <i class="fas fa-arrow-right ml-1"></i></a>
+</div>
+            </div>
+
+            <!-- Ego Network (Span 2) -->
+            <div class="card lg:col-span-2 flex flex-col relative overflow-hidden">
+                <div class="flex justify-between items-center mb-2 flex-shrink-0 relative z-10">
+                    <h3 class="section-title mb-0"><i class="fas fa-project-diagram text-blue-500 mr-2"></i> 互動圈 (Ego Network)</h3>
+                    <button onclick="openRefModal('interaction_circle')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                </div>
+
+                <div class="flex justify-center gap-3 text-[10px] mb-2 px-1 flex-shrink-0 text-slate-500 font-medium relative z-10 bg-white/80 rounded-full py-1">
+                    <span class="flex items-center"><span class="legend-dot" style="background:#3b82f6"></span>提問</span>
+                    <span class="flex items-center"><span class="legend-dot" style="background:#22c55e"></span>改進</span>
+                    <span class="flex items-center"><span class="legend-dot" style="background:#a855f7"></span>整合</span>
+                </div>
+
+                <div id="ego-network-container" class="w-full flex-1 min-h-[300px] bg-slate-50/50 rounded-xl border border-slate-100 relative z-0"></div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             🔥 全新第三點五層：進階認知指標特寫 (Highlight Core Indicators)
+        =========================================== -->
+        <section class="mt-8 pt-6 border-t border-slate-200/60">
+            <h2 class="text-lg font-extrabold text-slate-700 mb-4 flex items-center">
+                <i class="fas fa-star text-amber-400 mr-2"></i> 核心認知突破指標
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                <!-- 1. 觀點多樣性 (獨立卡片) -->
+                <div class="card bg-white hover:border-sky-300 transition group cursor-pointer" onclick="openRefModal('diversity')">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-sm font-bold text-slate-700 flex items-center"><i class="fas fa-lightbulb text-sky-500 mr-2"></i> 觀點多樣性 (Diversity)</h3>
+                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-sky-400 transition text-xs"></i>
+                    </div>
+                    <div class="flex items-end gap-2 mb-2">
+                        <span class="text-3xl font-black text-slate-800" id="topic-count-val">0</span>
+                        <span class="text-xs text-slate-500 mb-1">個不同主題</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 mt-1">
+                        <div class="bg-gradient-to-r from-sky-400 to-blue-500 h-2 rounded-full transition-all duration-1000" id="topic-diversity-bar" style="width: 0%"></div>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-2">衡量參與不同領域討論的廣度</p>
+                </div>
+
+                <!-- 2. 認知路徑長度 (獨立卡片) -->
+                <div class="card bg-white hover:border-indigo-300 transition group cursor-pointer" onclick="openRefModal('path_length')">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-sm font-bold text-slate-700 flex items-center"><i class="fas fa-road text-indigo-500 mr-2"></i> 認知路徑長度 (Path Length)</h3>
+                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-indigo-400 transition text-xs"></i>
+                    </div>
+                    <div class="flex items-end gap-2 mb-2">
+                        <span class="text-3xl font-black text-slate-800" id="avg-depth-val">0</span>
+                        <span class="text-xs text-slate-500 mb-1">層討論深度</span>
+                    </div>
+                    <!-- 🔥 3. 替換為圖像化的深度視覺 -->
+                    <div id="path-length-visual" class="flex items-center justify-center h-4 mt-3 mb-2">
+                        <!-- 動態生成節點圖像 -->
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-2 text-center">衡量討論串延續與深掘的程度</p>
+                </div>
+
+                <!-- 3. 語義與詞彙深度 (獨立狀態卡) -->
+                <div class="card bg-white hover:border-teal-300 transition group cursor-pointer" onclick="openRefModal('lexical')">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-sm font-bold text-slate-700 flex items-center"><i class="fas fa-book-reader text-teal-500 mr-2"></i> 語義深度 (Lexical Depth)</h3>
+                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-teal-400 transition text-xs"></i>
+                    </div>
+                    <div class="mb-3">
+                        <span id="lexical-level-badge" class="px-3 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold border border-slate-200">
+                            分析中...
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs mt-3">
+                        <div class="text-slate-400 line-through decoration-slate-300" id="lexical-initial-box">我覺得...</div>
+                        <i class="fas fa-arrow-right text-slate-300"></i>
+                        <div class="font-bold text-teal-700" id="lexical-current-box">理論顯示...</div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ==========================================
+             第四層：前瞻動態分析 (Advanced Dynamics)
+        =========================================== -->
+        <section class="mt-8 pt-6 border-t border-slate-200/60">
+            <h2 class="text-xl font-extrabold text-slate-800 mb-6 flex items-center">
+                <i class="fas fa-brain text-slate-400 mr-2"></i> 前瞻知識動態分析 (Advanced Dynamics)
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <!-- A. 概念演化雲 (專屬區塊):立體的雲 + 資料線 + 故事卡 -->
+                <div class="card hover:border-teal-200 transition col-span-1 md:col-span-2" id="concept-card">
+                    <div class="flex justify-between items-center mb-3 border-b border-slate-100 pb-3">
+                        <h3 class="section-title mb-0"><i class="fas fa-cloud text-teal-500 mr-2"></i> 我的概念雲 (Concept Evolution)</h3>
+                        <button onclick="openRefModal('concept_evolution')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                    </div>
+                    <p class="text-xs text-slate-500 mb-3">你說過的想法會長成一朵雲:字越大代表用越多次,顏色代表這個想法現在的狀態,虛線連起常一起出現的詞。點一個詞看它的故事,滾輪或按鈕可以放大縮小。</p>
+                    <div id="kbc-host"></div>
+                </div>
+
+                <!-- B. 跨溫層破壁指數 -->
+                <div class="card hover:border-orange-200 transition">
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                        <h3 class="section-title mb-0"><i class="fas fa-hammer text-orange-500 mr-2"></i> 跨溫層破壁指數 (Echo-Chamber)</h3>
+                        <button onclick="openRefModal('echo_chamber')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                    </div>
+
+                    <div class="flex items-center gap-6 py-4">
+                        <div class="w-24 h-24 rounded-full flex items-center justify-center relative flex-shrink-0">
+                            <svg class="absolute w-full h-full transform -rotate-90 drop-shadow-sm">
+                                <circle cx="48" cy="48" r="42" stroke="#f1f5f9" stroke-width="8" fill="transparent" />
+                                <circle cx="48" cy="48" r="42" stroke="currentColor" stroke-width="8" fill="transparent" stroke-dasharray="264" id="echo-circle" class="text-orange-500 transition-all duration-1000 ease-out" style="stroke-dashoffset: 264; stroke-linecap: round;" />
+                            </svg>
+                            <span class="text-3xl font-black text-slate-800" id="echo-score">0</span>
+                        </div>
+                        <div>
+                            <div class="inline-block px-2 py-1 bg-orange-100 text-orange-700 text-[10px] font-bold rounded mb-1 border border-orange-200" id="echo-title">同溫層探索者</div>
+                            <p class="text-sm text-slate-600 font-medium" id="echo-desc">你目前大多與固定幾位同學互動。</p>
+                            <p class="text-xs text-slate-400 mt-2"><i class="fas fa-lightbulb text-amber-400 mr-1"></i> 提示：嘗試回覆平時較少交流的同學，可提升此分數。</p>
+                        </div>
+                    </div>
+                    <div class="rounded-lg bg-orange-50/60 border border-orange-100 px-3 py-2 mb-2 text-[11px] text-slate-600 leading-relaxed" id="echo-legend">
+                        <div class="font-bold text-orange-600 mb-0.5">📖 怎麼看這個圈圈?</div>
+                        <div>圈裡的數字是「破壁指數」(0~100):用你<b>回應過幾位不同的同學</b>,除以同組其他同學的人數。圈圈越滿,代表你跟越多不同的人交流,不是只跟固定幾位同學說話。</div>
+                        <div class="mt-1.5 space-y-0.5">
+                            <div>🟠 <b>0~39 同溫層探索者</b>:大多和固定幾位同學互動</div>
+                            <div>🔵 <b>40~79 知識橋樑</b>:開始連結不同的同學</div>
+                            <div>🟢 <b>80~100 社群破壁者</b>:跟幾乎每位同學都交流過</div>
+                            <div class="text-slate-400">重複回應同一位同學,分數不會增加;回應「還沒說過話」的新同學,圈圈才會變滿。</div>
+                        </div>
+                    </div>
+                    <div id="echo-caption" class="rounded-lg border border-orange-100 bg-white px-3 py-2 text-[12px] leading-relaxed text-slate-700" style="min-height:66px"></div>
+                    <div id="echo-moments" class="mt-2 hidden"></div>
+                </div>
+<div class="card hover:border-rose-200 transition flex flex-col">
+                    <div class="flex justify-between items-center mb-2 border-b border-slate-100 pb-3">
+                        <h3 class="section-title mb-0"><i class="fas fa-bolt text-rose-500 mr-2"></i> 認知頓悟軌跡 (Eureka Arc)</h3>
+                        <button onclick="openRefModal('eureka_arc')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mb-2 mt-2">圖表反映發言歷程中從「衝突/困惑」走向「昇華」的過程。</p>
+                    <div class="rounded-lg bg-rose-50/60 border border-rose-100 px-3 py-2 mb-2 text-[11px] text-slate-600 leading-relaxed" id="eureka-legend">
+                        <div class="font-bold text-rose-600 mb-0.5">📖 怎麼看這張圖?</div>
+                        <div>橫軸是你的每一則發言(N1 = 第 1 則);縱軸是想法的「高度」:每發言一次就往上爬一格,線越往上,代表你的想法累積得越多。</div>
+                        <div class="mt-1.5 space-y-0.5">
+                            <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:2px solid #f43f5e;vertical-align:-3px;margin-right:4px"></span><b>紅色小點</b> = 一般發言。其中<b>提問、反駁</b>會讓線稍微下沉一點,表示你碰到了值得想的難題。</div>
+                            <div><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#fbbf24;border:2px solid #d97706;vertical-align:-3px;margin-right:4px"></span><b>黃色點</b> = <b>改進</b>:把想法改得更好,多爬 0.5。</div>
+                            <div><span style="display:inline-block;width:15px;height:15px;border-radius:50%;background:#fbbf24;border:2px solid #d97706;vertical-align:-3px;margin-right:4px"></span><b>黃色大點</b> = <b>昇華</b>:把零散的想法整合成新觀點,一口氣多爬 2,是最大的進步!</div>
+                            <div class="text-slate-400">把滑鼠移到任何一個點上,會顯示那一則發言的內容。</div>
+                        </div>
+                    </div>
+                    <div id="eureka-box" class="mt-auto mb-auto">
+                        <div class="eureka-chart-container">
+                            <canvas id="eurekaChart"></canvas>
+                        </div>
+                        <div id="eureka-caption" class="mt-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[12px] leading-relaxed text-slate-700" style="min-height:66px"></div>
+                        <div id="eureka-moments" class="mt-2 hidden"></div>
+                    </div>
+                </div>
+            <!-- 念念成櫻:實體的櫻花樹(從一顆種子慢慢長成一樹繁花)+ 歷程演進說明 -->
+            <div class="md:col-span-2 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card hover:border-pink-300 transition relative overflow-hidden flex flex-col lg:col-span-1">
+                    <div class="absolute -bottom-8 -right-8 text-9xl opacity-10 pointer-events-none filter blur-[2px] transform -rotate-12">🌸</div>
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3 relative z-10">
+                        <h3 class="section-title mb-0"><i class="fas fa-tree text-pink-400 mr-2"></i> 念念成櫻 (Idea Lineage)</h3>
+                        <button onclick="openRefModal('idea_lineage')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                    </div>
+                    <p class="text-[10px] text-slate-500 mb-2 relative z-10">追蹤你種下的哪一顆「知識種子」，在社群中綻放成最美的櫻花。</p>
+                    <div id="lineage-content" class="relative z-10 flex-1 flex flex-col justify-center">
+                        <!-- 動態生成櫻花樹 -->
+                    </div>
+                </div>
+                <div class="card lg:col-span-2 hover:border-pink-300 transition" id="nn-card" style="background:linear-gradient(180deg,#fff9fc,#ffffff)">
+                    <div class="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                            <h3 class="section-title mb-0"><i class="fas fa-seedling text-pink-500 mr-2"></i> 念念成櫻</h3>
+                            <p class="text-[13px] text-pink-700/80 font-medium mt-1 leading-relaxed">每一個念頭，都有機會成為一朵櫻花；當想法被回應、被改進，便漸漸開成一樹繁花。</p>
+                        </div>
+                        <button onclick="openRefModal('idea_lineage')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">
+                        <div class="md:col-span-3 min-w-0"><div id="nn-tree-box"></div></div>
+                        <div class="md:col-span-2 min-w-0 md:sticky md:top-3"><div id="nn-log" style="--kf-log-h:600px"></div></div>
+                    </div>
+                </div>
+            </div>
+
+                <!-- C. 想法的存活與繁衍樹 (🔥 櫻花版) -->
+                
+
+                <!-- D. 認知掙扎與頓悟軌跡 -->
+                
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Note Detail Modal -->
+    <div id="note-detail-modal" class="modal" onclick="closeModalDirect(event, 'note-detail-modal')">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="text-base font-bold text-slate-800 flex items-center"><i class="fas fa-sticky-note text-indigo-500 mr-2"></i> 發言詳情</h3>
+                <span class="close" onclick="document.getElementById('note-detail-modal').style.display='none'">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="flex items-center gap-2 mb-4">
+                    <span id="nd-type" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-600 uppercase">TYPE</span>
+                    <span id="nd-date" class="text-xs text-slate-400">YYYY-MM-DD</span>
+                </div>
+                <h2 id="nd-title" class="text-xl font-black text-slate-800 mb-4 leading-tight">標題載入中...</h2>
+                <div id="nd-content" class="text-slate-600 text-sm leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100 whitespace-pre-wrap">內容載入中...</div>
+                <div class="mt-4 flex items-center justify-end">
+                    <span class="text-xs text-slate-400 mr-2">Author:</span>
+                    <span id="nd-author" class="text-xs font-bold text-slate-700 bg-white border border-slate-200 px-2 py-1 rounded shadow-sm">User</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ref Modal Structure (🔥 導入即時 AI 導師解析版) -->
+    <div id="refModal" class="modal" onclick="closeModalDirect(event, 'refModal')">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="font-bold text-base text-slate-800 flex items-center gap-2"><i class="fas fa-book-open text-indigo-500"></i> <span id="modalTitle">指標解析</span></h3>
+                <span class="close" onclick="document.getElementById('refModal').style.display='none'">&times;</span>
+            </div>
+            <div class="modal-body space-y-5">
+                <div>
+                    <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center"><i class="fas fa-graduation-cap mr-2"></i> 理論背景 (Theory)</h4>
+                    <div class="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 leading-relaxed" id="modalTheory"></div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-4">
+                    <h4 class="text-[12px] font-bold text-indigo-600 uppercase tracking-widest mb-3 flex items-center"><i class="fas fa-magic mr-2"></i> 專屬 AI 數據診斷 (Insights)</h4>
+                    <div id="modalInsight" class="w-full">
+                        <!-- AI 動態生成 Why / What / How -->
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100">
+                    <p class="text-[10px] text-slate-400 italic" id="modalRef"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // 測試版:資料與登入由 kb-core.js 提供(不再連線 Firebase)
+    let gateUser = null; // 目前登入者
+
+    // --- Global State ---
+    let currentUserId = '';
+    let globalData = {};
+    let radarChartInstance = null;
+    let currentUserStats = null;
+    let egoNetworkInstance = null;
+    let eurekaChartInstance = null;
+    let insightCache = {}; // 🔥 新增：儲存 AI 分析結果的快取
+
+    // ✅ Gemini AI Configuration
+    // ✅ Gemini AI Configuration
+let apiKey = "";
+// Gemini 模型自動選擇:向 Google 查詢這把金鑰「實際可用」的模型,挑出版本最新的 flash 模型;
+// 查不到時依序嘗試 gemini-3.8-flash、gemini-2.5-flash(遇到 404 自動換下一個)。
+async function geminiPickModels(key) {
+    const tail = String(key).slice(-6);
+    try {
+        const c = JSON.parse(localStorage.getItem('kb_ai_models') || 'null');
+        if (c && c.tail === tail && Date.now() - c.t < 6 * 3600 * 1000 && Array.isArray(c.list)) return c.list;
+    } catch (e) {}
+    let list = [];
+    try {
+        const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=' + key);
+        if (r.ok) {
+            const j = await r.json();
+            const ver = n => parseFloat((n.match(/^gemini-([0-9]+(?:[.][0-9]+)?)/) || [0, 0])[1]);
+            list = (j.models || [])
+                .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+                .map(m => String(m.name).replace('models/', ''))
+                .filter(n => /^gemini-[0-9]+([.][0-9]+)?-flash$/.test(n))
+                .sort((a, b) => ver(b) - ver(a))
+                .slice(0, 3);
+        }
+    } catch (e) {}
+    try { localStorage.setItem('kb_ai_models', JSON.stringify({ tail: tail, t: Date.now(), list: list })); } catch (e) {}
+    return list;
+}
+async function geminiFetch(key, init) {
+    let stored = ''; try { stored = localStorage.getItem('kb_ai_model') || ''; } catch (e) {}
+    const discovered = await geminiPickModels(key);
+    // 優先使用查詢到的最新模型;上次成功的模型與固定備援排在後面
+    let pref = ''; try { pref = ((KB.settings.get().ai || {}).model) || ''; } catch (e) {} if (pref === 'auto') pref = '';
+    // 設定中心指定的模型最優先;沒指定(自動)時,用查詢到的最新 flash 模型
+    const models = [].concat(pref ? [pref] : [], discovered, [stored], ['gemini-3.8-flash', 'gemini-2.5-flash']).filter((m, i, arr) => m && arr.indexOf(m) === i);
+    let last;
+    for (const m of models) {
+        const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + key, init);
+        if (r.status !== 404) {
+            if (r.ok) { try { localStorage.setItem('kb_ai_model', m); } catch (e) {} window.__geminiModel = m; }
+            return r;
+        }
+        last = r;
+    }
+    return last;
+}
+let aiModelUrl = "";
+
+// 自動讀取 API Key 的機制
+async function initApiKey() {
+    // 1. 優先嘗試從本機端 Local Storage 讀取 (老師端或先前設定過的裝置)
+    const localKey = localStorage.getItem('kb_ai_key');
+
+    if (localKey) {
+        apiKey = localKey;
+        console.log("[AI System] 已從 LocalStorage 載入 API Key");
+    } else {
+        console.warn("[AI System] 尚未設定 API Key,AI 導師將無法運作(請老師在首頁或設定中心輸入金鑰)");
+    }
+
+    // 動態組合模型 API URL (為了穩定性，這裡統一對齊 index.html 使用 gemini-2.5-flash)
+    if (apiKey) {
+        aiModelUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        return true;
+    }
+    return false;
+}
+    // --- Ref Data Database ---
+    const refData = {
+        'interaction_circle': { title: '自我與社群互動圈 (Ego Network)', theory: '此圖呈現以你為中心的知識互動網絡。箭頭代表對話流向，顏色代表對話性質。豐富的連結類型與對象多樣性，反映了活躍的社會認知動態。', cite: 'Zhang, J., et al. (2009). Designs for collective cognitive responsibility.' },
+        'roles': { title: '知識角色 (Epistemic Roles)', theory: '根據「認識論代理人」原則，學生在社群中應展現多樣化的貢獻模式，如發起者、連結者或整合者，而非單一的接收者。', cite: 'Scardamalia, M. (2002). Socio-cognitive dynamics of knowledge building.' },
+        'initiator': { title: '開創力 (Initiator)', theory: '衡量發起新討論串的能力。這是「真實問題 (Real Ideas)」原則的體現。', cite: 'Zhang, J., et al. (2009).' },
+        'builder': { title: '連結力 (Builder)', theory: '衡量延伸與回應他人想法的能力。體現「觀點改進 (Improvable Ideas)」原則。', cite: 'Scardamalia, M., & Bereiter, C. (2006).' },
+        'synthesizer': { title: '整合力 (Synthesizer)', theory: '衡量進行「昇華 (Rise-above)」的能力，將分散觀點整合為結論。', cite: 'Chen, B., et al. (2015).' },
+        'sustainer': { title: '維護力 (Sustainer)', theory: '衡量維持討論熱度與社群互動的能力，確保知識對話不中斷。', cite: 'Oshima, J., et al. (2012).' },
+        'created': { title: '發文貢獻 (Contribution)', theory: '「集體認知責任」要求每個成員都需對社群知識做出貢獻。', cite: 'Zhang, J., et al. (2009).' },
+        'read': { title: '閱讀廣度 (Reading Breadth)', theory: '廣泛閱讀他人筆記是理解社群分散知識的前提，體現「觀點多樣性」。這個數字是真實紀錄:學生在論壇「點開」別人的想法(看完整內容)的不同篇數,同一則只算一次、自己的不算;系統從開始記錄這項資料之後才會累計。', cite: 'Chen, B., & Hong, H. Y. (2016).' },
+        'buildon': { title: '觀點連結 (Build-ons)', theory: 'Build-on 代表你不僅閱讀，還進一步延伸或修正他人的想法，是知識演化的動力。', cite: 'Scardamalia, M., & Bereiter, C. (2006).' },
+        'impact': { title: '社群影響力 (Community Impact)', theory: '透過「被引用數 (In-degree)」衡量你的想法激發了多少後續討論。', cite: 'Oshima, J., et al. (2012).' },
+        'evolution': { title: '想法演化 (Idea Evolution)', theory: '此軌跡圖展示你的想法如何隨時間經歷「提問 -> 修正 -> 整合」的歷程。', cite: 'Reimann, P. (2009).' },
+        'scaffold': { title: '思考鷹架 (Scaffolds)', theory: '鷹架是支持高階思維的語言模板，幫助學生進行更細緻的論證與反思。', cite: 'Chen, B., et al. (2017).' },
+        'radar': { title: '知識五力 (Competency Radar)', theory: '綜合評估學生的多維度能力：主動性、社會性、認知深度等。', cite: 'Lai, K. W., & Law, N. (2006).' },
+        'lexical': { title: '語義與詞彙深度 (Lexical Depth)', theory: '追蹤學生從使用「日常語言」轉向精確的「學術術語」，反映了概念理解的深化與專業化過程。', cite: 'Resendes, M., et al. (2015).' },
+        'concept_evolution': { title: '概念演化軌跡 (Concept Evolution Map)', theory: '從你的貼文找出你常用的概念詞,用雲的大小表示用了幾次、用顏色表示這個想法現在的狀態(提問中、被延伸、改進中、被質疑、已整合),虛線連起常一起出現的詞,具象化你的想法如何出現、被回應、被改進、被整合。狀態依你的貼文類型與同學回應判斷,是系統的規則估計,僅供參考。', cite: 'Oshima, J., et al. (2012).' },
+        'echo_chamber': { title: '跨溫層破壁指數 (Echo-Chamber Breaking)', theory: '分析你是否主掌握打破同溫層，去回應極少互動的同學。成功破壁者能促進觀點多樣性，成為社群的知識橋樑 (Broker)。', cite: 'Matsuzawa, Y., et al. (2012).' },
+        'idea_lineage': { title: '念念成櫻 (Idea Lineage)', theory: '追蹤你拋出的單一觀點如何被他人質疑、補充並收斂。體現了「集體認知責任」。', cite: 'Scardamalia, M., & Bereiter, C. (2006).' },
+        'eureka_arc': { title: '認知頓悟軌跡 (Eureka Arc)', theory: '追蹤你經歷「認知衝突 (提問/反駁)」後，最終走向「昇華 (Rise-above)」的歷程。', cite: 'D’Mello, S., et al. (2014).' },
+        'diversity': { title: '觀點多樣性 (Idea Diversity)', theory: '衡量參與不同主題討論的廣度。', cite: 'Scardamalia, M. (2002).' },
+        'path_length': { title: '認知路徑長度 (Path Length)', theory: '衡量討論串的延續深度。', cite: 'Zhang, J., et al. (2007).' }
+    };
+
+    // 🔥 全新升級：捨棄靜態規則，導入即時 AI 專屬解析與快取機制
+    function openRefModal(key) {
+        const data = refData[key] || { title: '數據指標', theory: '正在讀取...', cite: '' };
+        const modal = document.getElementById('refModal');
+        const s = currentUserStats;
+
+        document.getElementById('modalTitle').innerText = data.title;
+        document.getElementById('modalTheory').innerText = data.theory;
+        document.getElementById('modalRef').innerText = data.cite;
+
+        if (!s) {
+            document.getElementById('modalInsight').innerHTML = `<div class="text-sm text-slate-500 italic p-4 text-center">請先選擇一位學生並產生互動數據。</div>`;
+            modal.style.display = "flex";
+            return;
+        }
+
+        // 🔥 檢查是否有快取紀錄，若有則直接顯示，避免重複消耗 AI 資源
+        if (insightCache[currentUserId] && insightCache[currentUserId][key]) {
+            document.getElementById('modalInsight').innerHTML = insightCache[currentUserId][key];
+            modal.style.display = "flex";
+            return;
+        }
+
+        // 1. 顯示載入動畫，讓使用者知道 AI 正在運算
+        document.getElementById('modalInsight').innerHTML = `
+            <div class="flex flex-col items-center justify-center py-8">
+                <i class="fas fa-circle-notch fa-spin text-indigo-500 text-3xl mb-4 shadow-sm rounded-full"></i>
+                <span class="text-xs text-indigo-600 font-bold tracking-wide animate-pulse">AI 導師正在為您提煉專屬洞察...</span>
+            </div>
+        `;
+        modal.style.display = "flex";
+
+        // 2. 觸發 AI 演算
+        generateModalAIInsight(key, s);
+    }
+
+
+// 呼叫 Gemini AI 生成獨一無二的診斷
+    async function generateModalAIInsight(key, stats) {
+
+        // 👇 請在這裡貼上這段防呆機制 👇
+        if (!apiKey) {
+            alert("請先至系統首頁輸入並儲存 Gemini API Key，才能啟動 AI 導師功能！");
+            document.getElementById('modalInsight').innerHTML = `<div class="text-sm text-red-500 italic p-4 text-center">缺少 API Key，無法進行分析。</div>`;
+            return;
+        }
+        // 👆 貼到這裡結束 👆
+
+        const insightContainer = document.getElementById('modalInsight');
+        const metricName = refData[key].title;
+        const studentName = document.getElementById('user-name').innerText;
+        const roleName = document.getElementById('role-title').innerText;
+
+        // 🔥 新增：擷取該指標的「專屬精確數據」，讓 AI 能針對單一項目深入分析
+        let specificData = "";
+        if (key === 'initiator') specificData = `開創力得分：${stats.roleMetrics.initiator} / 100，提問次數：${stats.scaffoldCounts.question}`;
+        else if (key === 'builder') specificData = `連結力得分：${stats.roleMetrics.builder} / 100，回覆次數：${stats.linksCount}`;
+        else if (key === 'synthesizer') specificData = `整合力得分：${stats.roleMetrics.synthesizer} / 100，昇華次數：${stats.scaffoldCounts.riseabove}`;
+        else if (key === 'sustainer') specificData = `維護力得分：${stats.roleMetrics.sustainer} / 100，被回覆次數：${stats.repliedCount}`;
+        else if (key === 'created') specificData = `總發文：${stats.totalNotes} 篇`;
+        else if (key === 'read') specificData = `閱讀他人文章:${document.getElementById('card-read-val').innerText} 則(學生實際點開別人想法的不同篇數;系統從有這項紀錄起才開始計算)`;
+        else if (key === 'buildon') specificData = `觀點連結 (Build-on) 次數：${stats.linksCount} 次`;
+        else if (key === 'impact') specificData = `社群影響力 (被回覆總數)：${stats.repliedCount} 次`;
+        else if (key === 'radar') specificData = `五力分數 - 開創:${stats.roleMetrics.initiator}, 連結:${stats.roleMetrics.builder}, 整合:${stats.roleMetrics.synthesizer}, 維護:${stats.roleMetrics.sustainer}`;
+        else if (key === 'scaffold') specificData = `鷹架使用次數 - 提問:${stats.scaffoldCounts.question}, 延伸:${stats.scaffoldCounts.extend}, 改進:${stats.scaffoldCounts.improve}, 反駁:${stats.scaffoldCounts.counter}, 昇華:${stats.scaffoldCounts.riseabove}`;
+        else if (key === 'evolution') specificData = `最近發文數：${stats.recentNotes.length} 篇，展現了想法演化的軌跡`;
+        else if (key === 'interaction_circle') specificData = `互動圈涵蓋人數：${stats.networkSize} 人`;
+        else if (key === 'echo_chamber') specificData = `跨溫層破壁分數：${stats.echoStats.score} 分，向外回覆 ${stats.echoStats.replies} 次，集中在 ${stats.echoStats.targets} 個特定同學身上`;
+        else if (key === 'idea_lineage') specificData = `最佳初始想法衍生出 ${stats.lineageStats.count} 個後續觀點，最深向下紮根 ${stats.lineageStats.maxDepth + 1} 層`;
+        else if (key === 'eureka_arc') specificData = `經歷認知衝突(提問/反駁) ${stats.scaffoldCounts.question + stats.scaffoldCounts.counter} 次，最終達到昇華(Rise-above) ${stats.scaffoldCounts.riseabove} 次`;
+        else if (key === 'diversity') specificData = `參與了 ${stats.uniqueTopicsCount} 個不同的討論主題`;
+        else if (key === 'path_length') specificData = `平均討論深度：${stats.avgDepth.toFixed(1)} 層`;
+        else if (key === 'lexical') specificData = `語義階段：${stats.lexicalStats.level} (${stats.lexicalStats.title})，包含學術詞彙 ${stats.lexicalStats.acCount} 次，邏輯詞彙 ${stats.lexicalStats.lgCount} 次`;
+        else if (key === 'concept_evolution') specificData = '概念雲裡的詞與狀態(依貼文類型與同學回應判斷):' + (window.__kbCC && window.__kbCC.model ? window.__kbCC.model.summaryText() : '資料不足');
+        else if (key === 'roles') specificData = `系統綜合判定主要知識角色為：${roleName}`;
+        else specificData = `目前沒有特定的專屬數據可提供。`;
+
+        // 【組合學生的綜合數據集】作為 AI 判斷的 Context
+        let context = `
+        - 學生姓名：${studentName}
+        - 系統判定主要特質：${roleName}
+        - 基礎表現：總發文${stats.totalNotes}篇, 回覆他人${stats.linksCount}次, 被他人回覆${stats.repliedCount}次。
+        - 社交網絡：實質互動圈涵蓋${stats.networkSize}人。思考深度平均達${stats.avgDepth.toFixed(1)}層。
+        - 鷹架偏好：提問${stats.scaffoldCounts.question}次, 延伸${stats.scaffoldCounts.extend}次, 改進${stats.scaffoldCounts.improve}次, 昇華${stats.scaffoldCounts.riseabove}次。
+        - 其他特徵：破壁分數${stats.echoStats.score}分, 語義階段${stats.lexicalStats.level}。`;
+
+        // 學生自己的姓名與同學姓名一律換成代號後才交給 AI;顯示時再在本機換回來
+        const ident = window.__kbIdent || (window.__kbIdent = kbAiIdent(globalData.userList));
+        let story = '';
+        try { story = kbStoryText(currentUserId); } catch (e) { console.error(e); }
+        const safeContext = ident.scrub(context.replace('學生姓名：' + studentName, '學生:這位同學(就是正在看的你)'));
+        const prompt = kbRefPrompt({ audience: 'student', title: metricName, meaning: (refData[key] && refData[key].theory) || '',
+            current: ident.scrub(specificData), data: safeContext, timeline: story,
+            question: '我現在的狀態怎麼了?接下來可以怎麼做?',
+            extraRules: '角色與分數是系統用規則估計的,請當成參考,不要說成定論。' });
+
+        try {
+            const response = await geminiFetch(apiKey, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            const data = await response.json();
+            const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (textContent) {
+                // 將 AI 生成的 Markdown 轉為 HTML 並套用設計樣式，加入重新分析按鈕
+                const htmlContent = `
+                    <div class="ai-insight-content bg-gradient-to-br from-indigo-50/80 to-white p-5 rounded-xl border border-indigo-100 shadow-sm fade-in relative group">
+                        <button onclick="forceReanalyze('${key}')" class="absolute top-3 right-3 text-[10px] bg-white/80 border border-indigo-100 text-indigo-500 hover:bg-indigo-500 hover:text-white px-2.5 py-1.5 rounded transition shadow-sm font-bold flex items-center opacity-0 group-hover:opacity-100 focus:opacity-100"><i class="fas fa-sync-alt mr-1"></i>重新分析</button>
+                        ${marked.parse(window.kbAiUnscrub ? window.kbAiUnscrub(textContent) : textContent)}
+                    </div>`;
+
+                // 🔥 儲存結果至快取
+                if (!insightCache[currentUserId]) insightCache[currentUserId] = {};
+                insightCache[currentUserId][key] = htmlContent;
+
+                insightContainer.innerHTML = htmlContent;
+            } else {
+                throw new Error("Empty AI Response");
+            }
+        } catch (e) {
+            console.error("AI Insight Error:", e);
+            insightContainer.innerHTML = `
+                <div class="text-sm text-amber-600 bg-amber-50 p-4 rounded-xl border border-amber-200">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>AI 分析導師目前忙線中，請稍後再試一次。
+                </div>`;
+        }
+    }
+
+    // 🔥 新增：強制重新分析功能
+    window.forceReanalyze = function(key) {
+        const s = currentUserStats;
+        if (!s) return;
+
+        // 刪除此項目的快取
+        if (insightCache[currentUserId] && insightCache[currentUserId][key]) {
+            delete insightCache[currentUserId][key];
+        }
+
+        const insightContainer = document.getElementById('modalInsight');
+        insightContainer.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-8">
+                <i class="fas fa-circle-notch fa-spin text-indigo-500 text-3xl mb-4 shadow-sm rounded-full"></i>
+                <span class="text-xs text-indigo-600 font-bold tracking-wide animate-pulse">AI 導師正在為您重新深度解析...</span>
+            </div>
+        `;
+        generateModalAIInsight(key, s);
+    };
+
+    // 🔥 新增：用於控制「念念成櫻」各階段的展開與收合
+    window.toggleLineageStage = function(contentId, headerEl) {
+        const content = document.getElementById(contentId);
+        const icon = headerEl.querySelector('.fa-chevron-down');
+        if (content.classList.contains('hidden')) {
+            content.classList.remove('hidden');
+            icon.classList.add('rotate-180');
+        } else {
+            content.classList.add('hidden');
+            icon.classList.remove('rotate-180');
+        }
+    };
+
+    function closeModalDirect(event, modalId) {
+        if (event.target == document.getElementById(modalId)) document.getElementById(modalId).style.display = "none";
+    }
+
+   // --- Core Cloud Logic ---
+    async function initApp() {
+        const aiStatus = document.getElementById('ai-status-indicator');
+        aiStatus.innerText = "Checking Key...";
+        aiStatus.className = "text-amber-400 font-bold";
+
+        // 呼叫 API Key 初始化 (等待抓取金鑰)
+        const keyLoaded = await initApiKey();
+
+        // 根據是否抓到金鑰，更新右上角的 AI 狀態燈號
+        if (keyLoaded) {
+            aiStatus.innerText = "Ready (AI Embedded)";
+            aiStatus.className = "text-emerald-400 font-bold";
+        } else {
+            aiStatus.innerText = "Offline (No API Key)";
+            aiStatus.className = "text-red-400 font-bold";
+        }
+
+        // 本機資料來源(kb-core.js):同一台電腦其他分頁有變動時即時更新
+        function feed() {
+            const c = KB.content.get();
+            return { nodes: JSON.parse(JSON.stringify(c.nodes)), topics: JSON.parse(JSON.stringify(c.topics)), userList: KB.compat.userList(gateUser.role), reads: KB.content.reads() };
+        }
+        function applyData(data) {
+            globalData = data;
+        try { window.__kbIdent = kbAiIdent(data.userList); } catch (e) {}
+            insightCache = {};
+            if (!document.getElementById('student-selector')) initUserSwitcher();
+            else if (currentUserId) switchUser(currentUserId);
+        }
+        const dbStatus = document.getElementById('db-status-text');
+        dbStatus.innerText = "LOCAL"; dbStatus.className = "text-cyan-400 font-bold";
+        applyData(feed());
+        KB.on((keys, remote) => { if (remote && KB.auth.current()) applyData(feed()); });
+    }
+
+    function initUserSwitcher() {
+        const container = document.getElementById('nav-user-select-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        const select = document.createElement('select');
+        select.className = "bg-white/10 text-white text-xs border border-white/20 rounded px-2 py-1.5 outline-none font-bold cursor-pointer";
+        select.id = "student-selector";
+
+        const users = Object.values(globalData.userList || {});
+        // 學生只能看自己的分析;老師與管理者可選擇任何一位學生
+        const students = users.filter(u => u.role !== 'teacher' && (gateUser.role !== 'student' || u.id === gateUser.id));
+        const optStyle = o => { o.style.color = "#334155"; o.style.backgroundColor = "#ffffff"; return o; };
+
+        // 班級:老師/管理者在有兩個以上班級時,可以先選班級,學生清單只列出那個班級的人
+        const clsOf = u => u.classId || '__none__';
+        const groups = {}; students.forEach(u => { (groups[clsOf(u)] = groups[clsOf(u)] || { name: u.className || '(還沒分班)', n: 0 }).n++; });
+        const clsKeys = Object.keys(groups), showClass = gateUser.role !== 'student' && clsKeys.length >= 2;
+        let want = null; try { want = new URLSearchParams(location.search).get('student'); } catch (e) {}
+        const wantUser = want && gateUser.role !== 'student' ? students.find(u => u.id === want) : null;
+        let clsFilter = 'all'; try { clsFilter = localStorage.getItem('kb_class_filter') || 'all'; } catch (e) {}
+        if (!showClass || !groups[clsFilter]) clsFilter = 'all';
+        if (wantUser && showClass) clsFilter = clsOf(wantUser);   // 從設定中心點某位學生進來:直接切到他的班級
+        let classSel = null;
+        if (showClass) {
+            classSel = document.createElement('select');
+            classSel.id = 'class-selector'; classSel.title = '選擇班級';
+            classSel.className = "bg-white/10 text-white text-xs border border-white/20 rounded px-2 py-1.5 outline-none font-bold cursor-pointer mr-2";
+            classSel.innerHTML = '';
+            const all = optStyle(document.createElement('option')); all.value = 'all'; all.text = '全部班級(' + students.length + ' 人)'; classSel.appendChild(all);
+            clsKeys.sort((a, b) => groups[a].name.localeCompare(groups[b].name, 'zh-Hant')).forEach(k => { const o = optStyle(document.createElement('option')); o.value = k; o.text = groups[k].name + '(' + groups[k].n + ' 人)'; classSel.appendChild(o); });
+            classSel.value = clsFilter; container.appendChild(classSel);
+        }
+        const inScope = u => clsFilter === 'all' || clsOf(u) === clsFilter;
+        function fillStudents() {
+            select.innerHTML = '';
+            const list = students.filter(inScope);
+            if (list.length === 0) select.innerHTML = '<option>無學生資料</option>';
+            else list.forEach(u => { const option = optStyle(document.createElement('option')); option.value = u.id; option.text = u.name; select.appendChild(option); });
+            return list;
+        }
+        fillStudents();
+        select.onchange = function() { switchUser(this.value); };
+        if (classSel) classSel.onchange = function () {
+            clsFilter = this.value; try { localStorage.setItem('kb_class_filter', clsFilter); } catch (e) {}
+            const list = fillStudents(); if (list.length) { select.value = list[0].id; switchUser(list[0].id); }
+        };
+        container.appendChild(select);
+
+        let targetId = students.filter(inScope).length > 0 ? students.filter(inScope)[0].id : null;
+        // 從設定中心的使用者清單點進來:?student=學號(僅老師與管理者有效,學生只能看自己)
+        if (wantUser) targetId = wantUser.id;
+        if (targetId) { select.value = targetId; switchUser(targetId); }
+    }
+
+    function getRootAndDepth(nodeId, nodesMap) {
+        let depth = 1; let current = nodesMap[nodeId]; let rootId = nodeId;
+        while (current && current.parentId && nodesMap[current.parentId]) {
+            depth++; current = nodesMap[current.parentId]; rootId = current.id;
+        }
+        return { rootId, depth };
+    }
+
+    // 開創力等四項改用「占自己貼文的比例」計算(達到目標比例即滿分)。
+    // 舊算法用「次數」加總並設上限,學生各有數十篇貼文時,幾乎所有人都會被推到 100 分,看不出差異。
+    const SP_PLAN = /(我們(要|可以|應該|先|接下來|得)|接下來|下一步|我建議|我提議|我想(把|先|改|加|問|知道)|不如|決定|計畫|目標|假設|驗證|測試|實驗|可以先|要不要)/;
+    // 「發文量太少」時,比例會不準(只發 1 篇提問,提問占比就是 100%)。所以每一項能力都先乘上「累積程度」:
+    // 發文 0 篇 = 0%、發文滿 ROLE_MATURE_N 篇才算滿,讓分數隨著發文慢慢長高,而不是一開始就衝到頂。
+    const ROLE_MATURE_N = 10;
+    const roleMature = n => Math.max(0, Math.min(1, n / ROLE_MATURE_N));
+    // 影響力:被別人回應的次數(每次 15 分,滿 100),同樣乘上累積程度;還沒發文就是 0
+    const influenceScore = st => st.totalNotes > 0 ? Math.round(Math.min(100, st.repliedCount * 15 + 10) * roleMature(st.totalNotes)) : 0;
+    function calculateRoleMetrics(stats) {
+        const n = stats.totalNotes;
+        if (!n) return { initiator: 0, builder: 0, synthesizer: 0, sustainer: 0 };
+        const mat = roleMature(n);
+        const cap = v => Math.max(0, Math.round(Math.min(100, v) * mat));   // 先把「達到目標比例」封頂在 100,再乘上累積程度(否則比例超過目標的人會超過上限)
+        // 開創力:提問、開新話題或提出下一步的貼文占比(35% 為滿分)
+        const initiator = cap((stats.initiateCount / n) / 0.35 * 100);
+        // 連結力:回應「別人」想法的貼文占比(90% 為滿分)
+        const builder = cap((stats.crossCount / n) / 0.9 * 100);
+        // 整合力:整合(昇華)貼文占比(12% 為滿分,占 60%)+ 改進/反駁貼文占比(45% 為滿分,占 40%)
+        const raShare = stats.scaffoldCounts.riseabove / n;
+        const impShare = (stats.scaffoldCounts.improve + stats.scaffoldCounts.counter) / n;
+        const synthesizer = cap(Math.min(1, raShare / 0.12) * 60 + Math.min(1, impShare / 0.45) * 40);
+        // 維護力:有發文的日期占全部發文日的比例(占 50%)+ 被他人回覆的比例(80% 為滿分,占 50%)
+        const sustainer = cap(stats.dateCoverage * 50 + Math.min(1, (stats.repliedCount / n) / 0.8) * 50);
+        return { initiator, builder, synthesizer, sustainer };
+    }
+
+    function analyzeStudentData(userId) {
+        if (!globalData || !globalData.nodes) return null;
+        const nodes = globalData.nodes || [];
+        const myNotes = nodes.filter(n => n.author === userId);
+        const myNoteIds = myNotes.map(n => n.id);
+        const nodesMap = {}; nodes.forEach(n => nodesMap[n.id] = n);
+
+        let repliedCount = 0;
+        nodes.forEach(n => { if (n.parentId && myNoteIds.includes(n.parentId) && n.author !== userId) repliedCount++; });
+
+        const scaffoldCounts = { 'question': 0, 'extend': 0, 'improve': 0, 'counter': 0, 'riseabove': 0 };
+        myNotes.forEach(n => { if (scaffoldCounts[n.type] !== undefined) scaffoldCounts[n.type]++; });
+
+        const linksCount = myNotes.filter(n => n.parentId).length;
+        const topicsSet = new Set(); let totalDepth = 0;
+
+        myNotes.forEach(n => {
+            const info = getRootAndDepth(n.id, nodesMap);
+            topicsSet.add(info.rootId); totalDepth += info.depth;
+        });
+
+        const sortedNotes = myNotes.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        const interactants = new Set();
+        nodes.forEach(n => {
+            if(n.parentId) {
+                const p = nodes.find(x => x.id === n.parentId);
+                if(p) {
+                    if(n.author === userId && p.author !== userId) interactants.add(p.author);
+                    if(p.author === userId && n.author !== userId) interactants.add(n.author);
+                }
+            }
+        });
+
+        const avgDepth = myNotes.length > 0 ? (totalDepth / myNotes.length) : 0;
+        const initiateCount = myNotes.filter(n => n.type === 'question' || !n.parentId || SP_PLAN.test((n.title || '') + ' ' + (n.content || ''))).length;
+        const crossCount = myNotes.filter(n => { const p = n.parentId ? nodesMap[n.parentId] : null; return p && p.author !== userId; }).length;
+        const dayKey = n => new Date(n.date).toDateString();
+        const allDays = new Set(nodes.map(dayKey));
+        const myDays = new Set(myNotes.map(dayKey));
+        const dateCoverage = allDays.size > 0 ? myDays.size / allDays.size : 0;
+        const roleMetrics = calculateRoleMetrics({scaffoldCounts, linksCount, totalNotes: myNotes.length, avgDepth: avgDepth, repliedCount: repliedCount, initiateCount, crossCount, dateCoverage});
+
+        // 🔥 1. Lexical Analysis (真實詞彙掃描)
+        const allText = myNotes.map(n => n.content + " " + n.title).join(" ");
+        const academicWords = ['理論', '機制', '證明', '總結', '分析', '影響', '核心', '結構', '觀點', '現象', '顯示', '實證', '概念', '解釋'];
+        const logicWords = ['因為', '所以', '導致', '推論', '假設', '可能', '同意', '雖然', '但是', '原因', '發現', '關聯', '結果'];
+
+        let acCount = 0; let lgCount = 0;
+        academicWords.forEach(w => acCount += (allText.split(w).length - 1));
+        logicWords.forEach(w => lgCount += (allText.split(w).length - 1));
+
+        let lexicalLevel = "LV.0", lexicalTitle = "LV.0 尚未開始";
+        if (myNotes.length > 0 && (acCount / myNotes.length >= 0.25 || roleMetrics.synthesizer > 60)) {
+            lexicalLevel = "LV.3"; lexicalTitle = "LV.3 學術建構";
+        } else if (myNotes.length > 0 && (lgCount / myNotes.length >= 0.2 || roleMetrics.builder > 60)) {
+            lexicalLevel = "LV.2"; lexicalTitle = "LV.2 邏輯推演";
+        } else if (myNotes.length > 0) {
+            lexicalLevel = "LV.1"; lexicalTitle = "LV.1 日常探索";
+        }
+
+        // 🔥 2. Echo Chamber Analysis
+        let echoTargets = new Set(); let outReplies = 0;
+        nodes.forEach(n => {
+            if (n.author === userId && n.parentId) {
+                const parent = nodes.find(p => p.id === n.parentId);
+                if (parent && parent.author !== userId) { echoTargets.add(parent.author); outReplies++; }
+            }
+        });
+        // 跨溫層分數 = 回應過的不同同學數 / 同一討論區的其他成員數(舊算法固定除以 5,小組只有 3~4 人時最高只能拿 60 分)
+        const mates = new Set();
+        nodes.forEach(n => { if (n.author !== userId && topicsSet.has(getRootAndDepth(n.id, nodesMap).rootId)) mates.add(n.author); });
+        const echoScore = outReplies === 0 ? 0 : Math.min(Math.round((echoTargets.size / Math.max(1, mates.size)) * 100), 100);
+
+        // 🔥 3. Idea Lineage Analysis
+        const getDesc = (nodeId) => {
+            let count = 0, maxD = 0;
+            const children = nodes.filter(n => n.parentId === nodeId);
+            children.forEach(c => {
+                count++; const sub = getDesc(c.id);
+                count += sub.count; maxD = Math.max(maxD, sub.maxDepth + 1);
+            });
+            return { count, maxDepth: children.length > 0 ? Math.max(maxD, 1) : 0 };
+        };
+        let lineageMaxDepth = 0; let lineageCount = 0;
+        myNotes.forEach(n => {
+            const info = getDesc(n.id);
+            if (info.count > lineageCount) { lineageCount = info.count; lineageMaxDepth = info.maxDepth; }
+        });
+
+        // 閱讀他人:真實紀錄(學生點開別人想法的不同篇數,自己的不算);播放時只算到該步驟當天為止、且那則想法當時已存在
+        const rdMap = (globalData.reads && globalData.reads[userId]) || {}, rdCut = (window.__kbReadCut === undefined) ? Infinity : window.__kbReadCut;
+        const readCount = Object.keys(rdMap).filter(id => nodesMap[id] && String(nodesMap[id].author) !== String(userId) && new Date(rdMap[id] + 'T00:00:00').getTime() <= rdCut).length;
+
+        return {
+            totalNotes: myNotes.length, repliedCount, linksCount, readCount, scaffoldCounts,
+            recentNotes: sortedNotes.slice(0, 20),
+            roleMetrics: roleMetrics,
+            uniqueTopicsCount: topicsSet.size,
+            avgDepth: avgDepth,
+            networkSize: interactants.size,
+            lexicalStats: { acCount, lgCount, level: lexicalLevel, title: lexicalTitle },
+            echoStats: { targets: echoTargets.size, replies: outReplies, score: echoScore, mates: mates.size },
+            lineageStats: { count: lineageCount, maxDepth: lineageMaxDepth }
+        };
+    }
+
+    function switchUser(userId) {
+        currentUserId = userId;
+        const user = Object.values(globalData.userList).find(u => u.id === userId);
+        if (!user) return;
+
+        document.getElementById('current-user-avatar').src = user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=random`;
+        document.getElementById('user-name').innerText = user.name;
+        document.getElementById('user-avatar-large').innerText = user.name[0];
+
+        const stats = analyzeStudentData(userId);
+        currentUserStats = stats;
+
+        // 動態角色 UI
+        const setBar = (id, val) => { document.getElementById(id+'-val').innerText = val+'%'; document.getElementById(id+'-bar').style.width = val+'%'; };
+        setBar('role-initiator', stats.roleMetrics.initiator);
+        setBar('role-builder', stats.roleMetrics.builder);
+        setBar('role-synthesizer', stats.roleMetrics.synthesizer);
+        setBar('role-sustainer', stats.roleMetrics.sustainer);
+
+        const m = stats.roleMetrics;
+        let ft = "綜合探索型", fd = "各項能力均衡發展，持續摸索最佳的知識建構模式。";
+        let bestRole = '探索者', roleSub = "The Explorer";
+
+        const maxStat = Math.max(m.initiator, m.builder, m.synthesizer, m.sustainer);
+
+        if (maxStat === 0 || stats.totalNotes === 0) {
+            ft = "知識新手"; fd = "剛踏入社群，準備開始你的知識旅程。";
+            bestRole = '新手'; roleSub = 'Newcomer';
+        } else if (maxStat === m.synthesizer && m.synthesizer > 40) {
+            ft = "理論建構型"; fd = "傾向整合觀點，構建高階的解釋模型。";
+            bestRole = '整合者'; roleSub = 'Synthesizer';
+        } else if (maxStat === m.initiator && m.initiator > 40) {
+            ft = "批判思考型"; fd = "善於發起議題與提出關鍵問題，挑戰既有觀點。";
+            bestRole = '開創者'; roleSub = 'Initiator';
+        } else if (maxStat === m.builder && m.builder > 40) {
+            ft = "社群連結型"; fd = "善於在社群中建立連結，延伸他人想法。";
+            bestRole = '連結者'; roleSub = 'Builder';
+        } else if (maxStat === m.sustainer && m.sustainer > 40) {
+            ft = "話題維護型"; fd = "能引發共鳴，讓討論熱度持續不墜。";
+            bestRole = '維護者'; roleSub = 'Sustainer';
+        }
+
+        document.getElementById('role-title').innerText = bestRole;
+        document.getElementById('role-subtitle').innerText = "The " + roleSub;
+        document.getElementById('radar-decision-text').innerHTML = `<i class="fas fa-fingerprint text-indigo-400 mr-1"></i> ${ft}`;
+
+        document.getElementById('topic-count-val').innerText = stats.uniqueTopicsCount;
+        const topicBar = document.getElementById('topic-diversity-bar');
+        if(topicBar) topicBar.style.width = `${Math.min(stats.uniqueTopicsCount * 10, 100)}%`;
+
+        document.getElementById('avg-depth-val').innerText = stats.avgDepth.toFixed(1);
+
+        const depthContainer = document.getElementById('path-length-visual');
+        if (depthContainer) {
+            let visualHtml = '';
+            const maxNodes = 5;
+            const currentNodes = Math.max(Math.round(stats.avgDepth), 1);
+            for(let i=1; i<=maxNodes; i++) {
+               let color = i <= currentNodes ? 'bg-indigo-500' : 'bg-slate-200';
+               if(i>1) visualHtml += `<div class="h-1 w-6 ${color} transition-colors duration-500"></div>`;
+               visualHtml += `<div class="w-3 h-3 rounded-full ${color} shadow-sm transition-colors duration-500"></div>`;
+            }
+            depthContainer.innerHTML = visualHtml;
+        }
+
+        const initBox = document.getElementById('lexical-initial-box');
+        const currBox = document.getElementById('lexical-current-box');
+        const levelBadge = document.getElementById('lexical-level-badge');
+        let iW = "我覺得...", cW = "因為...", bc = "bg-green-100 text-green-700 border-green-200";
+
+        if (stats.lexicalStats.level === "LV.0") { iW="(無)"; cW="(無)"; bc="bg-slate-100 text-slate-500 border-slate-200"; }
+        else if (stats.lexicalStats.level === "LV.3") { iW="我觀察到..."; cW="理論顯示 / 總結是..."; bc="bg-purple-100 text-purple-700 border-purple-200"; }
+        else if (stats.lexicalStats.level === "LV.2") { iW="我覺得 / 同意"; cW="這導致 / 推論是..."; bc="bg-teal-100 text-teal-700 border-teal-200"; }
+
+        if(levelBadge) { levelBadge.className = `px-3 py-1 rounded-full text-xs font-bold border ${bc}`; levelBadge.innerText = stats.lexicalStats.title; }
+        initBox.innerHTML = `"${iW}"`;
+        currBox.innerHTML = `"${cW}"`;
+
+        animateValue("card-created-val", 0, stats.totalNotes, 800);
+        animateValue("card-read-val", 0, stats.readCount, 800);
+        animateValue("card-buildon-val", 0, stats.linksCount, 800);
+        animateValue("card-impact-val", 0, stats.repliedCount, 800);
+
+        renderTimeline(stats.recentNotes, globalData.nodes);
+        renderScaffoldBars(stats.scaffoldCounts);
+
+        renderRadarChart([
+            stats.roleMetrics.initiator,
+            stats.roleMetrics.builder,
+            stats.roleMetrics.synthesizer,
+            stats.roleMetrics.sustainer,
+            influenceScore(stats)
+        ]);
+
+        renderEgoNetwork(userId);
+        renderConceptEvolution(userId);
+        renderEchoChamber(stats);
+
+        // 🔥 修改：傳入 userId, 全域節點 與 全域使用者名單，以繪製完整的成長歷程
+        renderIdeaLineage(userId, globalData.nodes, globalData.userList);
+
+        renderEurekaArc(userId, globalData.nodes);
+        try { attachStudentReplays(userId, stats); } catch (e) { console.error(e); }
+        try { renderNianNian(userId); } catch (e) { console.error(e); }
+
+        document.getElementById('ai-feedback').innerHTML = `
+            <div class="flex flex-col items-center justify-center h-full opacity-60 text-center">
+                <i class="fas fa-magic text-2xl mb-2 text-indigo-300"></i>
+                <p class="text-xs">點擊更新按鈕，獲取專屬學習建議。</p>
+            </div>`;
+    }
+
+    // ===== 念念成櫻:把「自己衍生最多後續討論的那個想法」畫成一棵會長大的櫻花樹 =====
+    function renderNianNian(userId) {
+        const box = document.getElementById('nn-tree-box'), logEl = document.getElementById('nn-log');
+        if (!box || !logEl || typeof KBForest === 'undefined') return;
+        const nodes = globalData.nodes || [], kids = {}, memo = {};
+        nodes.forEach(n => { if (n.parentId) (kids[n.parentId] = kids[n.parentId] || []).push(n); });
+        const sizeOf = id => { if (memo[id] !== undefined) return memo[id]; let c = 0; (kids[id] || []).forEach(k => { c += 1 + sizeOf(k.id); }); return (memo[id] = c); };
+        let best = null, bs = -1;
+        nodes.filter(n => n.author === userId).forEach(n => { const sz = sizeOf(n.id); if (sz > bs) { bs = sz; best = n; } });
+        if (!best) {
+            box.innerHTML = '<div class="text-sm text-slate-500 p-8 text-center leading-relaxed">你還沒有發文。<br>發出第一個想法,就是種下第一顆種子 🌰</div>';
+            logEl.innerHTML = ''; logEl.classList.remove('kf-log'); return;
+        }
+        // 收集這個想法底下所有的回應(整棵子樹)
+        const sub = [], stack = [best];
+        while (stack.length) { const n = stack.pop(); sub.push(n); (kids[n.id] || []).forEach(k => stack.push(k)); }
+        const data = sub.map(n => ({ id: n.id, topicId: 'nn', author: String(n.author), parentId: n.id === best.id ? null : n.parentId, type: n.type, title: n.title, date: new Date(n.date).getTime() }));
+        const nameOf = id => { const u = Object.values(globalData.userList || {}).find(x => String(x.id) === String(id)); return (u && u.name) || String(id); };
+        const ident = window.__kbIdent || (window.__kbIdent = kbAiIdent(globalData.userList));
+        const ctl = KBForest.mount(box, { nodes: data, topics: [{ id: 'nn', name: '我的念念成櫻' }], userList: globalData.userList, nameOf, single: true, youId: userId, mode: 'tree', logEl, treeTitle: '我的念念成櫻' });
+        const pl = kbAttachReplay({ guide: false, id: 'nn', anchor: box, labels: ctl.labels, explainTitle: '我的念念成櫻(一個念頭如何長成一樹繁花)的成長過程', stepper: true, slow: true, jump: 3, baseDelay: 850, dayPause: { every: 3, ms: 2000 },
+            render: step => ctl.setStep(step), values: step => ctl.valuesAt(step, ident.scrub) });
+        if (pl) ctl.onJump = k => pl.goto(k);
+        return ctl;
+    }
+
+    // 每個項目各自有播放鈕:從「起點」(尚無貼文)開始,依發文日逐日累積,只更新那一項
+    function attachStudentReplays(userId, finalStats) {
+        const sdS = kbStepDays(globalData.nodes.map(n => n.date));
+        const ident = window.__kbIdent || (window.__kbIdent = kbAiIdent(globalData.userList));
+        const statsMemo = {}; const statsAt = step => statsMemo[step] || (statsMemo[step] = statsCalc(step)); const dayEnds = [...new Set(globalData.nodes.map(n => new Date(n.date).setHours(23, 59, 59, 999)))].sort((a, b) => a - b);
+        const statsCalc = step => { const saved = globalData.nodes; globalData.nodes = saved.filter(n => sdS.idx(n.date) <= step); window.__kbReplaying = true; window.__kbReadCut = step >= dayEnds.length ? Infinity : (step <= 0 ? -1 : dayEnds[step - 1]); try { return analyzeStudentData(userId); } finally { globalData.nodes = saved; window.__kbReplaying = false; window.__kbReadCut = undefined; } };
+        const nodesAt = step => globalData.nodes.filter(n => sdS.idx(n.date) <= step);
+        const card = id => { const el = document.getElementById(id); return el ? el.closest('.card') : null; };
+        const roleOf = st => {
+            const m = st.roleMetrics, maxStat = Math.max(m.initiator, m.builder, m.synthesizer, m.sustainer);
+            let t = '探索者', sub = 'The Explorer', ft = '綜合探索型';
+            if (maxStat === 0 || st.totalNotes === 0) { t = '新手'; sub = 'Newcomer'; ft = '知識新手'; }
+            else if (maxStat === m.synthesizer && m.synthesizer > 40) { t = '整合者'; sub = 'Synthesizer'; ft = '理論建構型'; }
+            else if (maxStat === m.initiator && m.initiator > 40) { t = '開創者'; sub = 'Initiator'; ft = '批判思考型'; }
+            else if (maxStat === m.builder && m.builder > 40) { t = '連結者'; sub = 'Builder'; ft = '社群連結型'; }
+            else if (maxStat === m.sustainer && m.sustainer > 40) { t = '維護者'; sub = 'Sustainer'; ft = '話題維護型'; }
+            return { t, sub, ft };
+        };
+        const R = (id, anchor, inside, title, render, values) => { if (anchor) kbAttachReplay({ id, anchor, inside, labels: sdS.labels, explainTitle: title, render: step => render(statsAt(step), step), values: step => values(statsAt(step), step) }); };
+        const zero = { totalNotes: 0, linksCount: 0, repliedCount: 0, readCount: 0, uniqueTopicsCount: 0, avgDepth: 0, scaffoldCounts: { question: 0, extend: 0, improve: 0, counter: 0, riseabove: 0 }, roleMetrics: { initiator: 0, builder: 0, synthesizer: 0, sustainer: 0 }, lexicalStats: { acCount: 0, lgCount: 0, level: 'LV.0', title: 'LV.0 尚未開始' }, echoStats: { targets: 0, replies: 0, score: 0, mates: 0 }, lineageStats: { count: 0, maxDepth: 0 }, recentNotes: [] };
+        const S = st => st || zero;
+        // 我的知識角色與四力
+        R('s-role', card('role-title'), true, '我的知識角色(開創力、連結力、整合力、維護力)的演變', st => {
+            st = S(st); const m = st.roleMetrics, r = roleOf(st);
+            const setBar = (id, v) => { document.getElementById(id + '-val').innerText = v + '%'; document.getElementById(id + '-bar').style.width = v + '%'; };
+            setBar('role-initiator', m.initiator); setBar('role-builder', m.builder); setBar('role-synthesizer', m.synthesizer); setBar('role-sustainer', m.sustainer);
+            document.getElementById('role-title').innerText = r.t; document.getElementById('role-subtitle').innerText = 'The ' + r.sub;
+            document.getElementById('radar-decision-text').innerHTML = '<i class="fas fa-fingerprint text-indigo-400 mr-1"></i> ' + r.ft;
+        }, st => { st = S(st); const m = st.roleMetrics; return roleOf(st).t + ':開創' + m.initiator + '%、連結' + m.builder + '%、整合' + m.synthesizer + '%、維護' + m.sustainer + '%'; });
+        // 四張數字卡
+        const cardsParent = card('card-created-val') ? card('card-created-val').parentElement : null;
+        R('s-cards', cardsParent, true, '我的發文貢獻、觀點連結與社群影響力(累積數字)', st => {
+            st = S(st); ['card-created-val', 'card-read-val', 'card-buildon-val', 'card-impact-val'].forEach(stopCountUp);
+            document.getElementById('card-created-val').innerText = st.totalNotes; document.getElementById('card-read-val').innerText = st.readCount || 0;
+            document.getElementById('card-buildon-val').innerText = st.linksCount; document.getElementById('card-impact-val').innerText = st.repliedCount;
+        }, st => { st = S(st); return '發文 ' + st.totalNotes + ' 篇、回應別人 ' + st.linksCount + ' 次、被別人回應 ' + st.repliedCount + ' 次'; });
+        // 知識五力雷達
+        R('s-radar', document.getElementById('studentRadarChart').parentElement, false, '我的知識五力雷達(開創力、連結力、整合力、維護力、影響力)', st => {
+            st = S(st); radarChartInstance.data.datasets[0].data = [st.roleMetrics.initiator, st.roleMetrics.builder, st.roleMetrics.synthesizer, st.roleMetrics.sustainer, influenceScore(st)]; radarChartInstance.update('none');
+        }, st => { st = S(st); const m = st.roleMetrics; return '開創' + m.initiator + '、連結' + m.builder + '、整合' + m.synthesizer + '、維護' + m.sustainer + '、影響' + influenceScore(st) + (st.totalNotes > 0 && st.totalNotes < ROLE_MATURE_N ? '(才發 ' + st.totalNotes + ' 篇,分數先打折,發滿 ' + ROLE_MATURE_N + ' 篇才算滿)' : ''); });
+        // 鷹架偏好
+        const barsMax = Math.max(...Object.values(finalStats.scaffoldCounts), 1);
+        R('s-bars', document.getElementById('scaffold-bars').nextElementSibling, false, '我的鷹架偏好(提問、延伸、改進、反駁、整合各用了幾次)', st => renderScaffoldBars(S(st).scaffoldCounts, barsMax),
+            st => { const c = S(st).scaffoldCounts; return '提問' + c.question + '、延伸' + c.extend + '、改進' + c.improve + '、反駁' + c.counter + '、整合' + c.riseabove; });
+        // 思考演化軌跡(同時提供完整歷程故事)
+        R('s-timeline', document.getElementById('evolution-timeline'), false, '我的思考演化軌跡', st => renderTimeline(S(st).recentNotes, globalData.nodes), st => '累計 ' + S(st).totalNotes + ' 篇貼文');
+        const tl = document.querySelector('[data-kbnet="s-timeline"]');
+        if (tl) kbAddExplain(tl, { title: '我的完整知識建構歷程(從最初到最後)', label: '📖 AI 歷程故事', table: () => kbStoryText(userId) }, 's-story');
+        // 觀點多樣性、認知路徑長度、語義深度
+        R('s-diversity', card('topic-count-val'), true, '我的觀點多樣性(參與了幾條不同的討論串)', st => { st = S(st); document.getElementById('topic-count-val').innerText = st.uniqueTopicsCount; const b = document.getElementById('topic-diversity-bar'); if (b) b.style.width = Math.min(st.uniqueTopicsCount * 10, 100) + '%'; }, st => '參與 ' + S(st).uniqueTopicsCount + ' 條討論串');
+        R('s-path', card('avg-depth-val'), true, '我的認知路徑長度(討論一路往下延伸多深)', st => {
+            st = S(st); document.getElementById('avg-depth-val').innerText = st.avgDepth.toFixed(1);
+            const c = document.getElementById('path-length-visual'); if (c) { let h = ''; const cur = Math.max(Math.round(st.avgDepth), 1); for (let i = 1; i <= 5; i++) { const col = i <= cur ? 'bg-indigo-500' : 'bg-slate-200'; if (i > 1) h += '<div class="h-1 w-6 ' + col + ' transition-colors duration-500"></div>'; h += '<div class="w-3 h-3 rounded-full ' + col + ' shadow-sm transition-colors duration-500"></div>'; } c.innerHTML = h; }
+        }, st => '平均討論深度 ' + S(st).avgDepth.toFixed(1) + ' 層');
+        R('s-lexical', card('lexical-level-badge'), true, '我的語義深度(從日常用語走向學術與邏輯用語)', st => {
+            st = S(st); const lv = st.lexicalStats; let iW = '我覺得...', cW = '因為...', bc = 'bg-green-100 text-green-700 border-green-200';
+            if (lv.level === 'LV.0') { iW = '(無)'; cW = '(無)'; bc = 'bg-slate-100 text-slate-500 border-slate-200'; }
+            else if (lv.level === 'LV.3') { iW = '我觀察到...'; cW = '理論顯示 / 總結是...'; bc = 'bg-purple-100 text-purple-700 border-purple-200'; }
+            else if (lv.level === 'LV.2') { iW = '我覺得 / 同意'; cW = '這導致 / 推論是...'; bc = 'bg-teal-100 text-teal-700 border-teal-200'; }
+            const badge = document.getElementById('lexical-level-badge'); badge.className = 'px-3 py-1 rounded-full text-xs font-bold border ' + bc; badge.innerText = lv.title;
+            document.getElementById('lexical-initial-box').innerHTML = '"' + iW + '"'; document.getElementById('lexical-current-box').innerHTML = '"' + cW + '"';
+        }, st => { const lv = S(st).lexicalStats; return lv.title + '(學術詞 ' + lv.acCount + '、邏輯詞 ' + lv.lgCount + ')'; });
+        // 概念演化雲、跨溫層破壁指數、念念成櫻
+        (function () {
+            const cc = window.__kbCC, host = document.getElementById('kbc-host');
+            if (!cc || cc.empty || !host) return;
+            const player = kbAttachReplay({ id: 's-concept', anchor: cc.main, labels: sdS.labels, explainTitle: '我的概念雲(每個詞什麼時候長出來、現在是什麼狀態)',
+                render: step => cc.render(step), values: step => cc.model.summaryText(step) || '還沒有概念詞',
+                say: (k, pj) => cc.model.changes(k) || null, slow: true, baseDelay: 1600 });
+            // 故事卡放在播放列下面(離雲近一點),說明留在最後
+            const bar = document.querySelector('[data-kbnet="s-concept"]'); if (bar && cc.cardWrap) bar.insertAdjacentElement('afterend', cc.cardWrap);
+        })();
+        // 跨溫層破壁指數:播放時逐天說明「這天回應了誰、圈圈為什麼變滿」,並留下只增不減的「破壁歷程」
+        (function () {
+            const anchor = card('echo-score'); if (!anchor) return;
+            const cap = document.getElementById('echo-caption'), mom = document.getElementById('echo-moments');
+            const esc2 = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+            const nm = id => { const u = Object.values(globalData.userList || {}).find(x => String(x.id) === String(id)); return (u && u.name) || String(id); };
+            const byId = {}; globalData.nodes.forEach(n => { byId[n.id] = n; });
+            const L = sdS.labels.length;
+            const days = Array.from({ length: L }, () => ({ replies: {}, posts: 0 }));
+            globalData.nodes.forEach(n => {
+                if (String(n.author) !== String(userId)) return;
+                const k = sdS.idx(n.date); if (k < 0 || k >= L) return;
+                days[k].posts++;
+                const p = n.parentId ? byId[n.parentId] : null;
+                if (p && String(p.author) !== String(userId)) days[k].replies[p.author] = (days[k].replies[p.author] || 0) + 1;
+            });
+            const scs = [];
+            const scAt = k => scs[k] || (scs[k] = (statsAt(k) || zero).echoStats);
+            const lvl = v => v >= 80 ? 2 : (v >= 40 ? 1 : 0), LV = ['同溫層探索者', '知識橋樑', '社群破壁者'];
+            const seen = new Set(), ev = [];
+            for (let k = 1; k < L; k++) {
+                const ids = Object.keys(days[k].replies);
+                if (!ids.length) { ev[k] = null; continue; }
+                const tg = ids.map(id => ({ id, name: nm(id), n: days[k].replies[id], isNew: !seen.has(id) }));
+                ids.forEach(id => seen.add(id));
+                const a = scAt(k - 1).score, b = scAt(k).score;
+                ev[k] = { k, tg, a, b, up: lvl(b) > lvl(a), nNew: tg.filter(t => t.isNew).length };
+            }
+            const finalE = finalStats.echoStats;
+            function say(k) {
+                if (!cap) return;
+                if (k <= 0) { cap.innerHTML = '🌰 <b>起點</b>:還沒有跟任何同學互動,破壁指數是 0。按下 ▶ 看你一天一天認識了哪些同學。'; return; }
+                const e = ev[k], st = scAt(k), lab = sdS.labels[k];
+                if (!e) { cap.innerHTML = '<div><b>' + lab + '</b> 這天你沒有回應別人' + (days[k].posts ? '(發了 ' + days[k].posts + ' 則自己的想法)' : '') + '。</div><div>破壁指數維持 <b>' + st.score + '</b>。想把圈圈變滿,就去回應還沒說過話的同學!</div>'; return; }
+                const names = e.tg.map(t => '<b>' + esc2(t.name) + '</b>' + (t.isNew ? '<span style="color:#ea580c">(新朋友 🆕)</span>' : '(之前聊過)')).join('、');
+                let h = '<div><b>' + lab + '</b> 你回應了 ' + names + '。</div>';
+                h += e.nNew ? '<div>這天認識了 <b>' + e.nNew + '</b> 位新同學,所以圈圈從 <b>' + e.a + '</b> 變成 <b>' + e.b + '</b>。</div>' : '<div>回應的都是聊過的同學,所以破壁指數沒有增加(仍是 <b>' + e.b + '</b>)。</div>';
+                h += '<div class="text-slate-500">目前已經跟 ' + st.targets + ' / ' + st.mates + ' 位同組同學互動過。</div>';
+                if (e.up) h += '<div class="font-bold" style="color:#0f766e">🎉 升級了!你現在是「' + LV[lvl(e.b)] + '」。</div>';
+                cap.innerHTML = h;
+            }
+            let player = null, lastN = -1;
+            function moments(k) {
+                if (!mom) return;
+                const list = []; for (let i = 1; i <= k && i < L; i++) if (ev[i]) list.push(ev[i]);
+                mom.classList.toggle('hidden', !list.length);
+                if (!list.length) { lastN = -1; return; }
+                const st = scAt(Math.min(k, L - 1));
+                mom.innerHTML = '<div class="text-[11px] font-bold text-orange-700 mb-1">🌉 破壁歷程(到目前互動過 ' + st.targets + ' 位同學,點一下回到那一天)</div>' +
+                    '<div class="space-y-1 overflow-y-auto pr-1" style="max-height:112px">' + list.map(e => '<button type="button" data-k="' + e.k + '" class="w-full text-left text-[11px] rounded-md border px-2 py-1 ' + (e.k === k ? 'border-orange-400 bg-orange-50' : 'border-slate-200 bg-white hover:bg-orange-50') + '"><b>' + sdS.labels[e.k] + '</b> 回應 ' + e.tg.map(t => esc2(t.name) + (t.isNew ? '(新)' : '')).join('、') + ' · 指數 ' + e.a + ' → <b>' + e.b + '</b>' + (e.up ? ' 🎉' : '') + '</button>').join('') + '</div>';
+                const box = mom.lastElementChild; if (lastN >= 0 && list.length > lastN) box.scrollTop = box.scrollHeight; lastN = list.length;
+                Array.prototype.forEach.call(mom.querySelectorAll('[data-k]'), b => { b.onclick = () => { if (player) player.goto(Number(b.getAttribute('data-k'))); }; });
+            }
+            if (cap) cap.innerHTML = '<div>👆 <b>按下 ▶ 播放</b>:一天一天看你認識了哪些同學,這裡會即時說明「這天發生了什麼、圈圈為什麼變滿」。</div><div class="text-slate-500">整段歷程:你一共回應了 ' + finalE.targets + ' 位不同的同學(共 ' + finalE.replies + ' 次),破壁指數是 ' + finalE.score + '。</div>';
+            moments(L - 1);
+            player = kbAttachReplay({ guide: false, id: 's-echo', anchor: anchor, inside: true, labels: sdS.labels, explainTitle: '我的跨溫層破壁指數(跟多少不同同學互動)', stepper: true, slow: true, baseDelay: 1500,
+                render: step => { renderEchoChamber(S(statsAt(step))); say(step); moments(step); },
+                values: step => { const e = S(statsAt(step)).echoStats, v = ev[step]; return ident.scrub('破壁指數 ' + e.score + '(互動過 ' + e.targets + ' 位同學、回應 ' + e.replies + ' 次)' + (v ? ';這天回應了 ' + v.tg.map(t => t.name + (t.isNew ? '(新朋友)' : '(之前聊過)')).join('、') : '')); } });
+        })();
+        R('s-lineage', card('lineage-content'), true, '我的念念成櫻(一個想法長出多少後續討論)', (st, step) => renderIdeaLineage(userId, nodesAt(step), globalData.userList), st => { const l = S(st).lineageStats; return '最大的想法引出 ' + l.count + ' 則後續回應、最深 ' + l.maxDepth + ' 層'; });
+    }
+
+    // 概念雲:用這位學生的貼文(類型、回應、時間)畫出想法怎麼長大;資料線連起常一起出現的詞
+    function renderConceptEvolution(userId) {
+        const host = document.getElementById('kbc-host'); if (!host || !window.KBConcept) return;
+        const uid = userId || currentUserId;
+        const sd = kbStepDays(globalData.nodes.map(n => n.date));
+        const nameOf = id => { const u = (globalData.userList || {})[id]; return u ? u.name : '同學'; };
+        const model = KBConcept.build({ nodes: globalData.nodes, userId: uid, step: ts => sd.idx(ts), name: nameOf, topics: globalData.topics || [], max: 12 });
+        window.__kbCC = KBConcept.create(host, model, {
+            labels: sd.labels,
+            onGoPost: (id, topicId) => { location.href = 'Knowledge Building Forum.html?topic=' + encodeURIComponent(topicId) + '&node=' + encodeURIComponent(id); }
+        });
+        window.__kbCCUser = uid;
+    }
+
+    function renderEchoChamber(stats) {
+        let score = stats.echoStats.score;
+        let title = "同溫層探索者", desc = "你目前大多與固定幾位同學互動。";
+        let colorClass = "text-orange-500";
+
+        if (score >= 80) { title = "社群破壁者 🏆"; desc = "太棒了！你廣泛地與不同同學交流。"; colorClass = "text-emerald-500"; }
+        else if (score >= 40) { title = "知識橋樑"; desc = "你開始跨群體連結，繼續保持！"; colorClass = "text-sky-500"; }
+
+        document.getElementById('echo-score').innerText = score;
+        document.getElementById('echo-score').className = `text-3xl font-black ${colorClass}`;
+        document.getElementById('echo-title').innerText = title;
+        document.getElementById('echo-title').className = `inline-block px-2 py-1 text-[10px] font-bold rounded mb-1 border ${score>=80?'bg-emerald-100 text-emerald-700 border-emerald-200':(score>=40?'bg-sky-100 text-sky-700 border-sky-200':'bg-orange-100 text-orange-700 border-orange-200')}`;
+        document.getElementById('echo-desc').innerText = desc;
+
+        const circle = document.getElementById('echo-circle');
+        if(circle) {
+            circle.style.strokeDashoffset = 264 - (264 * score) / 100;
+            circle.setAttribute("class", `${colorClass} transition-all duration-1000 ease-out`);
+        }
+    }
+
+    // 🔥 全新升級版：支援顯示「各階段灌溉者與內容」的念念成櫻 (收合面板 + 僅顯示日期)
+    function renderIdeaLineage(userId, allNodes, users) {
+        const container = document.getElementById('lineage-content');
+
+        // 遞迴取得所有後代節點、深度，並攤平成時間序陣列
+        const getDescendants = (nodeId, currentDepth) => {
+            let count = 0, maxD = 0;
+            let descList = [];
+            const children = allNodes.filter(n => n.parentId === nodeId);
+
+            // 根據日期排序子節點，確保時間序
+            children.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+            children.forEach(c => {
+                count++;
+                descList.push({ ...c, depth: currentDepth });
+                const sub = getDescendants(c.id, currentDepth + 1);
+                count += sub.count;
+                maxD = Math.max(maxD, sub.maxDepth + 1);
+                descList = descList.concat(sub.descList);
+            });
+            return { count, maxDepth: children.length > 0 ? Math.max(maxD, 1) : 0, descList };
+        };
+
+        let bestNote = null, bestInfo = { count: -1, maxDepth: 0, descList: [] };
+
+        // 尋找衍生出最多後代的那篇「初始筆記」
+        allNodes.filter(n => n.author === userId).forEach(n => {
+            const info = getDescendants(n.id, 1);
+            if (info.count > bestInfo.count) { bestInfo = info; bestNote = n; }
+        });
+
+        // 狀態一：還沒有任何人來灌溉
+        if (!bestNote || bestInfo.count === 0) {
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center text-center py-6 bg-pink-50/50 rounded-xl border border-pink-100/50 relative overflow-hidden mt-auto mb-auto">
+                    <div class="text-4xl mb-2 opacity-50 grayscale">🌱</div>
+                    <div class="text-[11px] font-bold text-slate-500 mb-1">初始觀點種子 (Initial Idea Seed)</div>
+                    <div class="text-xs text-pink-500/80 font-medium italic z-10 px-4">
+                        目前還沒有同學來延伸你的想法。<br>試著發起一個好問題，種下你的櫻花種子吧！
+                    </div>
+                    <div class="mt-4 bg-white px-3 py-1.5 rounded-lg border border-pink-200 shadow-sm flex items-center gap-2 z-10 cursor-pointer hover:bg-pink-50 transition">
+                        <i class="fas fa-tint text-sky-400"></i>
+                        <span class="text-xs font-bold text-slate-600">求助訣竅：試著在標題加入「?」</span>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        // 狀態二：已有灌溉紀錄的櫻花樹
+        let line1Color = bestInfo.maxDepth >= 1 ? 'bg-pink-300' : 'bg-slate-200';
+        let line2Color = bestInfo.maxDepth >= 2 ? 'bg-pink-400' : 'bg-slate-200';
+
+        let petalsHtml = bestInfo.maxDepth >= 2 ? `
+            <div class="sakura-petal" style="left: 15%; animation-delay: 0s;"></div>
+            <div class="sakura-petal" style="left: 85%; animation-delay: 1.2s; transform: scale(0.8);"></div>
+            <div class="sakura-petal" style="left: 50%; animation-delay: 2s; width: 12px; height: 12px;"></div>
+            <div class="sakura-petal" style="left: 30%; animation-delay: 1.5s; transform: scale(0.6);"></div>
+        ` : '';
+
+        // 🔥 將所有子代依據成長階段 (Depth 層級) 進行分群
+        const groupedDesc = {};
+        bestInfo.descList.forEach(desc => {
+            const d = desc.depth;
+            if (!groupedDesc[d]) groupedDesc[d] = [];
+            groupedDesc[d].push(desc);
+        });
+
+        // 排序階段層級 (1, 2, 3...)
+        const depths = Object.keys(groupedDesc).map(Number).sort((a, b) => a - b);
+        // 清單高度:電腦版填滿卡片剩下的空間(basis 0 讓高度由右邊的樹決定,清單在裡面捲動),手機版限制在 420px 內捲動
+        let logHtml = `<div class="flex-1 lg:basis-0 min-h-[200px] max-h-[420px] lg:max-h-none overflow-y-auto custom-scrollbar mt-2 space-y-2 pr-1 pb-1">`;
+
+        // 遍歷每個階段，生成摺疊面板
+        depths.forEach(depth => {
+            const nodes = groupedDesc[depth];
+            nodes.sort((a, b) => new Date(a.date) - new Date(b.date)); // 確保該階段內的時間序
+
+            let stageTitle = depth === 1 ? "第 1 層：初步質疑與補充" :
+                             depth === 2 ? "第 2 層：深度延伸與反駁" :
+                             `第 ${depth} 層：觀點收斂與昇華`;
+
+            let stageIcon = depth === 1 ? "fa-seedling text-green-500" :
+                            depth === 2 ? "fa-leaf text-teal-500" :
+                            "fa-fan text-pink-400"; // 使用扇形代表花瓣盛開階段
+
+            // 預設展開第1層與第2層，更深層的先折疊起來保持畫面乾淨
+            const isOpen = depth <= 2;
+            const hiddenClass = isOpen ? '' : 'hidden';
+            const rotateClass = isOpen ? 'rotate-180' : '';
+
+            logHtml += `
+                <div class="border border-pink-100 rounded-xl overflow-hidden bg-white shadow-sm shrink-0">
+                    <!-- 階段標題按鈕 -->
+                    <div class="bg-pink-50/60 px-3 py-2 flex justify-between items-center cursor-pointer hover:bg-pink-100 transition" onclick="toggleLineageStage('stage-depth-${depth}', this)">
+                        <div class="text-[10px] font-bold text-slate-700 flex items-center gap-1.5">
+                            <i class="fas ${stageIcon}"></i> ${stageTitle} <span class="text-pink-500 font-normal">(${nodes.length} 篇)</span>
+                        </div>
+                        <i class="fas fa-chevron-down text-slate-400 text-[10px] transition-transform transform ${rotateClass} duration-300"></i>
+                    </div>
+                    <!-- 階段內容區塊 -->
+                    <div id="stage-depth-${depth}" class="p-2 space-y-2 ${hiddenClass} bg-slate-50/30">
+            `;
+
+            // 渲染該階段內的每一篇灌溉筆記
+            nodes.forEach(desc => {
+                const authorInfo = Object.values(users).find(u => u.id === desc.author);
+                const authorName = authorInfo ? authorInfo.name : '匿名';
+                const avatar = authorInfo ? (authorInfo.avatar || `https://ui-avatars.com/api/?name=${authorName}&background=random`) : `https://ui-avatars.com/api/?name=User&background=random`;
+
+                let badgeStyle = 'bg-slate-100 text-slate-600 border-slate-200';
+                let icon = 'fa-comment';
+                let typeName = '一般';
+
+                if (desc.type === 'question') { badgeStyle = 'bg-blue-50 text-blue-600 border-blue-200'; icon = 'fa-question'; typeName = '提問'; }
+                if (desc.type === 'improve') { badgeStyle = 'bg-green-50 text-green-600 border-green-200'; icon = 'fa-arrow-up'; typeName = '改進'; }
+                if (desc.type === 'extend') { badgeStyle = 'bg-yellow-50 text-yellow-600 border-yellow-200'; icon = 'fa-plus'; typeName = '延伸'; }
+                if (desc.type === 'counter') { badgeStyle = 'bg-red-50 text-red-600 border-red-200'; icon = 'fa-bolt'; typeName = '反駁'; }
+                if (desc.type === 'riseabove') { badgeStyle = 'bg-purple-50 text-purple-600 border-purple-200'; icon = 'fa-layer-group'; typeName = '昇華'; }
+
+                const isSelf = desc.author === userId;
+                const actionText = isSelf ? "自我延伸" : "前來澆水";
+                const bgClass = isSelf ? "bg-slate-50" : "bg-white";
+
+                logHtml += `
+                    <div class="flex gap-2 items-start ${bgClass} p-2 rounded-lg border border-pink-100/60 shadow-sm hover:border-pink-300 transition group cursor-pointer" onclick="viewNoteDetail('${desc.id}')">
+                        <img src="${avatar}" class="w-6 h-6 rounded-full mt-0.5 border border-slate-200 shadow-sm object-cover flex-shrink-0">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-center mb-0.5">
+                                <div class="flex items-center gap-1">
+                                    <span class="text-[10px] font-bold text-slate-700">${authorName}</span>
+                                    <span class="text-[8px] text-slate-400">${actionText}</span>
+                                </div>
+                                <span class="text-[8px] px-1.5 py-0.5 rounded border ${badgeStyle} font-bold flex items-center gap-1 leading-none"><i class="fas ${icon} text-[8px]"></i>${typeName}</span>
+                            </div>
+                            <p class="text-[11px] text-slate-600 line-clamp-2 leading-relaxed mb-1">${desc.content}</p>
+                            <div class="text-[8px] text-slate-400 flex justify-between">
+                                <!-- 🔥 修改：僅顯示日期，不顯示具體時間 -->
+                                <span>${new Date(desc.date).toLocaleDateString('zh-TW', {month:'short', day:'numeric'})}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            logHtml += `</div></div>`; // 結束該階段的內容區塊與面板
+        });
+
+        logHtml += `</div>`;
+
+        // 組裝包含「源頭筆記」、「摘要動畫」與「灌溉紀錄列表」的完整 UI
+        container.innerHTML = `
+            <div class="bg-white p-2.5 rounded-xl border border-pink-200 shadow-sm mb-2 relative z-10 cursor-pointer hover:bg-pink-50 transition shrink-0" onclick="viewNoteDetail('${bestNote.id}')">
+                <div class="flex justify-between items-center mb-1">
+                    <div class="text-[10px] text-pink-500 font-bold tracking-wider"><i class="fas fa-seedling mr-1"></i> 初始觀點種子</div>
+                    <!-- 🔥 修改：初始觀點也僅顯示日期 -->
+                    <div class="text-[9px] text-slate-400 font-mono">${new Date(bestNote.date).toLocaleDateString('zh-TW', {month:'short', day:'numeric'})}</div>
+                </div>
+                <div class="font-bold text-xs text-slate-800 truncate">${bestNote.title || '無標題'}</div>
+            </div>
+
+            <div class="flex justify-between items-center bg-gradient-to-r from-pink-50/50 to-rose-50/50 rounded-xl p-3 mb-2 border border-pink-100 relative overflow-hidden shadow-inner shrink-0">
+                ${petalsHtml}
+                <div class="text-center flex-1 relative z-10">
+                    <div class="text-2xl mb-0.5 ${bestInfo.maxDepth >= 0 ? 'drop-shadow-md' : 'opacity-40 grayscale'} transition-all duration-500">🌱</div>
+                </div>
+                <div class="w-8 h-1 rounded-full ${line1Color} transition-colors duration-500 relative z-10"></div>
+
+                <div class="text-center flex-1 relative z-10">
+                    <div class="text-2xl mb-0.5 ${bestInfo.maxDepth >= 1 ? 'drop-shadow-md' : 'opacity-40 grayscale'} transition-all duration-500">🌿</div>
+                </div>
+                <div class="w-8 h-1 rounded-full ${line2Color} transition-colors duration-500 relative z-10"></div>
+
+                <div class="text-center flex-1 relative z-10">
+                    <div class="text-3xl mb-0.5 ${bestInfo.maxDepth >= 2 ? 'drop-shadow-lg scale-110 transform -translate-y-1' : 'opacity-40 grayscale'} transition-all duration-500">🌸</div>
+                </div>
+            </div>
+
+            <div class="flex flex-col flex-1 overflow-hidden">
+                <div class="text-[10px] font-bold text-pink-500 border-b border-pink-100 pb-1.5 flex justify-between items-center shrink-0">
+                    <span><i class="fas fa-tint mr-1"></i> 歷程灌溉紀錄 (${bestInfo.count})</span>
+                    <span class="text-slate-400 font-normal">最深至第 ${bestInfo.maxDepth + 1} 層</span>
+                </div>
+                ${logHtml}
+            </div>
+        `;
+    }
+
+    function renderEurekaArc(userId, allNodes) {
+        const myNotes = allNodes.filter(n => n.author === userId).sort((a,b) => new Date(a.date) - new Date(b.date));
+        let acc = 0; const labels = [], data = [];
+        const TYPE = { question: ['提問', -0.5], counter: ['反駁', -0.5], improve: ['改進', 0.5], riseabove: ['昇華', 2], extend: ['延伸', 0] };
+        const isUp = n => n.type === 'riseabove' || n.type === 'improve';
+        const fmtD = n => new Date(n.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+        const esc2 = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        const cap = document.getElementById('eureka-caption'), mom = document.getElementById('eureka-moments');
+
+        myNotes.forEach((n, i) => {
+            labels.push(`N${i+1}`);
+            acc += 1;
+            let fluctuation = 0;
+            if (n.type === 'question' || n.type === 'counter') fluctuation = -0.5;
+            else if (n.type === 'improve') fluctuation = 0.5;
+            else if (n.type === 'riseabove') fluctuation = 2;
+
+            data.push(acc + fluctuation);
+        });
+
+        const ctx = document.getElementById('eurekaChart').getContext('2d');
+        if (eurekaChartInstance) eurekaChartInstance.destroy();
+
+        if (myNotes.length < 2) {
+            ctx.font = "12px Noto Sans TC"; ctx.fillStyle = "#94a3b8"; ctx.textAlign = "center";
+            ctx.fillText("歷程過短，請持續參與討論以產生軌跡", 150, 90);
+            if (cap) cap.textContent = '你的發言還不多。多參與幾次討論,這裡就會畫出你的想法一步步往上爬的軌跡。';
+            return;
+        }
+
+        const M = myNotes.length;
+        const baseR = myNotes.map(n => n.type === 'riseabove' ? 7.5 : (n.type === 'improve' ? 5 : 3));
+        const baseBorder = myNotes.map(n => isUp(n) ? '#d97706' : '#f43f5e');
+        eurekaChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '狀態', data: data,
+                    borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.05)',
+                    borderWidth: 2, tension: 0.4, fill: true,
+                    pointBackgroundColor: myNotes.map(n => isUp(n) ? '#fbbf24' : '#f43f5e'),
+                    pointRadius: baseR.slice(), pointBorderColor: baseBorder.slice(), pointBorderWidth: baseR.map(() => 1.5), pointHoverRadius: baseR.map(r => r + 3),
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: {
+                    title: items => { const i = items[0].dataIndex, n = myNotes[i]; return 'N' + (i + 1) + ' · ' + fmtD(n); },
+                    label: c => { const n = myNotes[c.dataIndex], t = TYPE[n.type] || ['一般發言', 0]; return t[0] + (t[1] > 0 ? '(多爬 ' + t[1] + ')' : t[1] < 0 ? '(稍微下沉)' : '') + ':' + (n.title || '(無標題)'); },
+                    afterLabel: c => '想法高度 ' + c.parsed.y
+                } } },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        display: true, suggestedMin: 0, suggestedMax: Math.max(...data, 4),
+                        grid: { color: '#f1f5f9' }, border: { dash: [4, 4] },
+                        ticks: { font: { size: 10 }, color: '#94a3b8', callback: function(val) { return val % 2 === 0 ? val : ''; } }
+                    }
+                }
+            }
+        });
+
+        // ---- 播放時的即時說明(停在畫面上,直到下一個點才換)+ 「想法進步的時刻」清單(只增加、不消失)----
+        const SAY = {
+            question: '你提出了一個問題。提問會讓想法暫時「卡住一下」(線稍微下沉),這很正常——代表你碰到了值得想的難題。',
+            counter: '你提出了不同的看法。反駁會讓想法先晃一下(線稍微下沉),但常常是下一次進步的起點。',
+            improve: '你把想法改得更好了!這是一次小進步(多爬 0.5)。',
+            riseabove: '你把零散的想法整合成更高一層的新觀點!這是一次大躍進(多爬 2)。',
+            extend: '你延伸、補充了想法,穩穩地往上爬一格。'
+        };
+        const nImp = myNotes.filter(n => n.type === 'improve').length, nRise = myNotes.filter(n => n.type === 'riseabove').length;
+        function paintCaption(k) {
+            if (!cap) return;
+            if (k <= 0) { cap.innerHTML = '🌰 <b>起點</b>:還沒有任何發言,想法的高度是 0。按下 ▶ 或拖動進度條,看想法怎麼一步步往上爬。'; return; }
+            const n = myNotes[k - 1], t = TYPE[n.type] || ['一般發言', 0], up = isUp(n);
+            let h = '<div><b>N' + k + ' · ' + fmtD(n) + '</b> ' + (up ? '<span style="color:#d97706">● 黃色點</span>' : '<span style="color:#f43f5e">● 紅色點</span>') + ' <span class="font-bold">' + t[0] + '</span></div>' +
+                '<div>' + (SAY[n.type] || '你發表了一則想法,往上爬一格。') + '</div>' +
+                '<div class="text-slate-500">「' + esc2(n.title || '(無標題)') + '」→ 想法高度 <b>' + data[k - 1] + '</b></div>';
+            if (k === M) h += '<div class="mt-1 font-bold text-indigo-700">🎉 播完了!共 ' + M + ' 次發言,其中 ' + nImp + ' 次改進、' + nRise + ' 次昇華。</div>';
+            cap.innerHTML = h;
+        }
+        let player = null, lastMom = -1;
+        function paintMoments(k) {
+            if (!mom) return;
+            const items = []; myNotes.forEach((n, i) => { if (i < k && isUp(n)) items.push(i); });
+            mom.classList.toggle('hidden', !items.length);
+            if (!items.length) { lastMom = -1; return; }
+            mom.innerHTML = '<div class="text-[11px] font-bold text-amber-700 mb-1">⭐ 想法進步的時刻(到目前 ' + items.length + ' 次,點一下回到那個點)</div>' +
+                '<div class="space-y-1 overflow-y-auto pr-1" style="max-height:112px">' + items.map(i => { const n = myNotes[i], t = TYPE[n.type]; return '<button type="button" data-k="' + (i + 1) + '" class="w-full text-left text-[11px] rounded-md border px-2 py-1 ' + (i === k - 1 ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white hover:bg-amber-50') + '"><b>N' + (i + 1) + ' · ' + fmtD(n) + '</b> ' + t[0] + '(多爬 ' + t[1] + ')「' + esc2(n.title || '(無標題)') + '」</button>'; }).join('') + '</div>';
+            const box = mom.lastElementChild; if (items.length > lastMom && lastMom >= 0) box.scrollTop = box.scrollHeight; lastMom = items.length;
+            Array.prototype.forEach.call(mom.querySelectorAll('[data-k]'), btn => { btn.onclick = () => { if (player) player.goto(Number(btn.getAttribute('data-k'))); }; });
+        }
+        paintCaption(M); if (cap) cap.innerHTML = '<div>👆 <b>按下 ▶ 播放</b>:一個點一個點看你的想法怎麼往上爬,這裡會即時說明「現在這個點代表什麼」。</div><div class="text-slate-500">整段歷程:共 ' + M + ' 次發言,其中 ' + nImp + ' 次改進、' + nRise + ' 次昇華,最後的想法高度是 ' + data[M - 1] + '。</div>';
+        paintMoments(M);
+        try {
+            player = kbAttachSeriesPlayer({ guide: false, id: 'eureka', explainTitle: '我的認知頓悟軌跡(每一次發言讓想法往上走或停一下)', chart: eurekaChartInstance, anchor: document.getElementById('eureka-box'), slow: true, baseDelay: 650,
+                hold: k => { const n = myNotes[k - 1]; return n ? (n.type === 'riseabove' ? 1800 : (n.type === 'improve' ? 1200 : 0)) : 0; },
+                onStep: (k, chart) => {
+                    const ds = chart.data.datasets[0];
+                    ds.pointRadius = baseR.map((r, i) => i === k - 1 ? r + 3 : r);
+                    ds.pointBorderColor = baseBorder.map((c, i) => i === k - 1 ? '#4f46e5' : c);
+                    ds.pointBorderWidth = baseR.map((r, i) => i === k - 1 ? 3.5 : 1.5);
+                    paintCaption(k); paintMoments(k);
+                } });
+        } catch (e) { console.error(e); }
+    }
+
+    function renderRadarChart(data) {
+        const ctx = document.getElementById('studentRadarChart').getContext('2d');
+        if (radarChartInstance) radarChartInstance.destroy();
+        radarChartInstance = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: ['開創力', '連結力', '整合力', '維護力', '影響力'],
+                datasets: [{
+                    data: data, fill: true, backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                    borderColor: 'rgb(99, 102, 241)', pointBackgroundColor: 'rgb(99, 102, 241)',
+                    pointBorderColor: '#fff', borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { r: { ticks: { display: false }, suggestedMin: 0, suggestedMax: 100, pointLabels: { font: { size: 11, family: "'Noto Sans TC', sans-serif", weight: 'bold' }, color: '#475569' }, grid: { color: '#e2e8f0' }, angleLines: { color: '#e2e8f0' } } },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    function renderEgoNetwork(userId) {
+        const container = document.getElementById('ego-network-container');
+        if(!container) return;
+
+        const nodes = globalData.nodes || [], users = globalData.userList || {};
+        const colors = { question: '#3b82f6', extend: '#eab308', improve: '#22c55e', counter: '#ef4444', riseabove: '#a855f7', alter: '#d5dbe5' };
+        const interactants = new Set([userId]);
+        const byIdN = {}; nodes.forEach(n => { byIdN[n.id] = n; });
+        const days = kbMakeDays(nodes.map(n => n.date));
+        const dayPos = kbThreadPos(nodes, n => n.date);
+        const events = []; // 每次回應 = 一筆事件(同一對學生的多次回應會合併成一條線)
+
+        nodes.forEach(n => {
+            if(n.parentId) {
+                const p = byIdN[n.parentId];
+                if(p) {
+                    if (n.author === userId && p.author !== userId) { interactants.add(p.author); events.push({ from: userId, to: p.author, d: days.index(n.date, dayPos(n.id)), type: n.type }); }
+                    if (p.author === userId && n.author !== userId) { interactants.add(n.author); events.push({ from: n.author, to: userId, d: days.index(n.date, dayPos(n.id)), type: n.type }); }
+                }
+            }
+        });
+
+        // 除了「你與每位對象」的連線,也畫出這些對象彼此之間的互動(淺灰細線)
+        nodes.forEach(n => {
+            if (!n.parentId) return;
+            const p = byIdN[n.parentId]; if (!p) return;
+            if (n.author !== p.author && n.author !== userId && p.author !== userId && interactants.has(n.author) && interactants.has(p.author)) events.push({ from: n.author, to: p.author, d: days.index(n.date, dayPos(n.id)), type: 'alter' });
+        });
+
+        const visNodes = Array.from(interactants).map(id => {
+            const u = Object.values(users).find(usr => usr.id === id), isMe = id === userId;
+            return { id: id, label: u ? u.name : id, shape: 'dot', size: isMe ? 24 : 14, color: isMe ? '#4f46e5' : '#cbd5e1', font: { size: 12, color: '#475569', face: 'Noto Sans TC' } };
+        });
+
+        if(egoNetworkInstance) { egoNetworkInstance.destroy(); egoNetworkInstance = null; }
+        Array.prototype.forEach.call(document.querySelectorAll('[data-kbnet="ego-s"]'), x => x.remove());
+        if (visNodes.length <= 1) container.innerHTML = '<div class="flex h-full items-center justify-center text-slate-400 text-xs italic">尚無互動紀錄</div>';
+        else {
+            const edgeFrame = kbEdgeFrames(events, colors);
+            const build = i => { const eds = edgeFrame(i).map(ed => (ed.color && ed.color.color === colors.alter) ? Object.assign({}, ed, { width: 1, arrows: '' }) : ed); const present = new Set([userId]); eds.forEach(ed => { present.add(ed.from); present.add(ed.to); }); return { nodes: visNodes.filter(nd => present.has(nd.id)), edges: eds }; };
+            const last = days.labels.length - 1;
+            const nodesDS = new vis.DataSet(build(last).nodes), edgesDS = new vis.DataSet(build(last).edges);
+            egoNetworkInstance = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, { nodes: { borderWidth: 2 }, edges: { smooth: false }, physics: { stabilization: { enabled: true, iterations: 160, updateInterval: 50, fit: true }, barnesHut: { gravitationalConstant: -3000, springLength: 120, damping: 0.6 } } });
+            // 排列穩定後就關閉物理運算,圖不會再一直晃動(仍可手動拖曳節點)
+            const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
+            egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics);
+            setTimeout(stopEgoPhysics, 2500);
+            kbAttachPlayer({ explainTitle: '我的互動圈(我和誰互動)的形成過程', id: 'ego-s', container: container, network: egoNetworkInstance, nodesDS: nodesDS, edgesDS: edgesDS, labels: days.stepLabels, steps: days.steps, build: build });
+        }
+    }
+
+    function renderTimeline(notes, dbNodes) {
+        const container = document.getElementById('evolution-timeline'); container.innerHTML = '';
+        if (notes.length === 0) { container.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm">尚無活動紀錄</div>'; return; }
+
+        const line = document.createElement('div'); line.className = 'evolution-line'; container.appendChild(line);
+
+        notes.forEach(note => {
+            let tc = 'bg-slate-100 text-slate-400 border-slate-200', ti = 'fa-comment';
+            if (note.type === 'question') { tc = 'bg-blue-50 text-blue-500 border-blue-200'; ti = 'fa-question'; }
+            if (note.type === 'improve') { tc = 'bg-green-50 text-green-500 border-green-200'; ti = 'fa-arrow-up'; }
+            if (note.type === 'riseabove') { tc = 'bg-purple-50 text-purple-500 border-purple-200'; ti = 'fa-layer-group'; }
+
+            let ctxHtml = '';
+            if (note.parentId) {
+                const parent = dbNodes.find(n => n.id === note.parentId);
+                if (parent) ctxHtml = `<div class="text-[10px] text-slate-400 mb-1.5 pl-2 border-l-2 border-slate-200"><i class="fas fa-reply mr-1"></i> 回應: ${parent.title}</div>`;
+            }
+
+            container.insertAdjacentHTML('beforeend', `
+                <div class="relative flex gap-4 mb-4 evolution-node group evolution-item">
+                    <div class="w-9 h-9 rounded-full ${tc} flex items-center justify-center shadow-sm border-2 flex-shrink-0 z-10 transition-transform group-hover:scale-110"><i class="fas ${ti} text-sm"></i></div>
+                    <div class="flex-1 bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition cursor-pointer" onclick="viewNoteDetail('${note.id}')">
+                        <div class="flex justify-between items-start mb-1"><h4 class="font-bold text-slate-700 text-sm leading-tight">${note.title || '無標題'}</h4><span class="text-[10px] text-slate-400 flex-shrink-0 ml-2">${new Date(note.date).toLocaleDateString()}</span></div>
+                        ${ctxHtml}
+                        <p class="text-xs text-slate-500 line-clamp-2 leading-relaxed">${note.content}</p>
+                    </div>
+                </div>`);
+        });
+    }
+
+    function renderScaffoldBars(counts, maxRef) {
+        const container = document.getElementById('scaffold-bars'); container.innerHTML = '';
+        const max = Math.max(maxRef || 0, ...Object.values(counts), 1), types = ['question', 'extend', 'improve', 'counter', 'riseabove'], colors = ['bg-blue-500', 'bg-yellow-400', 'bg-green-500', 'bg-red-500', 'bg-purple-500'];
+        types.forEach((t, i) => {
+            const val = counts[t], h = Math.max((val / max) * 100, 10), bar = document.createElement('div');
+            bar.className = `flex-1 ${colors[i]} rounded-t-lg relative transition-all duration-500 hover:opacity-80 cursor-pointer`;
+            bar.style.height = `${h}%`;
+            bar.innerHTML = `<div class="absolute -top-5 left-1/2 transform -translate-x-1/2 text-[11px] font-bold text-slate-600">${val}</div>`;
+            container.appendChild(bar);
+        });
+    }
+
+    function viewNoteDetail(noteId) {
+        const note = globalData.nodes.find(n => n.id === noteId); if(!note) return;
+        document.getElementById('nd-title').innerText = note.title || '無標題';
+        document.getElementById('nd-content').innerText = note.content;
+
+        // 🔥 修改這裡：將 toLocaleString 改為 toLocaleDateString，徹底移除時分秒
+        document.getElementById('nd-date').innerText = new Date(note.date).toLocaleDateString('zh-TW');
+
+        document.getElementById('nd-type').innerText = note.type;
+        const author = Object.values(globalData.userList).find(u => u.id === note.author);
+        document.getElementById('nd-author').innerText = author ? author.name : note.author;
+        document.getElementById('note-detail-modal').style.display = "flex";
+    }
+
+    // 動態播放要自己控制數字時,先讓還在跑的「數字跳動」動畫停下來(不然動畫的下一格會把播放的數字蓋掉)
+    function stopCountUp(id) { const o = document.getElementById(id); if (o) o.__animTok = (o.__animTok || 0) + 1; }
+    function animateValue(id, start, end, duration) {
+        const obj = document.getElementById(id); if(!obj) return;
+        let startTimestamp = null, last = null;
+        const token = obj.__animTok = (obj.__animTok || 0) + 1;
+        const step = (timestamp) => {
+            // 數字被別的地方改掉了(例如使用者按了「動態播放」,見 stopCountUp),就不要再把動畫的數字蓋回去
+            if (obj.__animTok !== token) return;
+            if (last !== null && obj.innerHTML !== String(last)) return;
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            last = Math.floor(progress * (end - start) + start);
+            obj.innerHTML = last;
+            if (progress < 1) window.requestAnimationFrame(step);
+        };
+        window.requestAnimationFrame(step);
+    }
+
+    function syncData() {
+        const btn = document.getElementById('sync-btn'), orgHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+        setTimeout(() => { if(currentUserId) switchUser(currentUserId); btn.innerHTML = orgHtml; }, 500);
+    }
+
+    // ===== AI 歷程解說:接上本頁的 AI 呼叫(姓名一律換成代號) =====
+    window.kbAiAudience = 'student';
+    window.kbAiAsk = async function (p) {
+        try { if (!KB.settings.get().ai.enabled) return '⚠️ AI 功能目前已被關閉(請老師到設定中心開啟)。'; } catch (e) {}
+        if (!apiKey) { try { await initApiKey(); } catch (e) {} }
+        if (!apiKey) return '⚠️ 尚未設定 Gemini 金鑰,請老師到首頁或設定中心輸入並儲存。';
+        const r = await geminiFetch(apiKey, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: p }] }] }) });
+        const j = await r.json();
+        if (!r.ok) return '⚠️ AI 暫時無法使用(' + ((j.error && j.error.message) || r.status) + ')';
+        return (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts && j.candidates[0].content.parts[0].text) || '⚠️ AI 沒有回應,請稍後再試。';
+    };
+    function kbStoryText(userId) {
+        const id = window.__kbIdent || (window.__kbIdent = kbAiIdent(globalData.userList));
+        return kbStoryTable({ nodes: (globalData.nodes || []).map(n => ({ id: n.id, author: String(n.author), parentId: n.parentId, type: n.type, title: n.title, content: n.content, date: new Date(n.date).getTime() })), userId: String(userId), codeOf: id.codeOf, scrub: id.scrub });
+    }
+
+    async function triggerAIAnalysis(mode = 'advice') {
+        // 👇 請在這裡貼上這段防呆機制 👇
+        if (!apiKey) {
+            alert("請先至系統首頁輸入並儲存 Gemini API Key，才能啟動 AI 導師功能！");
+            return;
+        }
+        // 👆 貼到這裡結束 👆
+        const btn = mode === 'advice' ? document.querySelector('button[onclick="triggerAIAnalysis(\'advice\')"]') : document.querySelector('button[onclick="triggerAIAnalysis(\'portfolio\')"]');
+        const feedbackContainer = document.getElementById('ai-feedback');
+
+        const originalText = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 思考中...';
+        const s = currentUserStats, ctx = `角色:${document.getElementById('role-title').innerText}。發文:${s.totalNotes},回覆:${s.linksCount},被引:${s.repliedCount}。鷹架:${s.scaffoldCounts.question}/${s.scaffoldCounts.extend}/${s.scaffoldCounts.improve}/${s.scaffoldCounts.riseabove}。`;
+        const promptText = mode === 'advice' ? `根據數據：${ctx} 給予該學生3點具體的知識建構改進建議 (繁體中文，語氣鼓勵，限150字內)。` : `根據數據：${ctx} 為學生撰寫一份「學習歷程檔案」的自我反思草稿 (Reflection Draft)。第一人稱，學術且真誠，限200字內。`;
+
+        try {
+            const response = await geminiFetch(apiKey, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
+            });
+            const data = await response.json();
+
+            // Extract the result text
+            const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text || "無法生成回應，請稍後再試。";
+
+            feedbackContainer.innerHTML = `<div class="p-3 bg-white/60 rounded-lg border border-indigo-50/50">${marked.parse(textContent)}</div>`;
+        } catch (e) {
+            console.error("AI Analysis error:", e);
+            feedbackContainer.innerHTML = '<span class="text-red-500">AI 分析失敗，請檢查網路連線或稍後再試。</span>';
+        }
+
+        btn.disabled = false; btn.innerHTML = originalText;
+    }
+
+    window.onload = function() {
+        window.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") { document.getElementById('refModal').style.display = "none"; document.getElementById('note-detail-modal').style.display = "none"; }
+        });
+        gateUser = KBUI.requireLogin({ roles: ['master', 'teacher', 'student'] });
+        if (gateUser) {
+            // 右上角只顯示:管理者 / 老師 / 學號
+            const oldName = document.getElementById('user-name'); if (oldName) oldName.parentElement.style.display = 'none';
+            const oldAv = document.getElementById('current-user-avatar'); if (oldAv) oldAv.style.display = 'none';
+            const host = document.getElementById('nav-user-select-container');
+            KBUI.mountUserBar({ container: host ? host.parentElement : null });
+            // 老師與管理者:可直接回到老師分析與設定中心;學生看不到這兩個按鈕
+            if (KB.can('analytics.teacher')) { const tl = document.getElementById('nav-teacher-link'); if (tl) tl.style.display = 'flex'; }
+            if (KB.can('setup.access')) { const sl = document.getElementById('nav-setup-link'); if (sl) sl.style.display = 'flex'; }
+            initApp();
+        }
+        Chart.defaults.font.family = "'Noto Sans TC', sans-serif";
+    };
+    </script>
+</body>
+</html>

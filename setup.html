@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>設定中心 | KB 知識建構平台</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%234f46e5%27/%3E%3Ctext x=%2732%27 y=%2743%27 font-family=%27sans-serif%27 font-size=%2728%27 font-weight=%27700%27 fill=%27white%27 text-anchor=%27middle%27%3EKB%3C/text%3E%3C/svg%3E">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+<script src="kb-config.js"></script>
+<script src="kb-core.js"></script>
+<script src="kb-cloud.js"></script>
+<script src="kb-ui.js"></script>
+<script src="kb-xlsx.js"></script>
+<script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Noto Sans TC', 'sans-serif'] } } } }</script>
+<style>
+  html, body { height: 100%; }
+  body { margin: 0; font-family: 'Noto Sans TC', sans-serif; background: #f1f5f9; color: #0f172a; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(15,23,42,.05); }
+  .nav-btn { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 14px; border-radius: 10px; color: #94a3b8; font-size: .9rem; transition: all .15s; border-left: 3px solid transparent; }
+  .nav-btn:hover { background: rgba(255,255,255,.06); color: #e2e8f0; }
+  .nav-btn.active { background: rgba(99,102,241,.18); color: #fff; border-left-color: #818cf8; }
+  .nav-btn i { width: 18px; text-align: center; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .tbl th { background: #f8fafc; text-align: left; padding: 8px 10px; font-weight: 700; color: #475569; border-bottom: 1px solid #e2e8f0; white-space: nowrap; position: sticky; top: 0; }
+  .tbl td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .tbl tr:hover td { background: #fafaff; }
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: .7rem; font-weight: 800; color: #fff; }
+  .chip.master { background: #7c3aed; } .chip.teacher { background: #2563eb; } .chip.student { background: #16a34a; }
+  .chip.ok { background: #dcfce7; color: #166534; } .chip.warn { background: #fef3c7; color: #92400e; } .chip.bad { background: #fee2e2; color: #991b1b; } .chip.gray { background: #e2e8f0; color: #475569; }
+  .btn { border: 0; border-radius: 9px; padding: 7px 13px; font-weight: 700; font-size: .82rem; cursor: pointer; transition: transform .1s, opacity .15s; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:active { transform: scale(.97); } .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-p { background: linear-gradient(135deg,#4f46e5,#2563eb); color: #fff; } .btn-g { background: #f1f5f9; color: #334155; } .btn-d { background: #dc2626; color: #fff; } .btn-s { background: #16a34a; color: #fff; }
+  .btn-sm { padding: 4px 9px; font-size: .75rem; }
+  .inp { border: 1.5px solid #cbd5e1; border-radius: 9px; padding: 7px 10px; font-size: .85rem; outline: none; background: #fff; font-family: inherit; }
+  .inp:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+  .lbl { display: block; font-size: .75rem; font-weight: 700; color: #475569; margin: 10px 0 4px; }
+  .sw { position: relative; width: 42px; height: 24px; background: #cbd5e1; border-radius: 999px; cursor: pointer; transition: background .15s; flex-shrink: 0; }
+  .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .sw.on { background: #4f46e5; } .sw.on::after { transform: translateX(18px); }
+  .row-set { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px dashed #e2e8f0; }
+  .row-set:last-child { border-bottom: 0; }
+  .danger-zone { border: 1.5px solid #fecaca; background: #fff7f7; border-radius: 14px; padding: 16px 20px; }
+  .stat { background: linear-gradient(135deg,#fff,#f8fafc); }
+  .fade-in { animation: fadein .25s ease-out; } @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .drop { border: 2px dashed #a5b4fc; border-radius: 12px; padding: 22px; text-align: center; background: #eef2ff; color: #4338ca; cursor: pointer; }
+  .drop.over { background: #e0e7ff; border-color: #4f46e5; }
+  @media print { .no-print { display: none !important; } .print-card { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="flex h-full">
+  <!-- 側邊導覽 -->
+  <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 hidden md:flex no-print">
+    <div class="p-5 border-b border-slate-800 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400 flex items-center justify-center text-white font-bold text-xl">KB</div>
+      <div><div class="font-bold text-white leading-tight" id="brand-name">設定中心</div><div class="text-[11px] text-slate-500">Setup Console · LOCAL</div></div>
+    </div>
+    <nav id="nav" class="flex-1 p-3 space-y-1 overflow-y-auto"></nav>
+    <div class="p-3 border-t border-slate-800 space-y-1" id="quick-links"></div>
+  </aside>
+
+  <!-- 主要區域 -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <header class="bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 text-white px-5 py-3 flex items-center gap-3 shrink-0 no-print">
+      <button id="menu-btn" class="md:hidden text-xl" aria-label="選單"><i class="fa-solid fa-bars"></i></button>
+      <div class="min-w-0"><h1 class="font-bold text-lg leading-tight" id="page-title">總覽</h1><p class="text-xs text-indigo-100 truncate" id="page-sub"></p></div>
+      <div class="ml-auto hidden lg:flex items-center gap-2 text-xs" id="top-links"></div>
+      <div class="w-56 hidden md:block"></div>
+    </header>
+    <div id="mobile-nav" class="md:hidden hidden bg-slate-900 p-2 grid grid-cols-2 gap-1 no-print"></div>
+    <main class="flex-1 overflow-y-auto p-4 md:p-6" id="main"><div id="content" class="max-w-6xl mx-auto space-y-5"></div></main>
+  </div>
+</div>
+
+<script>
+(function () {
+  var gate = KBUI.requireLogin({ staff: true });
+  if (!gate) return;
+  KBUI.mountUserBar();
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var esc = KBUI.esc;
+  var ROLE_TXT = { master: '管理者', teacher: '老師', student: '學生' };
+  var TYPE_TXT = { question: '提問', extend: '延伸', improve: '改進', counter: '反駁', riseabove: '整合' };
+  var CATS = ['科學', 'STEAM', '專題課', '電機電子', 'AI', '語言學習', '文學', '社會議題', '物理', '動漫', '程式', '歷史', '哲學', '藝術', '其他'];
+
+  /* ================= 共用工具 ================= */
+  function fmt(t) { if (!t) return '—'; var d = new Date(t); return isNaN(d) ? '—' : d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  function dateStr() { var d = new Date(); return d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0'); }
+  function download(name, content, mime) {
+    var binary = typeof content !== 'string';
+    var blob = new Blob([content], { type: binary ? (mime || 'application/octet-stream') : (mime || 'text/plain') + ';charset=utf-8' });
+    // 舊版 Edge/IE 的儲存方式
+    if (navigator.msSaveOrOpenBlob) { navigator.msSaveOrOpenBlob(blob, name); return; }
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url; a.download = name; a.style.display = 'none'; document.body.appendChild(a); a.click();
+    // 太早收回網址會讓瀏覽器「儲存失敗」,所以延後一分鐘才釋放
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 60000);
+  }
+  function sw(id, on) { return '<div class="sw' + (on ? ' on' : '') + '" role="switch" aria-checked="' + (on ? 'true' : 'false') + '" tabindex="0" data-sw="' + id + '"></div>'; }
+  function setRow(title, desc, ctrl) { return '<div class="row-set"><div><div class="font-bold text-sm">' + title + '</div><div class="text-xs text-slate-500 mt-0.5">' + (desc || '') + '</div></div><div class="shrink-0">' + ctrl + '</div></div>'; }
+  function card(title, icon, body, extra) { return '<div class="card fade-in"><div class="flex items-center gap-2 mb-3"><i class="fa-solid ' + icon + ' text-indigo-500"></i><h2 class="font-bold">' + title + '</h2><div class="ml-auto flex gap-2 flex-wrap">' + (extra || '') + '</div></div>' + body + '</div>'; }
+  function pwHidden() { try { return localStorage.getItem('kb_setup_pw_hide') === '1'; } catch (e) { return false; } }
+  function ok(r, msg) { if (r && r.ok === false) { KBUI.toast(r.error || '操作失敗', 'err'); return false; } if (msg) KBUI.toast(msg, 'ok'); return true; }
+  function clsName(id) { var c = KB.classes.list().filter(function (x) { return x.id === id; })[0]; return c ? c.name : ''; }
+  function grpName(id) { var g = KB.classes.groups().filter(function (x) { return x.id === id; })[0]; return g ? g.name : ''; }
+  function opts(list, sel, blank) { return (blank !== undefined ? '<option value="">' + esc(blank) + '</option>' : '') + list.map(function (o) { return '<option value="' + esc(o.v) + '"' + (String(o.v) === String(sel) ? ' selected' : '') + '>' + esc(o.t) + '</option>'; }).join(''); }
+
+  /* ================= 導覽 ================= */
+  var SECTIONS = [
+    { id: 'overview', icon: 'fa-gauge-high', title: '總覽', sub: '平台狀態、安全檢查與快速動作' },
+    { id: 'users', icon: 'fa-users-gear', title: '使用者管理', sub: '帳號、角色、密碼、匯入 Excel / CSV' },
+    { id: 'classes', icon: 'fa-people-group', title: '班級與分組', sub: '建立班級、組別,並把學生分配進去' },
+    { id: 'forum', icon: 'fa-comments', title: '論壇設定', sub: '討論區管理與學生權限、發文規則' },
+    { id: 'analysis', icon: 'fa-chart-pie', title: '分析設定', sub: 'KB 12 原則與認知能動性的判斷門檻' },
+    { id: 'ai', icon: 'fa-robot', title: 'AI 設定', sub: 'Gemini 金鑰、AI 功能開關與模型' },
+    { id: 'data', icon: 'fa-database', title: '資料與備份', sub: '匯出、備份、還原、回收桶與危險操作' },
+    { id: 'appearance', icon: 'fa-palette', title: '平台與安全設定', sub: '平台名稱、公告、維護模式、登入安全、顯示方式' },
+    { id: 'audit', icon: 'fa-clipboard-list', title: '稽核紀錄', sub: '誰在什麼時間做了什麼' },
+    { id: 'account', icon: 'fa-id-badge', title: '我的帳號', sub: '修改密碼與登出' }
+  ];
+  var current = (location.hash || '#overview').slice(1);
+  if (!SECTIONS.some(function (s) { return s.id === current; })) current = 'overview';
+  function navHTML(mobile) { return SECTIONS.map(function (s) { return '<button class="nav-btn' + (s.id === current ? ' active' : '') + '" data-go="' + s.id + '"><i class="fa-solid ' + s.icon + '"></i>' + esc(s.title) + '</button>'; }).join(''); }
+  function renderNav() {
+    $('#nav').innerHTML = navHTML();
+    $('#mobile-nav').innerHTML = navHTML();
+    var ql = KBUI.navItems().filter(function (i) { return i.href !== 'setup.html'; });
+    $('#quick-links').innerHTML = '<div class="text-[11px] text-slate-500 px-3 pb-1">快速前往</div>' + ql.map(function (i) { return '<a class="nav-btn" href="' + esc(i.href) + '"><i class="fa-solid ' + i.icon + '"></i>' + esc(i.text) + '</a>'; }).join('');
+    $('#top-links').innerHTML = ql.map(function (i) { return '<a class="bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5" href="' + esc(i.href) + '"><i class="fa-solid ' + i.icon + '"></i>' + esc(i.text) + '</a>'; }).join('');
+    var s = SECTIONS.filter(function (x) { return x.id === current; })[0];
+    $('#page-title').textContent = s.title; $('#page-sub').textContent = s.sub;
+    $('#brand-name').textContent = KB.settings.get().platformName || '設定中心';
+    document.title = s.title + ' | 設定中心';
+  }
+  function go(id) { current = id; location.hash = id; renderNav(); render(); $('#main').scrollTop = 0; $('#mobile-nav').classList.add('hidden'); }
+  function render() { var f = R[current]; if (f) { try { f(); } catch (e) { console.error(e); $('#content').innerHTML = '<div class="card text-red-600">此區塊載入失敗:' + esc(e.message) + '</div>'; } } }
+
+  /* ================= 1 總覽 ================= */
+  var R = {};
+  R.overview = function () {
+    var st = KB.stats(), cfg = KB.settings.get(), bk = KB.backup.list();
+    function stat(icon, color, n, label) { return '<div class="card stat flex items-center gap-3"><div class="w-11 h-11 rounded-xl flex items-center justify-center text-lg text-white ' + color + '"><i class="fa-solid ' + icon + '"></i></div><div><div class="text-2xl font-extrabold leading-none">' + n + '</div><div class="text-xs text-slate-500 mt-1">' + label + '</div></div></div>'; }
+    var checks = [];
+    function chk(level, title, desc, action) { checks.push('<div class="flex items-start gap-3 py-2.5 border-b border-slate-100 last:border-0"><span class="chip ' + level + ' mt-0.5">' + ({ ok: '正常', warn: '注意', bad: '待處理' }[level]) + '</span><div class="flex-1"><div class="text-sm font-bold">' + title + '</div><div class="text-xs text-slate-500">' + desc + '</div></div>' + (action || '') + '</div>'); }
+    if (st.defaultStaffPw.length) chk('bad', '仍在使用預設密碼', '帳號 <b>' + st.defaultStaffPw.map(esc).join('、') + '</b> 的密碼與帳號相同,正式使用前請務必更換。', '<button class="btn btn-p btn-sm" data-go="users">前往更換</button>');
+    else chk('ok', '最高權限帳號未使用預設密碼', '');
+    chk(st.staff >= 2 ? 'ok' : 'warn', '最高權限帳號數量:' + st.staff, st.staff >= 2 ? '建議保留至少兩個,避免唯一帳號忘記密碼。' : '目前只有一個,建議再建立一個備援帳號。', st.staff >= 2 ? '' : '<button class="btn btn-g btn-sm" data-go="users">新增帳號</button>');
+    chk('ok', '仍使用預設密碼(=學號)的學生:' + st.mustChange + ' 人', '目前統一不強制學生改密碼,登入後可直接使用。');
+    chk(bk.length ? 'ok' : 'warn', bk.length ? '最近備份:' + fmt(bk[bk.length - 1].time) : '尚未建立任何備份', '建議在重要操作前建立備份;清空、還原前系統也會自動備份。', '<button class="btn btn-g btn-sm" data-act="quick-backup">立即備份</button>');
+    chk(cfg.maintenance ? 'warn' : 'ok', '維護模式:' + (cfg.maintenance ? '已開啟(學生與訪客無法進入)' : '關閉'), '');
+    chk(cfg.forumLocked ? 'warn' : 'ok', '論壇鎖定:' + (cfg.forumLocked ? '已鎖定(學生不能發文)' : '未鎖定'), '');
+    chk('ok', '訪客瀏覽:' + (cfg.guestEnabled ? '開放(只能看論壇)' : '關閉'), '');
+    var pct = Math.round(st.storageBytes / (5 * 1024 * 1024) * 100);
+    chk(pct > 70 ? 'bad' : (pct > 40 ? 'warn' : 'ok'), '本機儲存空間:約 ' + (st.storageBytes / 1024).toFixed(0) + ' KB(約 ' + pct + '% 的 5MB 上限)', pct > 40 ? '資料量較大,請匯出備份後清理舊備份。' : '');
+    var au = KB.audit.list({ limit: 6 });
+    $('#content').innerHTML =
+      '<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">' + stat('fa-user-graduate', 'bg-emerald-500', st.students, '學生') + stat('fa-user-shield', 'bg-violet-500', st.staff, '老師 / 管理者') + stat('fa-people-group', 'bg-sky-500', st.classes + ' / ' + st.groups, '班級 / 組別') + stat('fa-comments', 'bg-indigo-500', st.topics, '討論區') + stat('fa-message', 'bg-blue-500', st.posts, '貼文') + stat('fa-trash-can', 'bg-slate-500', st.trash, '回收桶') + stat('fa-key', 'bg-amber-500', st.mustChange, '待改密碼學生') + stat('fa-hard-drive', 'bg-teal-500', bk.length, '備份份數') + '</div>' +
+      '<div class="grid lg:grid-cols-5 gap-5"><div class="lg:col-span-3">' + card('安全檢查', 'fa-shield-halved', checks.join('')) + '</div><div class="lg:col-span-2 space-y-5">' +
+      card('快速動作', 'fa-bolt', '<div class="grid grid-cols-2 gap-2"><button class="btn btn-p justify-center" data-go="users"><i class="fa-solid fa-file-import"></i>匯入名單</button><button class="btn btn-g justify-center" data-go="classes"><i class="fa-solid fa-people-group"></i>班級分組</button><button class="btn btn-g justify-center" data-go="forum"><i class="fa-solid fa-comments"></i>論壇設定</button><button class="btn btn-g justify-center" data-act="quick-backup"><i class="fa-solid fa-floppy-disk"></i>立即備份</button><a class="btn btn-g justify-center" href="Knowledge Building Forum.html?home=1"><i class="fa-solid fa-comments"></i>開啟論壇</a><a class="btn btn-g justify-center" href="ANALYTICS-teacher.html"><i class="fa-solid fa-chart-line"></i>老師分析</a></div>') +
+      card('最近操作', 'fa-clock-rotate-left', au.length ? au.map(function (a) { return '<div class="text-xs py-1.5 border-b border-slate-100 last:border-0"><span class="text-slate-400">' + fmt(a.t) + '</span> · <b>' + esc(a.actor) + '</b> ' + esc(a.action) + (a.ok === false ? ' <span class="chip bad">失敗</span>' : '') + '</div>'; }).join('') : '<div class="text-sm text-slate-400">尚無紀錄</div>', '<button class="btn btn-g btn-sm" data-go="audit">全部</button>') +
+      '</div></div>';
+  };
+
+  /* ================= 2 使用者管理 ================= */
+  var U = { q: '', role: '', cls: '', status: '', sel: {}, page: 1, per: 20 };
+  /* 點學生的學號或姓名 → 另開新分頁,直接看這位學生的知識羅盤(學生分析) */
+  function compassLink(u, inner) {
+    if (u.role !== 'student') return inner;
+    return '<a class="text-indigo-700 hover:underline hover:text-indigo-900" href="ANALYTICS-student.html?student=' + encodeURIComponent(u.id) + '" target="_blank" rel="noopener" title="在新分頁開啟 ' + esc(u.realName || u.id) + ' 的知識羅盤"><i class="fa-solid fa-compass text-[10px] mr-1 opacity-70"></i>' + inner + '</a>';
+  }
+  function placeholderNote() {
+    var n = KB.users.list().filter(function (u) { return u.placeholder; }).length;
+    if (!n) return '';
+    return '<div class="card" style="border-color:#fde68a;background:#fffbeb"><div class="flex items-start gap-3"><i class="fa-solid fa-user-clock text-amber-600 mt-1"></i><div class="text-sm"><b class="text-amber-900">還有 ' + n + ' 位預建學生等待確認學號</b><div class="text-xs text-amber-800 mt-1 leading-relaxed">這些學生(編碼 S01、S02…)的貼文已經在平台上。請按「匯入名單」上傳含「學號、姓名、班級、初始密碼」的 Excel,系統會依<b>姓名</b>找到對應的人,把學號換成真實學號、保留所有貼文並啟用帳號。在那之前,他們無法登入。</div></div></div></div>';
+  }
+  function filteredUsers() {
+    var q = U.q.trim().toLowerCase();
+    return KB.users.list().filter(function (u) {
+      if (U.role && u.role !== U.role) return false;
+      if (U.cls && u.classId !== U.cls) return false;
+      if (U.status && u.status !== U.status) return false;
+      if (q && (u.id.toLowerCase().indexOf(q) < 0 && String(u.realName).toLowerCase().indexOf(q) < 0)) return false;
+      return true;
+    });
+  }
+  R.users = function () {
+    var list = filteredUsers(), pages = Math.max(1, Math.ceil(list.length / U.per)); if (U.page > pages) U.page = pages;
+    var rows = list.slice((U.page - 1) * U.per, U.page * U.per);
+    var selCount = Object.keys(U.sel).length, allOn = rows.length && rows.every(function (u) { return U.sel[u.id]; });
+    var clsOpts = KB.classes.list().map(function (c) { return { v: c.id, t: c.name }; });
+    var toolbar = '<div class="flex flex-wrap gap-2 items-center mb-3"><input class="inp w-48" id="u-q" placeholder="搜尋學號或姓名" value="' + esc(U.q) + '"><select class="inp" id="u-role">' + opts([{ v: 'student', t: '學生' }, { v: 'teacher', t: '老師' }, { v: 'master', t: '管理者' }], U.role, '全部角色') + '</select><select class="inp" id="u-cls">' + opts(clsOpts, U.cls, '全部班級') + '</select><select class="inp" id="u-status">' + opts([{ v: 'active', t: '啟用中' }, { v: 'disabled', t: '已停用' }], U.status, '全部狀態') + '</select><span class="text-xs text-slate-500">共 ' + list.length + ' 人</span></div>';
+    var bulk = '<div class="flex flex-wrap gap-2 items-center mb-3 ' + (selCount ? '' : 'opacity-50') + '"><span class="text-xs font-bold text-indigo-700">已選 ' + selCount + ' 人</span><button class="btn btn-g btn-sm" data-act="bulk-reset" ' + (selCount ? '' : 'disabled') + '><i class="fa-solid fa-key"></i>重設密碼為學號</button><button class="btn btn-g btn-sm" data-act="bulk-disable" ' + (selCount ? '' : 'disabled') + '><i class="fa-solid fa-user-slash"></i>停用</button><button class="btn btn-g btn-sm" data-act="bulk-enable" ' + (selCount ? '' : 'disabled') + '><i class="fa-solid fa-user-check"></i>啟用</button><button class="btn btn-g btn-sm" data-act="bulk-move" ' + (selCount ? '' : 'disabled') + '><i class="fa-solid fa-right-left"></i>移動班級/組別</button><button class="btn btn-d btn-sm" data-act="bulk-delete" ' + (selCount ? '' : 'disabled') + '><i class="fa-solid fa-trash"></i>刪除</button></div>';
+    var tbl = '<div class="overflow-x-auto max-h-[60vh] border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th><input type="checkbox" data-act="u-all" ' + (allOn ? 'checked' : '') + '></th><th>學號 / 帳號</th><th>姓名</th><th>角色</th><th>班級</th><th>組別</th><th>狀態</th><th>密碼 <button class="btn btn-g btn-sm" data-act="pw-eye" title="顯示或隱藏初始密碼" style="padding:1px 6px"><i class="fa-solid ' + (pwHidden() ? 'fa-eye-slash' : 'fa-eye') + '"></i></button></th><th>最後登入</th><th>操作</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (u) {
+        var locked = u.lockUntil && Date.now() < u.lockUntil;
+        return '<tr><td><input type="checkbox" data-sel="' + esc(u.id) + '" ' + (U.sel[u.id] ? 'checked' : '') + '></td><td class="font-mono font-bold">' + compassLink(u, esc(u.id)) + '</td><td>' + compassLink(u, esc(u.realName || '—')) + '</td><td><span class="chip ' + u.role + '">' + ROLE_TXT[u.role] + '</span></td><td>' + esc(clsName(u.classId) || '—') + '</td><td>' + esc(grpName(u.groupId) || '—') + '</td><td>' + (u.placeholder ? '<span class="chip warn" title="預建學生,匯入名單後會自動換成真實學號並啟用">待匯入名單</span>' : (u.status === 'active' ? '<span class="chip ok">啟用</span>' : '<span class="chip bad">停用</span>')) + (locked ? ' <span class="chip warn">鎖定中</span>' : '') + '</td><td>' + (u.pwDefault ? '<span class="chip warn" title="學生還沒自己改過密碼,這是匯入名單時的初始密碼(沒指定就是學號)">初始密碼:<b class="font-mono">' + (pwHidden() ? '●●●●●' : esc(u.initialPw || u.id)) + '</b></span>' : '<span class="chip ok" title="學生已經自己改過密碼。系統只存加密後的密碼,看不到內容;忘記時請按鑰匙重設">已自己改過</span>') + '</td><td class="text-xs text-slate-500">' + fmt(u.lastLogin) + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="u-edit" data-id="' + esc(u.id) + '" title="編輯"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-g btn-sm" data-act="u-reset" data-id="' + esc(u.id) + '" title="重設密碼"><i class="fa-solid fa-key"></i></button> ' + (locked ? '<button class="btn btn-g btn-sm" data-act="u-unlock" data-id="' + esc(u.id) + '" title="解除鎖定"><i class="fa-solid fa-lock-open"></i></button> ' : '') + '<button class="btn btn-g btn-sm" data-act="u-toggle" data-id="' + esc(u.id) + '" title="' + (u.status === 'active' ? '停用' : '啟用') + '"><i class="fa-solid ' + (u.status === 'active' ? 'fa-user-slash' : 'fa-user-check') + '"></i></button> <button class="btn btn-d btn-sm" data-act="u-del" data-id="' + esc(u.id) + '" title="刪除"><i class="fa-solid fa-trash"></i></button></td></tr>';
+      }).join('') : '<tr><td colspan="10" class="text-center text-slate-400 py-10">沒有符合條件的使用者</td></tr>') + '</tbody></table></div>';
+    var pager = '<div class="flex items-center justify-between mt-3 text-xs text-slate-500"><span>第 ' + U.page + ' / ' + pages + ' 頁</span><div class="flex gap-2"><button class="btn btn-g btn-sm" data-act="u-prev" ' + (U.page <= 1 ? 'disabled' : '') + '>上一頁</button><button class="btn btn-g btn-sm" data-act="u-next" ' + (U.page >= pages ? 'disabled' : '') + '>下一頁</button></div></div>';
+    var head = '<button class="btn btn-p" data-act="u-new"><i class="fa-solid fa-user-plus"></i>新增使用者</button><button class="btn btn-s" data-act="u-import"><i class="fa-solid fa-file-import"></i>匯入名單</button><button class="btn btn-g" data-act="u-template"><i class="fa-solid fa-download"></i>下載範本</button><button class="btn btn-g" data-act="u-export"><i class="fa-solid fa-file-export"></i>匯出名單</button><button class="btn btn-g" data-act="u-print"><i class="fa-solid fa-print"></i>帳號通知單</button>';
+    $('#content').innerHTML = card('使用者清單', 'fa-users', toolbar + bulk + tbl + pager, head) +
+      '' + placeholderNote() + '<div class="card text-xs text-slate-500 leading-relaxed"><b class="text-slate-700">說明</b>:學生帳號就是學號;初始密碼預設也是學號,匯入名單時若有填「初始密碼」就用你填的,學生還沒自己改過密碼之前,在下方「密碼」欄看得到(用眼睛按鈕可隱藏)。目前不強制學生改密碼。新增的帳號預設是學生;要設為老師或管理者,請按該列的「編輯」修改角色(兩者權限完全相同)。系統不允許刪除、停用或降級最後一個「管理者/老師」帳號,避免平台沒有人能登入。</div>';
+    bindUsers();
+  };
+  function bindUsers() {
+    var q = $('#u-q'); if (!q) return;
+    var t; q.oninput = function () { U.q = q.value; U.page = 1; clearTimeout(t); t = setTimeout(function () { var p = q.selectionStart; R.users(); var n = $('#u-q'); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} }, 250); };
+    ['role', 'cls', 'status'].forEach(function (k) { $('#u-' + k).onchange = function () { U[k] = this.value; U.page = 1; R.users(); }; });
+  }
+
+  function userForm(u) {
+    if (!u) return addUserForm();
+    var cls = KB.classes.list().map(function (c) { return { v: c.id, t: c.name }; });
+    var m = KBUI.modal('<h3><i class="fa-solid fa-pen" style="color:#4f46e5"></i>編輯使用者</h3>' +
+      '<label>學號 / 帳號</label><input class="kbui-input" data-f="id" value="' + esc(u.id) + '" readonly style="background:#f1f5f9">' +
+      '<label>姓名</label><input class="kbui-input" data-f="realName" value="' + esc(u.realName) + '">' +
+      '<label>角色</label><select class="kbui-input" data-f="role">' + opts([{ v: 'student', t: '學生' }, { v: 'teacher', t: '老師(全部功能)' }, { v: 'master', t: '管理者(全部功能)' }], u.role) + '</select>' +
+      '<label>班級</label><select class="kbui-input" data-f="classId">' + opts(cls, u.classId, '(不指定)') + '</select>' +
+      '<label>組別</label><select class="kbui-input" data-f="groupId"></select>' +
+      '<div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="cancel">取消</button><button class="kbui-btn kbui-primary" data-f="save">儲存</button></div>');
+    var c = m.card, f = function (n) { return c.querySelector('[data-f=' + n + ']'); };
+    function fillGroups() { var gs = KB.classes.groups(f('classId').value).map(function (g) { return { v: g.id, t: g.name }; }); f('groupId').innerHTML = opts(gs, u.groupId, '(不指定)'); }
+    f('classId').onchange = function () { u.groupId = ''; fillGroups(); }; fillGroups();
+    f('cancel').onclick = m.close;
+    f('save').onclick = function () {
+      var r = KB.users.update(u.id, { realName: f('realName').value, role: f('role').value, classId: f('classId').value, groupId: f('groupId').value });
+      if (r.ok === false) { f('err').innerHTML = '<div class="kbui-err">' + esc(r.error) + '</div>'; return; }
+      m.close(); KBUI.toast('已更新', 'ok'); R.users();
+    };
+    setTimeout(function () { f('realName').focus(); }, 30);
+  }
+  /* 新增使用者:只有 學號、姓名、班級、初始密碼(選填) */
+  function addUserForm() {
+    var cls = KB.classes.list();
+    var m = KBUI.modal('<h3><i class="fa-solid fa-user-plus" style="color:#4f46e5"></i>新增使用者</h3>' +
+      '<label>學號</label><input class="kbui-input" data-f="id" autocomplete="off">' +
+      '<label>姓名</label><input class="kbui-input" data-f="realName" autocomplete="off">' +
+      '<label>班級</label><input class="kbui-input" data-f="className" list="kb-cls-list" placeholder="選擇或直接輸入新班級" autocomplete="off"><datalist id="kb-cls-list">' + cls.map(function (c) { return '<option value="' + esc(c.name) + '">'; }).join('') + '</datalist>' +
+      '<label>初始密碼(選填)</label><input class="kbui-input" data-f="password" autocomplete="off" placeholder="留空 = 學號"><div class="kbui-hint">目前統一不強制學生改密碼。</div>' +
+      '<div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="cancel">取消</button><button class="kbui-btn kbui-primary" data-f="save">新增</button></div>');
+    var c = m.card, f = function (n) { return c.querySelector('[data-f=' + n + ']'); };
+    f('cancel').onclick = m.close;
+    function save() {
+      var id = f('id').value.trim(), name = f('realName').value.trim(), cn = f('className').value.trim(), pw = f('password').value;
+      function fail(msg) { f('err').innerHTML = '<div class="kbui-err">' + esc(msg) + '</div>'; }
+      if (!id) return fail('請輸入學號');
+      if (!name) return fail('請輸入姓名');
+      if (pw) { var pol = KB.auth.checkPolicy(pw, { id: id }); if (pol) return fail(pol); }
+      var classId = '';
+      if (cn) { var ex = KB.classes.list().filter(function (x) { return x.name === cn; })[0]; if (ex) classId = ex.id; else { var cr = KB.classes.create(cn); if (cr.ok === false) return fail(cr.error); classId = cr.id; } }
+      var r = KB.users.create({ id: id, realName: name, role: 'student', classId: classId, password: pw });
+      if (r.ok === false) return fail(r.error);
+      m.close(); KBUI.toast('已新增', 'ok'); R.users();
+    }
+    f('save').onclick = save;
+    c.onkeydown = function (e) { if (e.key === 'Enter') save(); };
+    setTimeout(function () { f('id').focus(); }, 30);
+  }
+  function pwForm(id) {
+    var m = KBUI.modal('<h3><i class="fa-solid fa-key" style="color:#4f46e5"></i>設定新密碼:' + esc(id) + '</h3><p>為這個帳號指定新密碼(至少 6 字元)。</p><label>新密碼</label><input class="kbui-input" data-f="pw" type="text" autocomplete="off"><div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="cancel">取消</button><button class="kbui-btn kbui-primary" data-f="ok">設定</button></div>');
+    var c = m.card, f = function (n) { return c.querySelector('[data-f=' + n + ']'); };
+    f('cancel').onclick = m.close;
+    f('ok').onclick = function () { var v = f('pw').value; var pol = KB.auth.checkPolicy(v, { id: id }); if (pol) { f('err').innerHTML = '<div class="kbui-err">' + esc(pol) + '</div>'; return; } var r = KB.users.resetPassword(id, v); if (!ok(r, '已設定新密碼:' + v + '(請告訴學生)')) return; m.close(); R.users(); };
+    setTimeout(function () { f('pw').focus(); }, 30);
+  }
+  function selIds() { return Object.keys(U.sel); }
+
+  /* ---- 匯入 ---- */
+  var xlsxLoading = null;
+  function loadXLSX() {
+    if (window.XLSX) return Promise.resolve();
+    if (xlsxLoading) return xlsxLoading;
+    xlsxLoading = new Promise(function (res, rej) { var s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload = res; s.onerror = function () { xlsxLoading = null; rej(new Error('無法載入 Excel 解析元件(需要網路),請改用 CSV')); }; document.head.appendChild(s); });
+    return xlsxLoading;
+  }
+  function parseFile(file) {
+    return new Promise(function (resolve, reject) {
+      var name = file.name.toLowerCase(), fr = new FileReader();
+      fr.onerror = function () { reject(new Error('讀取檔案失敗')); };
+      if (/\.xlsx?$/.test(name)) {
+        fr.onload = function () {
+          // 先用內建讀取器(不需要網路);失敗時(例如舊式 .xls)再試線上元件
+          KBXLSX.read(fr.result).then(function (matrix) { resolve(matrix); }).catch(function (e1) {
+            loadXLSX().then(function () { var wb = XLSX.read(new Uint8Array(fr.result), { type: 'array' }); var ws = wb.Sheets[wb.SheetNames[0]]; var matrix = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }); resolve((matrix.filter(function (r) { return r.some(function (x) { return String(x).trim() !== ''; }); }))); })
+              .catch(function () { reject(new Error(e1.message + '。若是舊式 .xls,請另存成 .xlsx 或 CSV 後再匯入。')); });
+          });
+        };
+        fr.readAsArrayBuffer(file);
+      } else {
+        fr.onload = function () { var text = fr.result; resolve(KB.io.parseCSV(text)); };
+        fr.readAsText(file, 'utf-8');
+      }
+    });
+  }
+  function importDialog() {
+    var rows = null, fileName = '', matrix = null, ana = null;
+    function colLabel(i) { var n = i, s = ''; do { s = String.fromCharCode(65 + n % 26) + s; n = Math.floor(n / 26) - 1; } while (n >= 0); return s; }
+    function mapPanel() {
+      var fields = [['id', '學號 *'], ['realName', '姓名 *'], ['className', '班級'], ['password', '初始密碼(或密碼)'], ['groupName', '組別']];
+      var optHtml = function (sel) { return '<option value="-1">(不使用)</option>' + ana.headers.map(function (h, i) { return '<option value="' + i + '"' + (sel === i ? ' selected' : '') + '>' + colLabel(i) + ' 欄:' + esc(h || '(沒有標題)') + '</option>'; }).join(''); };
+      var found = fields.filter(function (x) { return ana.mapping[x[0]] >= 0; }).map(function (x) { return x[1].replace(' *', '') + '←' + esc(ana.headers[ana.mapping[x[0]]] || colLabel(ana.mapping[x[0]]) + ' 欄') + (ana.source[x[0]] === '內容判斷' ? '(依內容判斷)' : ''); });
+      return '<div style="border:1px solid #c7d2fe;background:#eef2ff;border-radius:10px;padding:10px 12px;margin:10px 0"><div class="text-sm font-bold" style="color:#3730a3"><i class="fa-solid fa-wand-magic-sparkles"></i> 系統自動認出的欄位(如果不對,可以自己改)</div><div class="text-xs" style="color:#4338ca;margin:4px 0 8px">' + (found.length ? esc('') + found.join('、') : '沒有認出任何欄位') + (ana.ignored.length ? '<br>不需要、已略過的欄位:' + ana.ignored.map(esc).join('、') : '') + '</div><div class="grid grid-cols-2 gap-2">' + fields.map(function (x) { return '<label class="text-xs m-0" style="display:flex;align-items:center;gap:6px"><span style="min-width:96px;font-weight:700">' + x[1] + '</span><select class="kbui-input" style="flex:1;padding:4px 6px" data-m="' + x[0] + '">' + optHtml(ana.mapping[x[0]]) + '</select></label>'; }).join('') + '</div></div>';
+    }
+    function bindMap() {
+      Array.prototype.forEach.call(c.querySelectorAll('[data-m]'), function (sel) { sel.onchange = function () { ana.mapping[sel.getAttribute('data-m')] = Number(sel.value); rows = KB.io.applyMapping(matrix, ana.mapping, ana.dataStart); preview(); }; });
+    }
+
+    var m = KBUI.modal('<h3><i class="fa-solid fa-file-import" style="color:#16a34a"></i>匯入名單(Excel / CSV)</h3><p>名單格式不一定要和範本一樣:系統會<b>自動認出「學號、姓名、班級、初始密碼(或密碼)」</b>這幾欄(欄位順序不同、多了電子郵件或學校都沒關係),認出的結果可以自己再改。沒填初始密碼的人,密碼就是學號。</p><div class="drop" data-f="drop"><i class="fa-solid fa-cloud-arrow-up text-2xl"></i><div class="font-bold mt-1">拖曳檔案到這裡,或點擊選擇</div><div class="text-xs mt-1">支援 .xlsx、.xls、.csv(UTF-8)</div><input type="file" accept=".csv,.xlsx,.xls" data-f="file" style="display:none"></div><div data-f="body"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="close">關閉</button><button class="kbui-btn kbui-primary" data-f="go" disabled>確認匯入</button></div>');
+    m.card.style.maxWidth = '760px';
+    var c = m.card, f = function (n) { return c.querySelector('[data-f=' + n + ']'); };
+    function options() { return { onDuplicate: (c.querySelector('[data-f=dup]') || {}).value || 'skip', autoCreateClass: true }; }
+    function preview() {
+      if (!rows) return;
+      var o = options(), rep = KB.users.importRows(rows, Object.assign({ dryRun: true }, o));
+      var list = rows.slice(0, 200).map(function (r, i) {
+        var line = r._line || (i + 2), st = '', cl = 'chip gray';
+        if (rep.errors.some(function (e) { return e.row === line; })) { st = '錯誤:' + rep.errors.filter(function (e) { return e.row === line; })[0].msg; cl = 'chip bad'; }
+        else if (rep.skipped.some(function (e) { return e.row === line; })) { st = '略過(已存在)'; cl = 'chip warn'; }
+        else if (rep.updated.some(function (e) { return e.row === line; })) { var up = rep.updated.filter(function (e) { return e.row === line; })[0]; st = up.msg || '更新'; cl = 'chip warn'; }
+        else { st = '新增'; cl = 'chip ok'; }
+        return '<tr><td>' + line + '</td><td class="font-mono">' + esc(r.id || '') + '</td><td>' + esc(r.realName || '') + '</td><td>' + esc(r.className || '') + '</td><td class="font-mono">' + esc(r.password || '') + '</td><td><span class="' + cl + '">' + esc(st) + '</span></td></tr>';
+      }).join('');
+      f('body').innerHTML = mapPanel() + '<div class="flex flex-wrap gap-2 my-3 text-xs"><span class="chip ok">新增 ' + rep.created.length + '</span><span class="chip warn">更新 ' + rep.updated.length + '</span><span class="chip warn">略過 ' + rep.skipped.length + '</span><span class="chip bad">錯誤 ' + rep.errors.length + '</span><span class="chip ok" title="檔案中有填「初始密碼」的人,會用你填的;沒填的用學號">用檔案中的初始密碼 ' + (rep.pwCustom || 0) + ' 人</span>' + (rep.pwKept ? '<span class="chip gray" title="這些學生已經自己改過密碼,不會被覆蓋">已自己改過、不覆蓋 ' + rep.pwKept + ' 人</span>' : '') + '<span class="text-slate-500">檔案:' + esc(fileName) + '(共 ' + rows.length + ' 列)</span></div><div class="flex items-center gap-2 mb-2 text-sm"><label class="m-0">學號已存在時:</label><select class="kbui-input" style="width:auto" data-f="dup"><option value="skip"' + (o.onDuplicate === 'skip' ? ' selected' : '') + '>略過</option><option value="update"' + (o.onDuplicate === 'update' ? ' selected' : '') + '>更新姓名/班級/組別(還沒改過密碼的人,也換成檔案裡的初始密碼)</option></select></div><div style="max-height:260px;overflow:auto;border:1px solid #e2e8f0;border-radius:10px"><table class="tbl"><thead><tr><th>列</th><th>學號</th><th>姓名</th><th>班級</th><th>初始密碼</th><th>結果</th></tr></thead><tbody>' + list + '</tbody></table></div>' + (rows.length > 200 ? '<div class="kbui-hint">僅預覽前 200 列,匯入時會處理全部。</div>' : '');
+      bindMap();
+      c.querySelector('[data-f=dup]').onchange = preview;
+      f('go').disabled = rep.created.length + rep.updated.length === 0;
+    }
+    function take(file) { if (!file) return; f('body').innerHTML = '<div class="kbui-hint my-3">讀取中…</div>'; fileName = file.name; parseFile(file).then(function (mx) {
+      matrix = mx; ana = KB.io.analyze(matrix); rows = KB.io.applyMapping(matrix, ana.mapping, ana.dataStart);
+      if (!matrix.length || !rows.length) { f('body').innerHTML = '<div class="kbui-err">檔案是空的,或找不到學生資料。</div>'; rows = null; return; }
+      preview();
+      if (ana.missing.length) KBUI.toast('還沒認出「' + ana.missing.map(function (k) { return k === 'id' ? '學號' : '姓名'; }).join('、') + '」欄,請在上方選一下', 'err');
+    }).catch(function (e) { f('body').innerHTML = '<div class="kbui-err">' + esc(e.message) + '</div>'; }); }
+    f('drop').onclick = function () { f('file').click(); };
+    f('file').onchange = function () { take(this.files[0]); };
+    ['dragover', 'dragenter'].forEach(function (ev) { f('drop').addEventListener(ev, function (e) { e.preventDefault(); f('drop').classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { f('drop').addEventListener(ev, function (e) { e.preventDefault(); f('drop').classList.remove('over'); if (ev === 'drop') take(e.dataTransfer.files[0]); }); });
+    f('close').onclick = m.close;
+    f('go').onclick = function () {
+      var rep = KB.users.importRows(rows, options());
+      m.close(); R.users();
+      var html = '新增 <b>' + rep.created.length + '</b>、更新 <b>' + rep.updated.length + '</b>、略過 <b>' + rep.skipped.length + '</b>、錯誤 <b>' + rep.errors.length + '</b>。';
+      KBUI.confirm({ title: '匯入完成', html: html + (rep.errors.length ? '<br>是否下載「錯誤報告」?' : '<br>' + (rep.pwCustom ? '其中 <b>' + rep.pwCustom + '</b> 人使用檔案中的「初始密碼」,其餘用學號。初始密碼可在「使用者」清單的「密碼」欄看到(學生自己改過就不再顯示),也可用「帳號通知單」發給學生。' : '新建帳號的初始密碼就是學號,請用「帳號通知單」發給學生。')), okText: rep.errors.length ? '下載錯誤報告' : '好', cancelText: '關閉' }).then(function (y) {
+        if (y && rep.errors.length) download('匯入錯誤報告_' + dateStr() + '.csv', KB.io.toCSV([['列', '學號', '原因']].concat(rep.errors.map(function (e) { return [e.row, e.id, e.msg]; }))), 'text/csv');
+      });
+    };
+  }
+  function printSheet() {
+    var st = KB.users.list().filter(function (u) { return u.role === 'student' && u.status === 'active'; });
+    if (!st.length) { KBUI.toast('目前沒有學生帳號', 'err'); return; }
+    var w = window.open('', '_blank'); if (!w) { KBUI.toast('瀏覽器擋住了彈出視窗,請允許後再試', 'err'); return; }
+    var name = KB.settings.get().platformName;
+    w.document.write('<!doctype html><meta charset="utf-8"><title>帳號通知單</title><style>body{font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;margin:16px}.g{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.c{border:1.5px dashed #94a3b8;border-radius:10px;padding:12px 14px;break-inside:avoid}h3{margin:0 0 6px;font-size:15px}p{margin:3px 0;font-size:13px}.k{font-family:monospace;font-size:15px;font-weight:700}small{color:#64748b}</style><h2>' + esc(name) + ' 帳號通知單</h2><div class="g">' + st.map(function (u) { return '<div class="c"><h3>' + esc(name) + '</h3><p>班級:' + esc(clsName(u.classId) || '—') + '</p><p>姓名:' + esc(u.realName) + '</p><p>帳號(學號):<span class="k">' + esc(u.id) + '</span></p><p>初始密碼:<span class="k">' + (u.pwDefault ? esc(u.initialPw || u.id) : '(已自行修改)') + '</span></p><small>登入後建議修改成只有自己知道的密碼,並妥善保管。</small></div>'; }).join('') + '</div><script>window.onload=function(){window.print()}<\/script>');
+    w.document.close();
+  }
+
+  /* ================= 3 班級與分組 ================= */
+  var CL = { sel: '' };
+  R.classes = function () {
+    var cls = KB.classes.list(), users = KB.users.list().filter(function (u) { return u.role === 'student'; });
+    if (!CL.sel || !cls.some(function (c) { return c.id === CL.sel; })) CL.sel = cls.length ? cls[0].id : '';
+    var left = '<div class="space-y-1">' + (cls.length ? cls.map(function (c) { var n = users.filter(function (u) { return u.classId === c.id; }).length; return '<div class="flex items-center gap-2 p-2 rounded-lg cursor-pointer ' + (c.id === CL.sel ? 'bg-indigo-50 border border-indigo-200' : 'hover:bg-slate-50 border border-transparent') + '" data-act="c-sel" data-id="' + c.id + '"><i class="fa-solid fa-people-roof text-indigo-500"></i><div class="flex-1 min-w-0"><div class="font-bold text-sm truncate">' + esc(c.name) + (c.archived ? ' <span class="chip gray">已封存</span>' : '') + '</div><div class="text-[11px] text-slate-500">' + n + ' 位學生' + (c.term ? ' · ' + esc(c.term) : '') + '</div></div></div>'; }).join('') : '<div class="text-sm text-slate-400 py-6 text-center">還沒有班級,請先建立</div>') + '</div>';
+    var right = '<div class="text-sm text-slate-400 py-10 text-center">請先在左邊選擇或建立班級</div>';
+    if (CL.sel) {
+      var c = cls.filter(function (x) { return x.id === CL.sel; })[0], gs = KB.classes.groups(CL.sel), members = users.filter(function (u) { return u.classId === CL.sel; });
+      right = '<div class="flex flex-wrap items-center gap-2 mb-3"><h3 class="font-bold text-lg">' + esc(c.name) + '</h3><button class="btn btn-g btn-sm" data-act="c-edit" data-id="' + c.id + '"><i class="fa-solid fa-pen"></i>編輯</button><button class="btn btn-g btn-sm" data-act="c-archive" data-id="' + c.id + '"><i class="fa-solid fa-box-archive"></i>' + (c.archived ? '取消封存' : '封存') + '</button><button class="btn btn-d btn-sm" data-act="c-del" data-id="' + c.id + '"><i class="fa-solid fa-trash"></i>刪除</button></div>' +
+        '<div class="mb-4"><div class="flex items-center gap-2 mb-2"><b class="text-sm">組別</b><button class="btn btn-p btn-sm" data-act="g-new"><i class="fa-solid fa-plus"></i>新增組別</button></div><div class="flex flex-wrap gap-2">' + (gs.length ? gs.map(function (g) { var n = members.filter(function (u) { return u.groupId === g.id; }).length; return '<span class="inline-flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-1.5 text-sm"><i class="fa-solid fa-user-group text-slate-500"></i>' + esc(g.name) + '<span class="text-xs text-slate-500">' + n + '人</span><button class="text-slate-400 hover:text-indigo-600" data-act="g-edit" data-id="' + g.id + '" title="改名"><i class="fa-solid fa-pen text-xs"></i></button><button class="text-slate-400 hover:text-red-600" data-act="g-del" data-id="' + g.id + '" title="刪除"><i class="fa-solid fa-xmark text-xs"></i></button></span>'; }).join('') : '<span class="text-xs text-slate-400">尚未建立組別</span>') + '</div></div>' +
+        '<div class="flex flex-wrap items-center gap-2 mb-2"><b class="text-sm">成員(' + members.length + ')</b><span class="text-xs text-slate-500">勾選後可批次分配組別</span><select class="inp" id="c-move-g">' + opts(gs.map(function (g) { return { v: g.id, t: g.name }; }), '', '分配到組別…') + '</select><button class="btn btn-p btn-sm" data-act="c-move">套用</button><button class="btn btn-g btn-sm" data-act="c-unassign">移出組別</button></div>' +
+        '<div class="overflow-x-auto max-h-[46vh] border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th><input type="checkbox" data-act="c-all"></th><th>學號</th><th>姓名</th><th>組別</th></tr></thead><tbody>' + (members.length ? members.map(function (u) { return '<tr><td><input type="checkbox" data-csel="' + esc(u.id) + '"></td><td class="font-mono font-bold">' + esc(u.id) + '</td><td>' + esc(u.realName) + '</td><td>' + esc(grpName(u.groupId) || '—') + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="text-center text-slate-400 py-8">這個班級還沒有學生,可到「使用者管理」匯入名單</td></tr>') + '</tbody></table></div>';
+    }
+    $('#content').innerHTML = '<div class="grid md:grid-cols-3 gap-5"><div>' + card('班級', 'fa-people-roof', left, '<button class="btn btn-p btn-sm" data-act="c-new"><i class="fa-solid fa-plus"></i>新增</button>') + '</div><div class="md:col-span-2">' + card('班級內容', 'fa-diagram-project', right) + '</div></div>';
+  };
+  function textPrompt(title, label, value, onOk, extra) {
+    var m = KBUI.modal('<h3>' + esc(title) + '</h3><label>' + esc(label) + '</label><input class="kbui-input" data-f="v" value="' + esc(value || '') + '" autocomplete="off">' + (extra || '') + '<div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="no">取消</button><button class="kbui-btn kbui-primary" data-f="ok">確定</button></div>');
+    var f = function (n) { return m.card.querySelector('[data-f=' + n + ']'); };
+    f('no').onclick = m.close;
+    function go() { var r = onOk(f('v').value, m.card); if (r && r.ok === false) { f('err').innerHTML = '<div class="kbui-err">' + esc(r.error) + '</div>'; return; } m.close(); }
+    f('ok').onclick = go; f('v').onkeydown = function (e) { if (e.key === 'Enter') go(); };
+    setTimeout(function () { f('v').focus(); f('v').select(); }, 30);
+  }
+
+  /* ================= 4 論壇設定 ================= */
+  function topicForm(t) {
+    var edit = !!t; t = t || { name: '', desc: '', categories: [] };
+    var m = KBUI.modal('<h3><i class="fa-solid fa-folder-plus" style="color:#4f46e5"></i>' + (edit ? '編輯討論區' : '新增討論區') + '</h3><label>名稱 / 研究問題</label><input class="kbui-input" data-f="name" value="' + esc(t.name) + '"><label>說明</label><textarea class="kbui-input" rows="3" data-f="desc">' + esc(t.desc) + '</textarea><label>分類(可複選)</label><div class="flex flex-wrap gap-2" data-f="cats">' + CATS.map(function (c) { return '<label style="display:inline-flex;align-items:center;gap:4px;margin:0;font-weight:500"><input type="checkbox" value="' + c + '" ' + ((t.categories || []).indexOf(c) >= 0 ? 'checked' : '') + '>' + c + '</label>'; }).join('') + '</div><div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="no">取消</button><button class="kbui-btn kbui-primary" data-f="ok">儲存</button></div>');
+    var f = function (n) { return m.card.querySelector('[data-f=' + n + ']'); };
+    f('no').onclick = m.close;
+    f('ok').onclick = function () {
+      var name = f('name').value.trim(); if (!name) { f('err').innerHTML = '<div class="kbui-err">請輸入名稱</div>'; return; }
+      var cats = Array.prototype.slice.call(f('cats').querySelectorAll('input:checked')).map(function (x) { return x.value; }); if (!cats.length) cats = ['其他'];
+      var c = KB.content.get(), topics = JSON.parse(JSON.stringify(c.topics));
+      if (edit) { var i = topics.findIndex(function (x) { return x.id === t.id; }); if (i >= 0) { topics[i].name = name; topics[i].desc = f('desc').value; topics[i].categories = cats; } KB.content.audit('topic.update', t.id, name); }
+      else { var nt = { id: 't_' + Date.now().toString(36), name: name, desc: f('desc').value, categories: cats, author: gate.id, date: new Date().toISOString(), status: 'open' }; topics.unshift(nt); KB.content.audit('topic.create', nt.id, name); }
+      KB.content.save({ topics: topics }); m.close(); KBUI.toast('已儲存', 'ok'); R.forum();
+    };
+    setTimeout(function () { f('name').focus(); }, 30);
+  }
+  R.forum = function () {
+    var cfg = KB.settings.get(), c = KB.content.get();
+    var tl = c.topics.length ? '<div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>名稱</th><th>分類</th><th>貼文</th><th>建立</th><th>操作</th></tr></thead><tbody>' + c.topics.map(function (t) {
+      var n = c.nodes.filter(function (x) { return x.topicId === t.id; }).length;
+      return '<tr><td class="font-bold">' + esc(t.name) + '<div class="text-xs font-normal text-slate-500">' + esc(t.desc || '') + '</div></td><td>' + (t.categories || []).map(function (x) { return '<span class="chip gray">' + esc(x) + '</span>'; }).join(' ') + '</td><td>' + n + '</td><td class="text-xs text-slate-500">' + fmt(t.date) + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="t-edit" data-id="' + esc(t.id) + '"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-sm" data-act="t-del" data-id="' + esc(t.id) + '"><i class="fa-solid fa-trash"></i></button></td></tr>';
+    }).join('') + '</tbody></table></div>' : '<div class="text-sm text-slate-400 py-8 text-center">目前沒有討論區</div>';
+    var win = cfg.postWindow || {};
+    var rules = setRow('開放訪客瀏覽論壇', '關閉後,首頁的「訪客瀏覽」會失效。', sw('guestEnabled', cfg.guestEnabled)) +
+      setRow('學生可以編輯自己的貼文', '學生只能改自己的,看不到別人貼文的編輯鈕。', sw('studentEditOwn', cfg.studentEditOwn)) +
+      setRow('學生刪除自己的貼文', '「僅限無人回覆」可避免整串討論被截斷。老師與管理者不受限制。', '<select class="inp" data-setting="studentDeleteOwn">' + opts([{ v: 'noReplies', t: '僅限沒有人回覆時' }, { v: 'always', t: '隨時可刪(連同回覆)' }, { v: 'never', t: '不可刪除' }], cfg.studentDeleteOwn) + '</select>') +
+      setRow('鎖定論壇(學生唯讀)', '鎖定後學生與訪客都不能發文、編輯、刪除;老師與管理者仍可操作。', sw('forumLocked', cfg.forumLocked)) +
+      setRow('限定發文時間', '只在這段時間內學生可以發文。', sw('postWindowEnabled', win.enabled) + '<div class="mt-2 flex gap-2 items-center text-xs"><input class="inp" type="datetime-local" id="pw-start" value="' + esc(win.start || '') + '"> 至 <input class="inp" type="datetime-local" id="pw-end" value="' + esc(win.end || '') + '"><button class="btn btn-g btn-sm" data-act="pw-save">儲存</button></div>');
+    $('#content').innerHTML = card('討論區管理', 'fa-folder-tree', tl, '<button class="btn btn-p" data-act="t-new"><i class="fa-solid fa-plus"></i>新增討論區</button>') + card('權限與發文規則', 'fa-sliders', rules);
+  };
+
+  /* ================= 5 分析設定 ================= */
+  R.analysis = function () {
+    var a = KB.settings.get().analysis;
+    function num(id, v, step, min, max) { return '<input class="inp w-24" type="number" id="an-' + id + '" value="' + v + '" step="' + step + '" min="' + min + '" max="' + max + '">'; }
+    $('#content').innerHTML = card('認知能動性 (Epistemic Agency) 判定', 'fa-brain',
+      '<p class="text-xs text-slate-500 mb-2">個人指數 = (主動發起 ÷ 目標 + 自我修正 ÷ 目標 + 提出解釋 ÷ 目標)÷ 3,各項最高算 1。指數達標,且「達標學生比例」夠高,才算落實。</p>' +
+      setRow('「主動發起」滿分比例', '提問、開新話題或提出下一步的貼文占比,達到此值該項滿分。', num('init', a.agencyTargets.init, 0.01, 0.01, 1)) +
+      setRow('「自我修正」滿分比例', '修正、改進、反駁或回應自己的貼文占比。', num('mon', a.agencyTargets.mon, 0.01, 0.01, 1)) +
+      setRow('「提出解釋」滿分比例', '說明原因、機制、證據的貼文占比。', num('exp', a.agencyTargets.exp, 0.01, 0.01, 1)) +
+      setRow('個人達標指數', '個人指數 ≥ 此值,該學生算達標(0~1)。', num('pass', a.agencyPass, 0.01, 0.1, 1)) +
+      setRow('全班達標比例', '達標學生占比 ≥ 此值,Epistemic Agency 才打勾(0~1)。', num('rate', a.agencyRate, 0.01, 0.1, 1))) +
+      card('KB 12 原則其他門檻', 'fa-list-check',
+        setRow('Real Ideas:疑問型貼文占比', '貼文含問號或為提問類型的占比 ≥ 此值。', num('q', a.kbQuestion, 0.01, 0.01, 1)) +
+        setRow('Idea Diversity:對照性想法占比', '提問、改進、反駁等類型占比 ≥ 此值。', num('div', a.kbDiversityContrast, 0.01, 0.01, 1)) +
+        setRow('Authoritative Sources:引用資料占比', '貼文含「文獻、研究、官方、網址、實測…」等線索的占比 ≥ 此值。', num('src', a.kbSources, 0.01, 0.01, 1))) +
+      '<div class="flex gap-2"><button class="btn btn-p" data-act="an-save"><i class="fa-solid fa-floppy-disk"></i>儲存設定</button><button class="btn btn-g" data-act="an-reset"><i class="fa-solid fa-rotate-left"></i>還原預設值</button></div>' +
+      '<div class="card text-xs text-slate-500">這些門檻會立即套用在「老師分析」的 KB 12 檢核與 Epistemic Agency。文字類指標是關鍵字估計,僅供教學參考。</div>';
+  };
+
+  /* ================= 6 AI 設定 ================= */
+  R.ai = function () {
+    var cfg = KB.settings.get().ai, key = ''; try { key = localStorage.getItem('kb_ai_key') || ''; } catch (e) {}
+    $('#content').innerHTML = card('Gemini 金鑰', 'fa-key',
+      '<div class="flex items-center gap-2 mb-3">' + (key ? '<span class="chip ok">已設定</span><span class="font-mono text-sm">…' + esc(key.slice(-4)) + '</span>' : '<span class="chip warn">尚未設定</span>') + '</div>' +
+      '<label class="lbl">貼上 Gemini API Key</label><div class="flex gap-2"><input class="inp flex-1" type="password" id="ai-key" placeholder="AIza…" autocomplete="off"><button class="btn btn-p" data-act="ai-test"><i class="fa-solid fa-plug"></i>測試並儲存</button>' + (key ? '<button class="btn btn-g" data-act="ai-clear">清除</button>' : '') + '</div><div id="ai-res" class="text-xs mt-2"></div>' +
+      '<p class="text-xs text-slate-500 mt-3">這裡使用的就是在首頁輸入的那一把金鑰(同一個瀏覽器共用);想更換也可以直接在上面貼新的。金鑰只存在這台電腦的瀏覽器,不會寫進平台資料,也不會出現在備份檔裡。</p>') +
+      card('模型選擇', 'fa-microchip', '<p class="text-xs text-slate-500 mb-3">下面的清單是用目前這把金鑰向 Google 查詢到的「可用模型」。選好後,老師分析、學生分析與首頁的 AI 功能都會優先使用這個模型;選「自動」則使用版本最新的 flash 模型。</p><div id="ai-model-box"></div>') +
+      card('AI 功能', 'fa-robot',
+        setRow('啟用 AI 功能', '關閉後,老師分析的 AI 診斷、Ref 的 AI 診斷、學生分析的 AI 導師都會停用。', sw('aiEnabled', cfg.enabled)) +
+        setRow('傳給 AI 的內容會去除學生姓名', '固定開啟:姓名、名字與學號一律換成 S01、S02… 代號,AI 回覆後再由你的瀏覽器換回。', '<span class="chip ok">固定開啟</span>') +
+        '');
+    renderModelBox();
+    if (key && aiModels.list === null && !aiModels.loading) loadModels();
+  };
+
+  /* ---- 模型清單:向 Google 查詢這把金鑰實際可用的模型 ---- */
+  var aiModels = { list: null, loading: false, err: '', key: '' };
+  function getKey() { try { return localStorage.getItem('kb_ai_key') || ''; } catch (e) { return ''; } }
+  function verOf(n) { var m = /^gemini-([0-9]+(?:[.][0-9]+)?)/.exec(n); return m ? parseFloat(m[1]) : 0; }
+  function listGeminiModels(key) {
+    var out = [];
+    function page(token) {
+      return fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=' + encodeURIComponent(key) + (token ? '&pageToken=' + encodeURIComponent(token) : '')).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok || j.error) throw new Error('HTTP ' + r.status + ' ' + ((j.error && j.error.message) || '')); return j; });
+      }).then(function (j) {
+        (j.models || []).forEach(function (m) {
+          var id = String(m.name || '').replace('models/', '');
+          if ((m.supportedGenerationMethods || []).indexOf('generateContent') < 0) return;
+          if (!/^gemini/.test(id) || /tts|image|live|audio|embedding|robotics|computer-use|native/.test(id)) return;
+          out.push({ id: id, name: m.displayName || id });
+        });
+        return j.nextPageToken ? page(j.nextPageToken) : out;
+      });
+    }
+    return page('').then(function (l) { return l.sort(function (a, b) { return (verOf(b.id) - verOf(a.id)) || (a.id < b.id ? -1 : 1); }); });
+  }
+  function autoModel() {
+    var l = (aiModels.list || []).filter(function (m) { return /^gemini-[0-9]+([.][0-9]+)?-flash$/.test(m.id); });
+    return l.length ? l[0].id : '';
+  }
+  function loadModels() {
+    var key = getKey(); if (!key) { renderModelBox(); return; }
+    aiModels.loading = true; aiModels.err = ''; renderModelBox();
+    var cur = key;
+    listGeminiModels(key).then(function (l) { if (getKey() !== cur) return; aiModels.list = l; aiModels.key = cur; try { localStorage.removeItem('kb_ai_models'); } catch (e) {} })
+      .catch(function (e) { aiModels.err = e.message || String(e); aiModels.list = []; })
+      .then(function () { aiModels.loading = false; renderModelBox(); });
+  }
+  function renderModelBox() {
+    var box = $('#ai-model-box'); if (!box) return;
+    var key = getKey(), cur = KB.settings.get().ai.model || 'auto';
+    if (!key) { box.innerHTML = '<div class="text-sm text-amber-700"><i class="fa-solid fa-circle-info"></i> 還沒有金鑰。請先到首頁輸入並儲存 API Key(或在上面貼上),再回來選擇模型。</div>'; return; }
+    if (aiModels.loading) { box.innerHTML = '<div class="text-sm text-slate-500"><i class="fa-solid fa-circle-notch fa-spin"></i> 正在向 Google 查詢可用的模型…</div>'; return; }
+    var list = aiModels.list || [];
+    var items = [{ v: 'auto', t: '自動(使用版本最新的 flash 模型,推薦)' }].concat(list.map(function (m) { return { v: m.id, t: m.id + (m.name && m.name !== m.id ? '(' + m.name + ')' : '') }; }));
+    if (cur !== 'auto' && !list.some(function (m) { return m.id === cur; })) items.push({ v: cur, t: cur + '(目前設定,不在查詢結果中)' });
+    var used = ''; try { used = localStorage.getItem('kb_ai_model') || ''; } catch (e) {}
+    box.innerHTML = '<div class="flex flex-wrap gap-2 items-center"><select class="inp" style="min-width:300px" id="ai-model-sel">' + opts(items, cur) + '</select><button class="btn btn-g btn-sm" data-act="ai-redetect"><i class="fa-solid fa-rotate"></i>重新偵測</button><button class="btn btn-p btn-sm" data-act="ai-model-test"><i class="fa-solid fa-vial"></i>測試此模型</button></div>' +
+      (aiModels.err ? '<div class="text-xs text-red-600 mt-2"><i class="fa-solid fa-triangle-exclamation"></i> 查詢失敗:' + esc(aiModels.err) + '(請確認金鑰有效且網路正常)</div>' : '<div class="text-xs text-slate-500 mt-2">共查到 <b>' + list.length + '</b> 個可用模型' + (cur === 'auto' && autoModel() ? ';自動模式目前會使用 <b>' + esc(autoModel()) + '</b>' : '') + (used ? ';上一次實際成功使用:<b>' + esc(used) + '</b>' : '') + '。</div>') +
+      '<div id="ai-model-res" class="text-xs mt-2"></div>';
+  }
+
+
+  /* ================= 7 資料與備份 ================= */
+  function dlBackup(id) { var snap = id ? KB.backup.get(id) : KB.backup.snapshot(); if (!snap) return; download('KB備份_' + dateStr() + '.json', JSON.stringify(snap), 'application/json'); }
+  R.data = function () {
+    var bk = KB.backup.list().slice().reverse(), c = KB.content.get(), st = KB.stats();
+    var bl = bk.length ? '<div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>時間</th><th>說明</th><th>使用者</th><th>貼文</th><th>操作</th></tr></thead><tbody>' + bk.map(function (b) { return '<tr><td>' + fmt(b.time) + '</td><td>' + esc(b.label) + '</td><td>' + b.users + '</td><td>' + b.posts + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="b-dl" data-id="' + b.id + '"><i class="fa-solid fa-download"></i>下載</button> <button class="btn btn-g btn-sm" data-act="b-restore" data-id="' + b.id + '"><i class="fa-solid fa-clock-rotate-left"></i>還原</button> <button class="btn btn-d btn-sm" data-act="b-del" data-id="' + b.id + '"><i class="fa-solid fa-trash"></i></button></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="text-sm text-slate-400 py-6 text-center">還沒有備份。系統最多保留最近 5 份,清空或還原前會自動備份。</div>';
+    var tr = c.trash.length ? '<div class="overflow-x-auto max-h-[40vh] border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>類型</th><th>內容</th><th>刪除者</th><th>時間</th><th>操作</th></tr></thead><tbody>' + c.trash.map(function (it) { var topic = it.type === 'topic'; var name = topic ? it.data.name + '(含 ' + (it.relatedNodes || []).length + ' 則貼文)' : (function (d) { d = Array.isArray(d) ? d : [d]; return ((d[0] && d[0].title) || '(無標題)') + '(共 ' + d.length + ' 則)'; })(it.data); return '<tr><td>' + (topic ? '討論區' : '貼文') + '</td><td>' + esc(String(name).slice(0, 60)) + '</td><td>' + esc(KB.display.label(it.deletedBy, 'teacher')) + '</td><td class="text-xs text-slate-500">' + fmt(it.deletedAt) + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="tr-restore" data-id="' + esc(it.id) + '"><i class="fa-solid fa-rotate-left"></i>還原</button> <button class="btn btn-d btn-sm" data-act="tr-del" data-id="' + esc(it.id) + '"><i class="fa-solid fa-xmark"></i>永久刪除</button></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="text-sm text-slate-400 py-6 text-center">回收桶是空的</div>';
+    $('#content').innerHTML =
+      card('匯出', 'fa-file-export', '<div class="flex flex-wrap gap-2"><button class="btn btn-p" data-act="d-json"><i class="fa-solid fa-file-code"></i>匯出完整備份(JSON)</button><button class="btn btn-g" data-act="d-posts"><i class="fa-solid fa-file-csv"></i>匯出全部貼文(CSV)</button><button class="btn btn-g" data-act="u-export"><i class="fa-solid fa-users"></i>匯出使用者名單(CSV)</button></div><p class="text-xs text-slate-500 mt-2">完整備份包含使用者(含加密後的密碼)、班級、討論區、貼文、回收桶與設定;不含 AI 金鑰與稽核紀錄。</p>') +
+      card('備份與還原', 'fa-clock-rotate-left', bl + '<div class="flex flex-wrap gap-2 mt-3"><button class="btn btn-s" data-act="quick-backup"><i class="fa-solid fa-floppy-disk"></i>立即建立備份</button><button class="btn btn-g" data-act="b-file"><i class="fa-solid fa-file-import"></i>從備份檔還原…</button><input type="file" id="b-file-inp" accept=".json,application/json" style="display:none"></div>') +
+      card('回收桶(' + c.trash.length + ')', 'fa-trash-can', tr, c.trash.length ? '<button class="btn btn-d btn-sm" data-act="tr-empty">清空回收桶</button>' : '') +
+      '<div class="danger-zone"><div class="flex items-center gap-2 mb-2"><i class="fa-solid fa-triangle-exclamation text-red-600"></i><h2 class="font-bold text-red-700">危險操作</h2></div><p class="text-xs text-red-700/80 mb-3">以下操作都會先「自動備份」,並需要輸入確認文字才能執行。</p><div class="flex flex-wrap gap-2"><button class="btn btn-d" data-act="d-clear"><i class="fa-solid fa-eraser"></i>清空全部貼文與回收桶(' + st.posts + ' 則)</button><button class="btn btn-d" data-act="d-reset"><i class="fa-solid fa-skull-crossbones"></i>完整重置整個平台</button></div></div>';
+    var fi = $('#b-file-inp'); if (fi) fi.onchange = function () { var file = this.files[0]; if (!file) return; var fr = new FileReader(); fr.onload = function () { var o; try { o = JSON.parse(fr.result); } catch (e) { KBUI.toast('這不是有效的備份檔(JSON 格式錯誤)', 'err'); return; } restoreFlow(o, file.name); }; fr.readAsText(file, 'utf-8'); fi.value = ''; };
+  };
+  function restoreFlow(snap, label) {
+    var err = null; if (!snap || snap.app !== 'kb-platform') err = '這不是本平台的備份檔';
+    if (err) { KBUI.toast(err, 'err'); return; }
+    KBUI.confirmText({ title: '還原備份', html: '將用「' + esc(label || snap.label || snap.time) + '」取代目前所有資料(使用者 ' + (snap.users || []).length + ' 人、貼文 ' + (snap.nodes || []).length + ' 則)。', expected: '還原備份', autoBackup: true, okText: '確認還原' }).then(function (y) {
+      if (!y) return; var r = KB.backup.restore(snap);
+      if (!ok(r, '已還原(還原前的資料已自動備份)')) return;
+      var cu = KB.auth.current(); if (!cu) { location.href = 'index.html'; return; } renderNav(); render();
+    });
+  }
+  function postsCSV() {
+    var c = KB.content.get(), tn = {}; c.topics.forEach(function (t) { tn[t.id] = t.name; });
+    var rows = [['日期', '討論區', '作者', '類型', '標題', '內容', '文章ID', '上層文章ID']];
+    c.nodes.slice().sort(function (a, b) { return a.date - b.date; }).forEach(function (n) { var d = new Date(n.date); rows.push([d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(), tn[n.topicId] || n.topicId, KB.display.label(n.author, 'student'), TYPE_TXT[n.type] || n.type, n.title, n.content, n.id, n.parentId || '']); });
+    return KB.io.toCSV(rows);
+  }
+
+  /* ================= 8 平台與安全設定 ================= */
+  R.appearance = function () {
+    var c = KB.settings.get();
+    function inpRow(title, desc, id, val, type, extra) { return setRow(title, desc, '<input class="inp w-64" id="' + id + '" type="' + (type || 'text') + '" value="' + esc(val) + '" ' + (extra || '') + '>'); }
+    $('#content').innerHTML =
+      card('平台名稱與公告', 'fa-bullhorn',
+        inpRow('平台名稱', '顯示在論壇頁首與設定中心。', 'ap-name', c.platformName) +
+        setRow('顯示公告', '開啟後,所有頁面底部會出現公告(使用者可自行關閉)。', sw('annEnabled', c.announcement.enabled)) +
+        '<div class="py-2"><label class="lbl">公告內容</label><textarea class="inp w-full" rows="2" id="ap-ann">' + esc(c.announcement.text) + '</textarea><div class="mt-2 flex gap-2 items-center text-sm"><label class="m-0">類型</label><select class="inp" id="ap-level">' + opts([{ v: 'info', t: '一般(藍)' }, { v: 'warn', t: '注意(黃)' }, { v: 'danger', t: '重要(紅)' }], c.announcement.level) + '</select><button class="btn btn-p btn-sm" data-act="ap-save">儲存名稱與公告</button></div></div>') +
+      card('維護與顯示', 'fa-screwdriver-wrench',
+        setRow('維護模式', '開啟後,學生與訪客無法進入任何頁面(老師與管理者不受影響)。適合更新資料或調整設定時使用。', sw('maintenance', c.maintenance)) +
+        setRow('顯示名稱方式', '預設顯示姓名(右上角、貼文作者、討論區建立者、分析頁都用姓名;同名同姓時會附上學號)。選「學號」則全部改顯示學號。傳給 AI 時一律會換成代號。', '<select class="inp" data-setting="displayMode">' + opts([{ v: 'name', t: '姓名(預設)' }, { v: 'id', t: '學號' }], c.displayMode) + '</select>')) +
+      card('登入與密碼安全', 'fa-shield-halved',
+        inpRow('老師/管理者閒置自動登出(分鐘)', '0 代表不自動登出。', 'ap-idle', c.idleMinutes, 'number', 'min="0" max="1440"') +
+        inpRow('連續登入失敗幾次後鎖定', '', 'ap-maxfails', c.lockout.maxFails, 'number', 'min="2" max="20"') +
+        inpRow('鎖定時間(分鐘)', '', 'ap-lockmin', c.lockout.minutes, 'number', 'min="1" max="1440"') +
+        '<div class="pt-2"><button class="btn btn-p btn-sm" data-act="ap-sec-save">儲存登入安全設定</button></div>') +
+      card('語音輸入(實驗中)', 'fa-microphone',
+        setRow('發言視窗的語音輸入(🎤 用說的)', '開啟後,發言視窗的標題與內容旁邊會多一個「用說的」按鈕,小朋友可以用講的輸入,說完還能檢查、修改。關閉後就只有原本的打字輸入。注意:要用 Chrome 或 Edge、需要麥克風與網路,語音會送到瀏覽器的語音服務轉成文字。', sw('voiceEnabled', (c.voice || { enabled: true }).enabled !== false))) +
+      card('使用說明與同意書', 'fa-file-signature',
+        setRow('學生登入後先閱讀並同意', '開啟後,學生第一次登入(以及你修改說明內容之後)會先看到下面這段說明,按「同意並繼續」才能使用;不同意會被登出。同意紀錄會寫在稽核紀錄裡。', sw('consentEnabled', c.consent.enabled)) +
+        '<div class="py-2"><label class="lbl">說明內容(可依研究倫理要求自行修改)</label><textarea class="inp w-full" rows="6" id="cs-text">' + esc(c.consent.text) + '</textarea><div class="mt-2"><button class="btn btn-p btn-sm" data-act="cs-save">儲存說明內容</button></div></div>');
+  };
+
+  /* ================= 9 稽核紀錄 ================= */
+  var AU = { actor: '', action: '', fail: false };
+  R.audit = function () {
+    var list = KB.audit.list({ actor: AU.actor, action: AU.action, onlyFail: AU.fail, limit: 500 });
+    $('#content').innerHTML = card('稽核紀錄(最近 ' + list.length + ' 筆)', 'fa-clipboard-list',
+      '<div class="flex flex-wrap gap-2 mb-3 items-center"><input class="inp" id="au-actor" placeholder="操作者" value="' + esc(AU.actor) + '"><input class="inp" id="au-action" placeholder="動作(例如 auth、user、post)" value="' + esc(AU.action) + '"><label class="text-xs flex items-center gap-1"><input type="checkbox" id="au-fail" ' + (AU.fail ? 'checked' : '') + '>只看失敗</label><button class="btn btn-g btn-sm" data-act="au-apply">套用</button></div>' +
+      '<div class="overflow-x-auto max-h-[62vh] border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>時間</th><th>操作者</th><th>動作</th><th>對象</th><th>說明</th><th>結果</th></tr></thead><tbody>' + (list.length ? list.map(function (a) { return '<tr><td class="whitespace-nowrap text-xs">' + fmt(a.t) + '</td><td>' + esc(a.actor) + ' <span class="text-[10px] text-slate-400">' + esc(a.role) + '</span></td><td class="font-mono text-xs">' + esc(a.action) + '</td><td>' + esc(a.target) + '</td><td class="text-xs text-slate-600">' + esc(String(a.detail).slice(0, 120)) + '</td><td>' + (a.ok === false ? '<span class="chip bad">失敗</span>' : '<span class="chip ok">成功</span>') + '</td></tr>'; }).join('') : '<tr><td colspan="6" class="text-center text-slate-400 py-8">沒有符合的紀錄</td></tr>') + '</tbody></table></div>',
+      '<button class="btn btn-g btn-sm" data-act="au-export"><i class="fa-solid fa-file-csv"></i>匯出 CSV</button>');
+  };
+
+  /* ================= 10 我的帳號 ================= */
+  R.account = function () {
+    var cu = KB.auth.current();
+    $('#content').innerHTML = card('目前登入', 'fa-id-badge', '<div class="flex items-center gap-4"><img src="' + cu.avatar + '" class="w-16 h-16 rounded-full"><div><div class="text-xl font-extrabold">' + esc(cu.label) + '</div><div class="text-sm text-slate-500">' + KB.display.roleLabel(cu.role) + ' · 全部功能</div><div class="text-xs text-slate-400 mt-1">帳號:' + esc(cu.id) + '</div></div></div><div class="flex gap-2 mt-4"><button class="btn btn-p" data-act="me-pw"><i class="fa-solid fa-key"></i>修改密碼</button><button class="btn btn-g" data-act="me-out"><i class="fa-solid fa-right-from-bracket"></i>登出</button></div>') +
+      '<div class="card text-xs text-slate-500">閒置超過 ' + (KB.settings.get().idleMinutes || '∞') + ' 分鐘會自動登出(可在「平台與安全設定」調整)。</div>';
+  };
+
+  /* ================= 事件處理 ================= */
+  var A = {
+    'quick-backup': function () { var r = KB.backup.create('手動備份'); KBUI.toast('已建立備份', 'ok'); render(); },
+    'u-new': function () { userForm(); },
+    'pw-eye': function () { try { localStorage.setItem('kb_setup_pw_hide', pwHidden() ? '0' : '1'); } catch (e) {} R.users(); },
+    'u-edit': function (b) { userForm(KB.users.get(b.dataset.id)); },
+    'u-reset': function (b) {
+      var u = KB.users.get(b.dataset.id);
+      if (u.role !== 'student') { pwForm(u.id); return; }
+      // 學生忘記密碼:老師/管理者可以重設為學號,或直接指定一組新密碼
+      var m = KBUI.modal('<h3><i class="fa-solid fa-key" style="color:#4f46e5"></i>學生忘記密碼:' + esc(u.id) + (u.realName ? '(' + esc(u.realName) + ')' : '') + '</h3>' +
+        '<p>系統只保存加密後的密碼,<b>看不到學生自己改的密碼</b>,所以忘記時請直接幫他重設,選一種方式:</p>' +
+        '<div class="kbui-row" style="flex-direction:column;align-items:stretch;gap:8px"><button class="kbui-btn kbui-primary" data-f="toid">重設為學號(' + esc(u.id) + ')</button><button class="kbui-btn kbui-ghost" data-f="custom">指定一組新密碼</button><button class="kbui-btn kbui-ghost" data-f="cancel">取消</button></div>');
+      var f = function (n) { return m.card.querySelector('[data-f=' + n + ']'); };
+      f('cancel').onclick = m.close;
+      f('custom').onclick = function () { m.close(); pwForm(u.id); };
+      f('toid').onclick = function () { var r = KB.users.resetPassword(u.id); if (!ok(r, '已重設為學號')) return; m.close(); KBUI.modal('<h3><i class="fa-solid fa-circle-check" style="color:#16a34a"></i>已重設</h3><p>學生 <b>' + esc(u.id) + '</b> 的新密碼是他的學號:<b style="font-size:1.1rem">' + esc(r.password) + '</b></p><p class="kbui-hint">請告訴學生用這個登入;登入後可以在右上角選單「修改密碼」換成自己的。</p><div class="kbui-row"><button class="kbui-btn kbui-primary" data-f="done">知道了</button></div>').card.querySelector('[data-f=done]').onclick = function () { document.querySelectorAll('.kbui-overlay').forEach(function (o) { o.remove(); }); }; R.users(); };
+    },
+    'u-unlock': function (b) { KB.users.unlock(b.dataset.id); KBUI.toast('已解除鎖定', 'ok'); R.users(); },
+    'u-toggle': function (b) { var u = KB.users.get(b.dataset.id); var r = KB.users.setStatus(u.id, u.status === 'active' ? 'disabled' : 'active'); if (ok(r, u.status === 'active' ? '已停用' : '已啟用')) R.users(); },
+    'u-del': function (b) {
+      var u = KB.users.get(b.dataset.id);
+      KBUI.confirmText({ title: '刪除使用者', html: '將刪除 <b>' + esc(u.id) + '</b>(' + esc(u.realName || '') + ')。他的貼文會保留,作者仍顯示為這個學號。', expected: u.id, okText: '確認刪除' }).then(function (y) { if (!y) return; var r = KB.users.remove(u.id); if (ok(r, '已刪除')) { delete U.sel[u.id]; R.users(); } });
+    },
+    'u-all': function (b) { var list = filteredUsers().slice((U.page - 1) * U.per, U.page * U.per); list.forEach(function (u) { if (b.checked) U.sel[u.id] = 1; else delete U.sel[u.id]; }); R.users(); },
+    'u-prev': function () { U.page--; R.users(); }, 'u-next': function () { U.page++; R.users(); },
+    'u-import': importDialog,
+    'u-template': function () {
+      var bytes = KBXLSX.build([
+        { name: '名單', header: true, widths: [18, 18, 20, 22], textCols: [0, 1, 2, 3], blankRows: 300, rows: [['學號', '姓名', '班級', '初始密碼(選填)'], ['1120001', '王小明', '一年一班', ''], ['1120002', '李小華', '一年一班', '']] },
+        { name: '說明', widths: [70], rows: [['名單匯入說明'], ['1. 在「名單」工作表由第 2 列開始填寫,範例兩列可直接覆蓋或刪除。'], ['2. 學號與姓名必填;班級不存在時會自動建立。'], ['3. 初始密碼可留空,留空時密碼就是學號;有填的會照你填的當初始密碼,並顯示在設定中心「使用者」清單(學生自己改過就不再顯示)。'], ['4. 欄位已設為文字格式,學號開頭的 0 不會消失。'], ['5. 填好後存檔,回到設定中心 > 使用者管理 > 匯入名單,選擇這個檔案即可(會先預覽再確認)。']] }
+      ]);
+      download('名單匯入範本.xlsx', bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); KBUI.toast('範本已下載(名單匯入範本.xlsx)', 'ok');
+    },
+    'u-export': function () {
+      var matrix = KB.io.parseCSV(KB.io.accountSheet());
+      download('使用者名單_' + dateStr() + '.xlsx', KBXLSX.build([{ name: '學生名單', header: true, widths: [18, 18, 20, 24], textCols: [0, 1, 2, 3], rows: matrix }]), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    },
+    'u-print': printSheet,
+    'bulk-reset': function () { var ids = selIds().filter(function (i) { var u = KB.users.get(i); return u && u.role === 'student'; }); if (!ids.length) { KBUI.toast('選到的不是學生帳號(老師/管理者請逐一設定新密碼)', 'err'); return; } KBUI.confirm({ title: '批次重設密碼', html: '把 ' + ids.length + ' 位學生的密碼重設為學號?' }).then(function (y) { if (!y) return; ids.forEach(function (i) { KB.users.resetPassword(i); }); KBUI.toast('已重設 ' + ids.length + ' 位', 'ok'); R.users(); }); },
+    'bulk-disable': function () { var n = 0, err = ''; selIds().forEach(function (i) { var r = KB.users.setStatus(i, 'disabled'); if (r.ok) n++; else err = r.error; }); KBUI.toast('已停用 ' + n + ' 位' + (err ? '(部分失敗:' + err + ')' : ''), err ? 'err' : 'ok'); R.users(); },
+    'bulk-enable': function () { var n = 0; selIds().forEach(function (i) { if (KB.users.setStatus(i, 'active').ok) n++; }); KBUI.toast('已啟用 ' + n + ' 位', 'ok'); R.users(); },
+    'bulk-move': function () {
+      var cls = KB.classes.list(); if (!cls.length) { KBUI.toast('請先在「班級與分組」建立班級', 'err'); return; }
+      var m = KBUI.modal('<h3>移動班級 / 組別</h3><label>班級</label><select class="kbui-input" data-f="c">' + opts(cls.map(function (c) { return { v: c.id, t: c.name }; }), '') + '</select><label>組別</label><select class="kbui-input" data-f="g"></select><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="no">取消</button><button class="kbui-btn kbui-primary" data-f="ok">移動 ' + selIds().length + ' 人</button></div>');
+      var f = function (n) { return m.card.querySelector('[data-f=' + n + ']'); };
+      function fg() { f('g').innerHTML = opts(KB.classes.groups(f('c').value).map(function (g) { return { v: g.id, t: g.name }; }), '', '(不指定)'); } f('c').onchange = fg; fg();
+      f('no').onclick = m.close; f('ok').onclick = function () { selIds().forEach(function (i) { KB.users.update(i, { classId: f('c').value, groupId: f('g').value }); }); m.close(); KBUI.toast('已移動', 'ok'); R.users(); };
+    },
+    'bulk-delete': function () { var ids = selIds(); KBUI.confirmText({ title: '批次刪除使用者', html: '將刪除已選的 <b>' + ids.length + '</b> 位使用者。他們的貼文會保留。', expected: '批次刪除', okText: '確認刪除' }).then(function (y) { if (!y) return; var n = 0, err = ''; ids.forEach(function (i) { var r = KB.users.remove(i); if (r.ok) { n++; delete U.sel[i]; } else err = r.error; }); KBUI.toast('已刪除 ' + n + ' 位' + (err ? '(部分失敗:' + err + ')' : ''), err ? 'err' : 'ok'); R.users(); }); },
+    // classes
+    'c-new': function () { textPrompt('新增班級', '班級名稱', '', function (v) { var r = KB.classes.create(v); if (r.ok) { CL.sel = r.id; R.classes(); } return r; }, '<label>學期(選填)</label><input class="kbui-input" data-f="term" placeholder="例如 114-1">'); },
+    'c-sel': function (b) { CL.sel = b.dataset.id; R.classes(); },
+    'c-edit': function (b) { var c = KB.classes.list().filter(function (x) { return x.id === b.dataset.id; })[0]; textPrompt('編輯班級', '班級名稱', c.name, function (v, card2) { var r = KB.classes.update(c.id, { name: v.trim() || c.name, term: (card2.querySelector('[data-f=term]') || {}).value || '' }); if (r.ok) R.classes(); return r; }, '<label>學期</label><input class="kbui-input" data-f="term" value="' + esc(c.term || '') + '">'); },
+    'c-archive': function (b) { var c = KB.classes.list().filter(function (x) { return x.id === b.dataset.id; })[0]; KB.classes.update(c.id, { archived: !c.archived }); R.classes(); },
+    'c-del': function (b) { KBUI.confirm({ title: '刪除班級', html: '確定刪除這個班級與底下的組別?(班級內有學生時無法刪除)', danger: true, okText: '刪除' }).then(function (y) { if (!y) return; if (ok(KB.classes.remove(b.dataset.id), '已刪除')) R.classes(); }); },
+    'g-new': function () { textPrompt('新增組別', '組別名稱', '', function (v) { var r = KB.classes.createGroup(CL.sel, v); if (r.ok) R.classes(); return r; }); },
+    'g-edit': function (b) { var g = KB.classes.groups().filter(function (x) { return x.id === b.dataset.id; })[0]; textPrompt('組別改名', '組別名稱', g.name, function (v) { var r = KB.classes.updateGroup(g.id, v); if (r.ok) R.classes(); return r; }); },
+    'g-del': function (b) { KBUI.confirm({ title: '刪除組別', html: '確定刪除這個組別?(組別內有學生時無法刪除)', danger: true, okText: '刪除' }).then(function (y) { if (!y) return; if (ok(KB.classes.removeGroup(b.dataset.id), '已刪除')) R.classes(); }); },
+    'c-all': function (b) { $$('[data-csel]').forEach(function (x) { x.checked = b.checked; }); },
+    'c-move': function () { var gid = $('#c-move-g').value; var ids = $$('[data-csel]:checked').map(function (x) { return x.dataset.csel; }); if (!gid) { KBUI.toast('請先選擇要分配的組別', 'err'); return; } if (!ids.length) { KBUI.toast('請先勾選學生', 'err'); return; } ids.forEach(function (i) { KB.users.update(i, { groupId: gid }); }); KBUI.toast('已分配 ' + ids.length + ' 位', 'ok'); R.classes(); },
+    'c-unassign': function () { var ids = $$('[data-csel]:checked').map(function (x) { return x.dataset.csel; }); if (!ids.length) { KBUI.toast('請先勾選學生', 'err'); return; } ids.forEach(function (i) { KB.users.update(i, { groupId: '' }); }); KBUI.toast('已移出組別', 'ok'); R.classes(); },
+    // forum
+    't-new': function () { topicForm(); },
+    't-edit': function (b) { topicForm(KB.content.get().topics.filter(function (x) { return x.id === b.dataset.id; })[0]); },
+    't-del': function (b) {
+      var c = KB.content.get(), t = c.topics.filter(function (x) { return x.id === b.dataset.id; })[0], related = c.nodes.filter(function (n) { return n.topicId === t.id; });
+      var go = function () { var topics = c.topics.filter(function (x) { return x.id !== t.id; }), nodes = c.nodes.filter(function (n) { return n.topicId !== t.id; }), trash = JSON.parse(JSON.stringify(c.trash)); trash.unshift({ id: 'trash-' + Date.now(), type: 'topic', data: t, relatedNodes: related, deletedAt: Date.now(), deletedBy: gate.id }); KB.content.save({ topics: topics, nodes: nodes, trash: trash }); KB.content.audit('topic.delete', t.id, t.name); KBUI.toast('已移到回收桶', 'ok'); R.forum(); };
+      if (related.length) KBUI.confirmText({ title: '刪除討論區', html: '「' + esc(t.name) + '」有 <b>' + related.length + '</b> 則貼文,會一起移到回收桶(可在回收桶還原)。', expected: '刪除討論區', okText: '移到回收桶' }).then(function (y) { if (y) go(); });
+      else KBUI.confirm({ title: '刪除討論區', html: '確定刪除「' + esc(t.name) + '」?', danger: true, okText: '刪除' }).then(function (y) { if (y) go(); });
+    },
+    'pw-save': function () { var s = $('#pw-start').value, e = $('#pw-end').value; if (s && e && Date.parse(s) > Date.parse(e)) { KBUI.toast('開始時間不能晚於結束時間', 'err'); return; } KB.settings.update({ postWindow: { start: s, end: e } }); KBUI.toast('已儲存發文時間', 'ok'); },
+    // analysis
+    'an-save': function () {
+      function v(id) { return parseFloat($('#an-' + id).value); }
+      var vals = { init: v('init'), mon: v('mon'), exp: v('exp'), pass: v('pass'), rate: v('rate'), q: v('q'), div: v('div'), src: v('src') };
+      for (var k in vals) if (!(vals[k] > 0 && vals[k] <= 1)) { KBUI.toast('每一項都必須介於 0 到 1 之間(不含 0)', 'err'); return; }
+      KB.settings.update({ analysis: { agencyTargets: { init: vals.init, mon: vals.mon, exp: vals.exp }, agencyPass: vals.pass, agencyRate: vals.rate, kbQuestion: vals.q, kbDiversityContrast: vals.div, kbSources: vals.src } }); KBUI.toast('已儲存,老師分析會立即套用', 'ok');
+    },
+    'an-reset': function () { KB.settings.update({ analysis: { agencyPass: 0.7, agencyRate: 0.6, agencyTargets: { init: 0.25, mon: 0.5, exp: 0.3 }, kbDiversityContrast: 0.3, kbSources: 0.05, kbQuestion: 0.15 } }); KBUI.toast('已還原預設值', 'ok'); R.analysis(); },
+    // ai
+    'ai-test': function () {
+      var key = $('#ai-key').value.trim(), res = $('#ai-res'); if (!key) { KBUI.toast('請先貼上金鑰', 'err'); return; }
+      res.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-circle-notch fa-spin"></i> 正在連線 Gemini…</span>';
+      fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=5&key=' + encodeURIComponent(key)).then(function (r) { return r.json().then(function (j) { return { r: r, j: j }; }); }).then(function (o) {
+        if (!o.r.ok || o.j.error) throw new Error('HTTP ' + o.r.status + ' ' + ((o.j.error && o.j.error.message) || ''));
+        try { localStorage.setItem('kb_ai_key', key); localStorage.removeItem('kb_ai_models'); } catch (e) {} aiModels.list = null;
+        KB.audit.add('ai.keySaved', '', '金鑰已儲存於本機(後四碼 ' + key.slice(-4) + ')'); KBUI.toast('驗證成功,金鑰已儲存', 'ok'); R.ai();
+      }).catch(function (e) { res.innerHTML = '<span class="text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> 驗證失敗:' + esc(e.message) + '</span>'; });
+    },
+    'ai-clear': function () { KBUI.confirm({ title: '清除金鑰', html: '清除這台電腦儲存的 Gemini 金鑰?AI 功能會暫時無法使用。', danger: true, okText: '清除' }).then(function (y) { if (!y) return; try { localStorage.removeItem('kb_ai_key'); localStorage.removeItem('kb_ai_models'); localStorage.removeItem('kb_ai_model'); } catch (e) {} aiModels.list = null; KB.audit.add('ai.keyCleared', '', ''); KBUI.toast('已清除', 'ok'); R.ai(); }); },
+    'ai-redetect': function () { try { localStorage.removeItem('kb_ai_models'); } catch (e) {} aiModels.list = null; loadModels(); },
+    'ai-model-test': function () {
+      var key = getKey(), sel = $('#ai-model-sel'), res = $('#ai-model-res'); if (!key || !sel) return;
+      var id = sel.value === 'auto' ? (autoModel() || 'gemini-2.5-flash') : sel.value;
+      res.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-circle-notch fa-spin"></i> 正在用 ' + esc(id) + ' 測試…</span>';
+      fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(id) + ':generateContent?key=' + encodeURIComponent(key), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: '請只回覆「OK」兩個字。' }] }] }) })
+        .then(function (r) { return r.json().then(function (j) { return { r: r, j: j }; }); })
+        .then(function (o) {
+          if (!o.r.ok || o.j.error) throw new Error('HTTP ' + o.r.status + ' ' + ((o.j.error && o.j.error.message) || ''));
+          var txt = (((o.j.candidates || [])[0] || {}).content || {}).parts; txt = txt && txt[0] ? txt[0].text : '';
+          res.innerHTML = '<span class="text-emerald-700"><i class="fa-solid fa-circle-check"></i> ' + esc(id) + ' 可以使用(回覆:' + esc(String(txt).trim().slice(0, 30)) + ')</span>';
+        }).catch(function (e) { res.innerHTML = '<span class="text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> ' + esc(id) + ' 無法使用:' + esc(e.message) + '</span>'; });
+    },
+    // data
+    'd-json': function () { dlBackup(); KB.audit.add('data.export', 'json', ''); },
+    'd-posts': function () { download('全部貼文_' + dateStr() + '.csv', postsCSV(), 'text/csv'); KB.audit.add('data.export', 'posts.csv', ''); },
+    'b-dl': function (b) { dlBackup(b.dataset.id); },
+    'b-restore': function (b) { var s = KB.backup.get(b.dataset.id); restoreFlow(s, s && s.label); },
+    'b-del': function (b) { KB.backup.removeBackup(b.dataset.id); R.data(); },
+    'b-file': function () { $('#b-file-inp').click(); },
+    'tr-restore': function (b) {
+      var c = KB.content.get(), trash = JSON.parse(JSON.stringify(c.trash)), i = trash.findIndex(function (x) { return x.id === b.dataset.id; }); if (i < 0) return; var it = trash[i];
+      var topics = JSON.parse(JSON.stringify(c.topics)), nodes = JSON.parse(JSON.stringify(c.nodes));
+      if (it.type === 'topic') { topics.unshift(it.data); nodes = nodes.concat(it.relatedNodes || []); } else { nodes = nodes.concat(it.data); }
+      trash.splice(i, 1); KB.content.save({ topics: topics, nodes: nodes, trash: trash }); KB.content.audit('trash.restore', it.id, it.type); KBUI.toast('已還原', 'ok'); R.data();
+    },
+    'tr-del': function (b) { KBUI.confirm({ title: '永久刪除', html: '永久刪除這個項目?無法復原。', danger: true, okText: '永久刪除' }).then(function (y) { if (!y) return; var c = KB.content.get(); KB.content.save({ trash: c.trash.filter(function (x) { return x.id !== b.dataset.id; }) }); KB.content.audit('trash.delete', b.dataset.id, ''); R.data(); }); },
+    'tr-empty': function () { KBUI.confirmText({ title: '清空回收桶', html: '回收桶內所有項目會永久消失。', expected: '清空回收桶', okText: '確認清空' }).then(function (y) { if (!y) return; KB.content.save({ trash: [] }); KB.content.audit('trash.empty', '', ''); KBUI.toast('已清空', 'ok'); R.data(); }); },
+    'd-clear': function () { var n = KB.stats().posts + KB.stats().trash; KBUI.confirmText({ title: '清空全部貼文與回收桶', html: '將永久清除 <b>' + n + '</b> 則貼文與回收桶項目(討論區與使用者不受影響)。', expected: '清空資料', autoBackup: true, okText: '確認清空' }).then(function (y) { if (!y) return; var r = KB.backup.clearContent(); if (ok(r, '已清空(已先自動備份)')) R.data(); }); },
+    'd-reset': function () { KBUI.confirmText({ title: '完整重置整個平台', html: '將清除<b>所有使用者(只保留預設的管理者與老師帳號)、班級、貼文、設定</b>,恢復成剛安裝的狀態。你會被登出。', expected: '完整重置', autoBackup: true, okText: '確認重置' }).then(function (y) { if (!y) return; KB.backup.factoryReset(); location.href = 'index.html'; }); },
+    // appearance
+    'ap-save': function () { KB.settings.update({ platformName: $('#ap-name').value.trim() || '知識建構平台', announcement: { text: $('#ap-ann').value.trim(), level: $('#ap-level').value } }); KBUI.toast('已儲存', 'ok'); renderNav(); },
+    'ap-sec-save': function () { var idle = parseInt($('#ap-idle').value, 10), mf = parseInt($('#ap-maxfails').value, 10), lm = parseInt($('#ap-lockmin').value, 10); if (isNaN(idle) || idle < 0 || isNaN(mf) || mf < 2 || isNaN(lm) || lm < 1) { KBUI.toast('請輸入有效的數字', 'err'); return; } KB.settings.update({ idleMinutes: idle, lockout: { maxFails: mf, minutes: lm } }); KBUI.toast('已儲存', 'ok'); },
+    'cs-save': function () { var c = KB.settings.get().consent, txt = $('#cs-text').value.trim(); if (!txt) { KBUI.toast('說明內容不能是空的', 'err'); return; } KB.settings.update({ consent: { text: txt, version: txt === c.text ? c.version : c.version + 1 } }); KBUI.toast(txt === c.text ? '已儲存' : '已儲存;學生下次登入需要重新同意', 'ok'); },
+    // audit
+    'au-apply': function () { AU.actor = $('#au-actor').value.trim(); AU.action = $('#au-action').value.trim(); AU.fail = $('#au-fail').checked; R.audit(); },
+    'au-export': function () { var l = KB.audit.list({ actor: AU.actor, action: AU.action, onlyFail: AU.fail, limit: 5000 }); download('稽核紀錄_' + dateStr() + '.csv', KB.io.toCSV([['時間', '操作者', '角色', '動作', '對象', '說明', '結果']].concat(l.map(function (a) { return [a.t, a.actor, a.role, a.action, a.target, a.detail, a.ok === false ? '失敗' : '成功']; }))), 'text/csv'); },
+    // account
+    'me-pw': function () { KBUI.changePassword({}); },
+    'me-out': function () { KB.auth.logout(); location.href = 'index.html'; }
+  };
+
+  var SW = {
+    guestEnabled: function (v) { KB.settings.update({ guestEnabled: v }); }, studentEditOwn: function (v) { KB.settings.update({ studentEditOwn: v }); },
+    forumLocked: function (v) { KB.settings.update({ forumLocked: v }); }, postWindowEnabled: function (v) { KB.settings.update({ postWindow: { enabled: v } }); },
+    aiEnabled: function (v) { KB.settings.update({ ai: { enabled: v } }); }, annEnabled: function (v) { KB.settings.update({ announcement: { enabled: v } }); },
+    maintenance: function (v) { KB.settings.update({ maintenance: v }); }, voiceEnabled: function (v) { KB.settings.update({ voice: { enabled: v } }); }, consentEnabled: function (v) { KB.settings.update({ consent: { enabled: v } }); }, requireStudentPwChange: function (v) { KB.settings.update({ requireStudentPwChange: v }); }
+  };
+
+  document.addEventListener('click', function (e) {
+    var g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+    var s = e.target.closest('[data-sw]');
+    if (s) {
+      var on = !s.classList.contains('on'), id = s.dataset.sw;
+      if (id === 'maintenance' && on) { KBUI.confirm({ title: '開啟維護模式', html: '開啟後學生與訪客立刻無法使用平台。確定嗎?', okText: '開啟維護模式' }).then(function (y) { if (y) { SW[id](true); R[current](); } }); return; }
+      s.classList.toggle('on', on); s.setAttribute('aria-checked', on ? 'true' : 'false'); SW[id] && SW[id](on); KBUI.toast('已更新', 'ok'); return;
+    }
+    var a = e.target.closest('[data-act]');
+    if (a && A[a.dataset.act] && a.type !== 'checkbox') { A[a.dataset.act](a, e); return; }
+  });
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.id === 'ai-model-sel') { KB.settings.update({ ai: { model: t.value } }); KBUI.toast(t.value === 'auto' ? '已改為自動選擇最新模型' : '已指定使用 ' + t.value, 'ok'); renderModelBox(); return; }
+    if (t.dataset && t.dataset.setting) { var p = {}; p[t.dataset.setting] = t.value; KB.settings.update(p); KBUI.toast('已更新', 'ok'); return; }
+    if (t.type === 'checkbox' && t.dataset && t.dataset.act && A[t.dataset.act]) { A[t.dataset.act](t); return; }
+  });
+  // 使用者勾選(用 data-sel 的 checkbox)
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.matches && t.matches('input[type=checkbox][data-sel]')) { if (t.checked) U.sel[t.dataset.sel] = 1; else delete U.sel[t.dataset.sel]; R.users(); }
+  });
+  document.addEventListener('keydown', function (e) { var s = e.target.closest && e.target.closest('[data-sw]'); if (s && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); s.click(); } });
+  $('#menu-btn').onclick = function () { $('#mobile-nav').classList.toggle('hidden'); };
+  window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== current && SECTIONS.some(function (s) { return s.id === h; })) { current = h; renderNav(); render(); } });
+  KB.on(function (keys, remote) { if (!remote) return; if (!KB.auth.current()) return; renderNav(); if (!document.querySelector('.kbui-overlay')) render(); });
+
+  renderNav(); render(); KBUI.announce();
+})();
+</script>
+</body>
+</html>

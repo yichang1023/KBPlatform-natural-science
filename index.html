@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知識建構與智慧分析平台 | KB 知識建構平台</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%234f46e5%27/%3E%3Ctext x=%2732%27 y=%2743%27 font-family=%27sans-serif%27 font-size=%2728%27 font-weight=%27700%27 fill=%27white%27 text-anchor=%27middle%27%3EKB%3C/text%3E%3C/svg%3E">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Three.js for 3D Möbius Strip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- 測試版:單機核心(帳號、權限、資料) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+<script src="kb-config.js"></script>
+<script src="kb-core.js"></script>
+<script src="kb-cloud.js"></script>
+    <script src="kb-ui.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Noto Sans TC', 'sans-serif'],
+                        mono: ['Orbitron', 'monospace'],
+                    },
+                    colors: {
+                        kb: {
+                            dark: '#0f172a',
+                            primary: '#4f46e5',
+                            accent: '#06b6d4'
+                        }
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; overflow-x: hidden; background-color: #0f172a; color: white; }
+        #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.6; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .role-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .role-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(79, 70, 229, 0.5);
+        }
+        .role-card.selected {
+            background: rgba(79, 70, 229, 0.2);
+            border-color: #4f46e5;
+            box-shadow: 0 0 20px rgba(79, 70, 229, 0.3);
+        }
+        /* 身分卡片:點擊後放大成登入框 */
+        .role-card { position: relative; overflow: hidden; }
+        .role-card .login-form { max-height: 0; opacity: 0; overflow: hidden; transition: max-height .45s ease, opacity .3s ease, margin .3s; margin-top: 0; }
+        .role-card.expanded { grid-column: 1 / -1; background: rgba(79,70,229,.16); border-color: #6366f1; box-shadow: 0 0 28px rgba(79,70,229,.35); transform: none; cursor: default; animation: card-grow .35s ease-out; }
+        .role-card.expanded .login-form { max-height: 420px; opacity: 1; margin-top: 16px; }
+        .role-card.dim { opacity: .32; pointer-events: none; filter: saturate(.6); }
+        .role-card.logged { border-color: rgba(34,197,94,.6); background: rgba(34,197,94,.10); }
+        @keyframes card-grow { from { transform: scale(.96); } to { transform: scale(1); } }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+        .shake { animation: shake .35s; }
+        .field { width: 100%; background: rgba(15,23,42,.85); border: 1.5px solid #334155; border-radius: 10px; padding: 10px 12px 10px 38px; color: #fff; font-size: .92rem; outline: none; transition: border-color .15s, box-shadow .15s; }
+        .field:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129,140,248,.25); }
+        .field-wrap { position: relative; }
+        .field-wrap > i.lead { position: absolute; left: 12px; top: 13px; color: #64748b; font-size: .85rem; }
+        .field-wrap > button.eye { position: absolute; right: 10px; top: 9px; color: #64748b; background: none; border: 0; cursor: pointer; }
+        .btn-glow {
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-glow:after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(to bottom right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+            transform: rotate(45deg);
+            transition: transform 0.6s;
+            transform: translateY(100%);
+        }
+        .btn-glow:hover:after {
+            transform: translateY(0%);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans">
+
+    <div id="canvas-container"></div>
+
+    <!-- Header -->
+    <header class="relative z-10 p-6 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400 flex items-center justify-center text-white font-bold text-xl shadow-lg">KB</div>
+            <div>
+                <h1 class="text-xl font-bold tracking-wider">PROJECT <span class="text-indigo-400">AETHER</span></h1>
+                <p class="text-xs text-slate-400 font-mono">KNOWLEDGE BUILDING ENVIRONMENT</p>
+            </div>
+        </div>
+        <div class="text-xs text-slate-500 font-mono hidden md:block">
+            SYSTEM STATUS: <span id="system-status" class="text-yellow-500"><i class="fa-solid fa-circle-notch fa-spin"></i> CHECKING...</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="relative z-10 flex-1 flex flex-col items-center justify-center p-4 md:p-8">
+        
+        <div class="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Left Column: Introduction & Role -->
+            <div class="lg:col-span-7 flex flex-col gap-6">
+                <div class="glass-panel p-8 rounded-2xl animate-float">
+                    <h2 class="text-3xl md:text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+                        知識建構與智慧分析
+                    </h2>
+                    <p class="text-slate-300 leading-relaxed mb-6 text-lg">
+                        這是一個整合人類智慧與人工智慧的協作空間。在這裡，我們不只是學習既有知識，更是共同創造新知識。
+                        <br><br>
+                        <span class="text-indigo-300"><i class="fa-solid fa-quote-left"></i> 想法不僅存於腦中，更存於社群的對話裡。</span>
+                    </p>
+                    
+                    <!-- Role Selection / Login -->
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">IDENTIFICATION // 選擇身份並登入</h3>
+                        <div id="login-need" class="hidden text-sm rounded-lg px-4 py-2 border"></div>
+                        <div id="role-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                            <!-- Staff (老師 / 管理者) -->
+                            <div id="role-staff" class="role-card p-4 rounded-xl group">
+                                <div class="flex items-center gap-3" onclick="openRole('staff')">
+                                    <div class="w-11 h-11 shrink-0 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-lg group-hover:bg-indigo-500 group-hover:text-white transition-colors"><i class="fa-solid fa-chalkboard-user"></i></div>
+                                    <div class="min-w-0"><h4 class="font-bold text-white">我是老師</h4><p class="text-[11px] text-slate-400 leading-tight">老師 / 管理者登入</p></div>
+                                    <div class="ml-auto text-xs text-indigo-300 hidden status-ok"><i class="fa-solid fa-circle-check"></i></div>
+                                </div>
+                                <form class="login-form" onsubmit="return doLogin(event,'staff')" autocomplete="off">
+                                    <p class="text-xs text-slate-400 mb-3">請輸入老師或管理者帳號與密碼。登入後可使用論壇、全部分析頁與設定中心。</p>
+                                    <div class="space-y-3">
+                                        <div class="field-wrap"><i class="lead fa-solid fa-user"></i><input class="field" name="account" placeholder="帳號" autocomplete="username"></div>
+                                        <div class="field-wrap"><i class="lead fa-solid fa-lock"></i><input class="field" name="password" type="password" placeholder="密碼" autocomplete="current-password"><button type="button" class="eye" onclick="togglePw(this)" tabindex="-1"><i class="fa-regular fa-eye"></i></button></div>
+                                    </div>
+                                    <div class="login-err hidden mt-3 text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2"></div>
+                                    <div class="flex gap-3 mt-4"><button type="submit" class="btn-glow flex-1 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 font-bold text-sm"><i class="fa-solid fa-right-to-bracket mr-1"></i>登入</button><button type="button" onclick="closeRole()" class="px-4 py-2.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-sm">取消</button></div>
+                                </form>
+                            </div>
+
+                            <!-- Student -->
+                            <div id="role-student" class="role-card p-4 rounded-xl group">
+                                <div class="flex items-center gap-3" onclick="openRole('student')">
+                                    <div class="w-11 h-11 shrink-0 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-lg group-hover:bg-cyan-500 group-hover:text-white transition-colors"><i class="fa-solid fa-user-graduate"></i></div>
+                                    <div class="min-w-0"><h4 class="font-bold text-white">我是學生</h4><p class="text-[11px] text-slate-400 leading-tight">以學號登入</p></div>
+                                    <div class="ml-auto text-xs text-cyan-300 hidden status-ok"><i class="fa-solid fa-circle-check"></i></div>
+                                </div>
+                                <form class="login-form" onsubmit="return doLogin(event,'student')" autocomplete="off">
+                                    <p class="text-xs text-slate-400 mb-3">帳號就是你的<b class="text-slate-200">學號</b>;初始密碼由老師提供(沒有另外提供時就是學號),登入後請立刻改成自己的新密碼。忘記密碼請洽老師重設。</p>
+                                    <div class="space-y-3">
+                                        <div class="field-wrap"><i class="lead fa-solid fa-id-card"></i><input class="field" name="account" placeholder="學號" inputmode="text" autocomplete="username"></div>
+                                        <div class="field-wrap"><i class="lead fa-solid fa-lock"></i><input class="field" name="password" type="password" placeholder="密碼" autocomplete="current-password"><button type="button" class="eye" onclick="togglePw(this)" tabindex="-1"><i class="fa-regular fa-eye"></i></button></div>
+                                    </div>
+                                    <div class="login-err hidden mt-3 text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2"></div>
+                                    <div class="flex gap-3 mt-4"><button type="submit" class="btn-glow flex-1 py-2.5 rounded-lg bg-gradient-to-r from-cyan-600 to-sky-600 font-bold text-sm"><i class="fa-solid fa-right-to-bracket mr-1"></i>登入</button><button type="button" onclick="closeRole()" class="px-4 py-2.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-sm">取消</button></div>
+                                    <p class="text-[11px] text-slate-500 mt-3">忘記密碼?請洽老師,老師可以在設定中心把密碼重設回學號。</p>
+                                </form>
+                            </div>
+
+                            <!-- Guest -->
+                            <div id="role-guest" class="role-card p-4 rounded-xl group">
+                                <div class="flex items-center gap-3" onclick="openRole('guest')">
+                                    <div class="w-11 h-11 shrink-0 rounded-full bg-slate-500/20 flex items-center justify-center text-slate-300 text-lg group-hover:bg-slate-500 group-hover:text-white transition-colors"><i class="fa-solid fa-eye"></i></div>
+                                    <div class="min-w-0"><h4 class="font-bold text-white">訪客瀏覽</h4><p class="text-[11px] text-slate-400 leading-tight">只能看論壇內容</p></div>
+                                    <div class="ml-auto text-xs text-slate-300 hidden status-ok"><i class="fa-solid fa-circle-check"></i></div>
+                                </div>
+                                <form class="login-form" onsubmit="return doGuest(event)" autocomplete="off">
+                                    <p class="text-xs text-slate-400">訪客不需要密碼,可以瀏覽論壇內容,但<b class="text-slate-200">不能發文、不能看分析頁</b>。</p>
+                                    <div class="login-err hidden mt-3 text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2"></div>
+                                    <div class="flex gap-3 mt-4"><button type="submit" class="btn-glow flex-1 py-2.5 rounded-lg bg-gradient-to-r from-slate-600 to-slate-500 font-bold text-sm"><i class="fa-solid fa-door-open mr-1"></i>以訪客進入</button><button type="button" onclick="closeRole()" class="px-4 py-2.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-sm">取消</button></div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- 已登入狀態 -->
+                        <div id="session-bar" class="hidden items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">
+                            <img id="session-avatar" class="w-9 h-9 rounded-full" alt="">
+                            <div class="min-w-0"><div class="text-sm font-bold text-white" id="session-name"></div><div class="text-[11px] text-emerald-300" id="session-role"></div></div>
+                            <button onclick="doLogout()" class="ml-auto text-xs px-3 py-1.5 rounded-lg bg-slate-700/70 hover:bg-slate-600"><i class="fa-solid fa-right-from-bracket mr-1"></i>登出</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div id="entry-grid" class="grid grid-cols-2 gap-4">
+                    <button onclick="navigateTo('forum')" class="btn-glow group relative py-4 px-6 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 font-bold text-lg shadow-lg hover:shadow-indigo-500/30 flex items-center justify-center gap-3">
+                        <i class="fa-solid fa-rocket group-hover:animate-bounce"></i>
+                        <span>進入知識論壇</span>
+                    </button>
+                    <button onclick="navigateTo('analytics')" class="btn-glow group relative py-4 px-6 rounded-xl bg-slate-700/50 hover:bg-slate-700 font-bold text-lg border border-slate-600 hover:border-slate-500 flex items-center justify-center gap-3 text-slate-200">
+                        <i class="fa-solid fa-chart-pie group-hover:rotate-180 transition-transform duration-500"></i>
+                        <span id="btn-analytics-label">前往分析中樞</span>
+                    </button>
+                    <button id="btn-student-analytics" onclick="navigateTo('student')" class="hidden col-span-2 btn-glow group relative py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-700/70 to-teal-700/70 hover:from-emerald-600 hover:to-teal-600 font-bold border border-emerald-400/40 items-center justify-center gap-3">
+                        <i class="fa-solid fa-user-graduate group-hover:-translate-y-0.5 transition-transform duration-300"></i>
+                        <span>前往學生分析(選一位學生,看他的知識羅盤)</span>
+                    </button>
+                    <button id="btn-setup" onclick="navigateTo('setup')" class="hidden col-span-2 btn-glow group relative py-3 px-6 rounded-xl bg-gradient-to-r from-violet-700/80 to-indigo-700/80 hover:from-violet-600 hover:to-indigo-600 font-bold border border-violet-400/40 items-center justify-center gap-3">
+                        <i class="fa-solid fa-gear group-hover:rotate-90 transition-transform duration-500"></i>
+                        <span>前往設定中心(使用者、班級、論壇、備份…)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Column: System Config -->
+            <div class="lg:col-span-5 flex flex-col h-full">
+                <div class="glass-panel p-6 rounded-2xl h-full flex flex-col">
+                    <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-microchip"></i> AI Core Configuration
+                    </h3>
+                    <div id="ai-locked" class="hidden flex-1 flex items-center justify-center text-center text-xs text-slate-500 border border-dashed border-slate-700 rounded-lg p-6 mb-4"><div><i class="fa-solid fa-lock text-2xl mb-2 block text-slate-600"></i>AI 金鑰設定僅限老師與管理者<br>(登入後才會顯示)</div></div>
+                    
+                    <div id="ai-panel" class="flex-1 space-y-6">
+                        <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+                            <label class="block text-xs font-bold text-slate-400 mb-2">GEMINI API KEY</label>
+                            <div class="relative">
+                                <input type="password" id="api-key-input" placeholder="Paste your Google Gemini API Key here" class="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors pl-10">
+                                <i class="fa-solid fa-key absolute left-3 top-2.5 text-slate-500"></i>
+                            </div>
+                            <p class="text-[10px] text-slate-500 mt-2">
+                                * 金鑰僅儲存於您的瀏覽器 (Local Storage)，不會上傳至任何伺服器。
+                            </p>
+                        </div>
+
+                        <button onclick="testApiKey()" class="w-full py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-bold transition-colors flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-plug"></i> 測試並儲存金鑰
+                        </button>
+
+                        <div id="test-result" class="hidden bg-slate-900/50 p-3 rounded border border-slate-800 text-xs font-mono break-all"></div>
+                        
+                        <hr class="border-slate-700/50 my-4">
+                        
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-slate-400">Database Connection</span>
+                                <span id="db-connection-status" class="text-yellow-500 font-mono"><i class="fa-solid fa-circle-notch fa-spin text-[8px] mr-1"></i> CONNECTING...</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-slate-400">Visualization Engine</span>
+                                <span class="text-green-400 font-mono"><i class="fa-solid fa-circle text-[8px] mr-1"></i> THREE.JS</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-slate-400">Current User</span>
+                                <span id="current-user-display" class="text-indigo-400 font-mono font-bold">NOT SELECTED</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-8 text-center text-slate-500 text-xs font-mono opacity-50">
+            PROJECT AETHER v2.0 // KNOWLEDGE BUILDING PLATFORM // SECURE CONNECTION
+        </div>
+    </main>
+
+    <script>
+        // [Project AETHER] 登入分流控制器(測試版:單機核心 kb-core.js)
+        var openedRole = null;
+
+        window.onload = function() {
+            initThreeJS();
+            var st = document.getElementById('system-status');
+            st.innerHTML = '<i class="fa-solid fa-hard-drive"></i> LOCAL MODE';
+            st.className = 'text-cyan-400 font-bold';
+            var d = document.getElementById('db-connection-status');
+            d.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1"></i> LOCAL STORAGE';
+            d.className = 'text-cyan-400 font-mono';
+            var savedKey = localStorage.getItem('kb_ai_key');
+            if (savedKey) document.getElementById('api-key-input').value = savedKey;
+            showNeed();
+            refreshSession();
+            KBUI.announce();
+            KB.on(function (keys) { if (keys.indexOf('session') >= 0 || keys.indexOf('settings') >= 0) refreshSession(); });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeRole(); });
+        };
+
+        function showNeed() {
+            var need = new URLSearchParams(location.search).get('need');
+            var box = document.getElementById('login-need');
+            var msg = { login: '請先選擇身分並登入,才能進入該頁面。', staff: '該頁面僅限老師與管理者使用,請以老師或管理者身分登入。', denied: '你目前的身分沒有權限進入該頁面。' }[need];
+            if (!msg) return;
+            box.textContent = msg; box.className = 'text-sm rounded-lg px-4 py-2 border border-amber-500/40 bg-amber-500/10 text-amber-200';
+        }
+        function openRole(r) {
+            if (KB.auth.current()) { KBUI.toast('已登入,如要換身分請先登出', 'info'); return; }
+            openedRole = r;
+            ['staff', 'student', 'guest'].forEach(function (k) {
+                var c = document.getElementById('role-' + k);
+                c.classList.toggle('expanded', k === r); c.classList.toggle('dim', k !== r);
+            });
+            var inp = document.querySelector('#role-' + r + ' input[name=account]');
+            if (inp) setTimeout(function () { inp.focus(); }, 260);
+        }
+        function closeRole() {
+            openedRole = null;
+            ['staff', 'student', 'guest'].forEach(function (k) { var c = document.getElementById('role-' + k); c.classList.remove('expanded', 'dim'); var e = c.querySelector('.login-err'); if (e) e.classList.add('hidden'); });
+        }
+        function togglePw(btn) {
+            var inp = btn.parentElement.querySelector('input'); var show = inp.type === 'password';
+            inp.type = show ? 'text' : 'password'; btn.innerHTML = '<i class="fa-regular ' + (show ? 'fa-eye-slash' : 'fa-eye') + '"></i>';
+        }
+        function loginError(card, msg) {
+            var e = card.querySelector('.login-err'); e.textContent = msg; e.classList.remove('hidden');
+            card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+        }
+        // 雲端版:帳號資料在雲端,剛開啟頁面時要等連線完成才能驗證
+        function waitCloud(card, again) {
+            if (KB.cloud && KB.cloud.state === 'connecting') {
+                loginError(card, '正在連線到雲端,請稍候…');
+                KB.ready.then(function () { var e = card.querySelector('.login-err'); if (e) e.classList.add('hidden'); again(); });
+                return true;
+            }
+            return false;
+        }
+        function doLogin(ev, kind) {
+            ev.preventDefault();
+            var form = ev.target, card = form.closest('.role-card');
+            if (waitCloud(card, function () { doLogin(ev, kind); })) return false;
+            var st = KB.settings.get();
+            var res = KB.auth.login(kind, form.elements.account.value, form.elements.password.value);
+            if (!res.ok) { loginError(card, res.error); form.elements.password.value = ''; form.elements.password.focus(); return false; }
+            if (st.maintenance && kind !== 'staff') { KB.auth.logout(); loginError(card, '平台目前維護中,請稍後再試。'); return false; }
+            form.reset(); onLoggedIn(res);
+            return false;
+        }
+        function doGuest(ev) {
+            ev.preventDefault();
+            var card = document.getElementById('role-guest');
+            if (waitCloud(card, function () { doGuest(ev); })) return false;
+            var st = KB.settings.get();
+            if (st.maintenance) { loginError(card, '平台目前維護中,請稍後再試。'); return false; }
+            var res = KB.auth.guest();
+            if (!res.ok) { loginError(card, res.error); return false; }
+            onLoggedIn(res);
+            return false;
+        }
+        function onLoggedIn(res) {
+            closeRole(); refreshSession();
+            (res.mustChange ? KBUI.changePassword({ forced: true }) : Promise.resolve()).then(function () { refreshSession(); return KBUI.ensureConsent(KB.auth.current()); }).then(function (ok) { if (ok !== false && !res.mustChange) KBUI.toast('登入成功', 'ok'); });
+        }
+        function doLogout() { KB.auth.logout(); closeRole(); refreshSession(); KBUI.toast('已登出', 'info'); }
+
+        function refreshSession() {
+            var cur = KB.auth.current();
+            var grid = document.getElementById('role-grid'), bar = document.getElementById('session-bar');
+            var staff = cur && KB.auth._isStaff(cur.role);
+            ['staff', 'student', 'guest'].forEach(function (k) {
+                var c = document.getElementById('role-' + k);
+                var mine = cur && ((k === 'staff' && staff) || (k === 'student' && cur.role === 'student') || (k === 'guest' && cur.role === 'guest'));
+                c.classList.toggle('logged', !!mine);
+                c.classList.toggle('dim', !!cur && !mine);
+                c.querySelector('.status-ok').classList.toggle('hidden', !mine);
+            });
+            if (cur) {
+                grid.classList.add('hidden'); bar.classList.remove('hidden'); bar.classList.add('flex');
+                document.getElementById('session-avatar').src = cur.avatar;
+                document.getElementById('session-name').textContent = cur.label;
+                document.getElementById('session-role').textContent = '已登入 · ' + KB.display.roleLabel(cur.role);
+            } else { grid.classList.remove('hidden'); bar.classList.add('hidden'); bar.classList.remove('flex'); }
+            document.getElementById('current-user-display').textContent = cur ? (KB.display.roleLabel(cur.role) + (cur.role === 'student' ? ' · ' + cur.label : '')).toUpperCase() : 'NOT SIGNED IN';
+            var lbl = document.getElementById('btn-analytics-label');
+            lbl.textContent = !cur ? '前往分析中樞' : (staff ? '前往分析中樞(老師)' : (cur.role === 'student' ? '前往知識羅盤' : '分析頁(訪客不開放)'));
+            document.getElementById('btn-student-analytics').classList.toggle('hidden', !staff);
+            document.getElementById('btn-student-analytics').classList.toggle('flex', !!staff);
+            document.getElementById('btn-setup').classList.toggle('hidden', !staff);
+            document.getElementById('btn-setup').classList.toggle('flex', !!staff);
+            document.getElementById('ai-panel').classList.toggle('hidden', !staff);
+            document.getElementById('ai-locked').classList.toggle('hidden', !!staff);
+        }
+        var KBFILES = { forum: 'Knowledge Building Forum.html?home=1', teacher: 'ANALYTICS-teacher.html', student: 'ANALYTICS-student.html', setup: 'setup.html' };
+
+        // Gemini 模型自動選擇:向 Google 查詢這把金鑰「實際可用」的模型,挑出版本最新的 flash 模型;
+// 查不到時依序嘗試 gemini-3.8-flash、gemini-2.5-flash(遇到 404 自動換下一個)。
+async function geminiPickModels(key) {
+    const tail = String(key).slice(-6);
+    try {
+        const c = JSON.parse(localStorage.getItem('kb_ai_models') || 'null');
+        if (c && c.tail === tail && Date.now() - c.t < 6 * 3600 * 1000 && Array.isArray(c.list)) return c.list;
+    } catch (e) {}
+    let list = [];
+    try {
+        const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=' + key);
+        if (r.ok) {
+            const j = await r.json();
+            const ver = n => parseFloat((n.match(/^gemini-([0-9]+(?:[.][0-9]+)?)/) || [0, 0])[1]);
+            list = (j.models || [])
+                .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+                .map(m => String(m.name).replace('models/', ''))
+                .filter(n => /^gemini-[0-9]+([.][0-9]+)?-flash$/.test(n))
+                .sort((a, b) => ver(b) - ver(a))
+                .slice(0, 3);
+        }
+    } catch (e) {}
+    try { localStorage.setItem('kb_ai_models', JSON.stringify({ tail: tail, t: Date.now(), list: list })); } catch (e) {}
+    return list;
+}
+async function geminiFetch(key, init) {
+    let stored = ''; try { stored = localStorage.getItem('kb_ai_model') || ''; } catch (e) {}
+    const discovered = await geminiPickModels(key);
+    // 優先使用查詢到的最新模型;上次成功的模型與固定備援排在後面
+    let pref = ''; try { pref = ((KB.settings.get().ai || {}).model) || ''; } catch (e) {} if (pref === 'auto') pref = '';
+    // 設定中心指定的模型最優先;沒指定(自動)時,用查詢到的最新 flash 模型
+    const models = [].concat(pref ? [pref] : [], discovered, [stored], ['gemini-3.8-flash', 'gemini-2.5-flash']).filter((m, i, arr) => m && arr.indexOf(m) === i);
+    let last;
+    for (const m of models) {
+        const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + key, init);
+        if (r.status !== 404) {
+            if (r.ok) { try { localStorage.setItem('kb_ai_model', m); } catch (e) {} window.__geminiModel = m; }
+            return r;
+        }
+        last = r;
+    }
+    return last;
+}
+
+        async function testApiKey() {
+            const key = document.getElementById('api-key-input').value.trim();
+            const resDiv = document.getElementById('test-result');
+            
+            if(!key) {
+                alert("請先輸入 API Key");
+                return;
+            }
+            
+            resDiv.classList.remove('hidden');
+            resDiv.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin mr-2 text-indigo-400"></i> 正在連線 Gemini...';
+            
+            try {
+const response = await geminiFetch(key, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        contents: [{ parts: [{ text: "Respond with 'Connected' only." }] }] 
+                    })
+                });
+                
+                const data = await response.json();
+                if (!response.ok || data.error) { throw new Error('HTTP ' + response.status + ' ' + ((data.error && data.error.message) || '')); }
+                if(data.candidates && data.candidates.length > 0) {
+                    resDiv.innerHTML = `<span class="text-green-400 font-bold"><i class="fa-solid fa-check-circle"></i> 驗證成功</span><br><span class="text-slate-400">AI Core Online</span>`;
+                    localStorage.setItem('kb_ai_key', key);
+                    
+                    KB.audit.add('ai.keySaved', '', '金鑰已儲存於本機(僅後四碼:' + key.slice(-4) + ')');
+                } else {
+                    throw new Error("Invalid response");
+                }
+            } catch(e) {
+                console.error(e);
+                resDiv.innerHTML = '<span class="text-red-400 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> 驗證失敗</span><br><span class="text-slate-400">請檢查金鑰或網路</span><br><span class="text-red-300 text-xs break-all">' + String(e && e.message ? e.message : e).replace(/</g,'&lt;') + '</span>';
+            }
+        }
+
+        function navigateTo(dest) {
+            var cur = KB.auth.current();
+            if (!cur) { KBUI.toast('請先選擇身分並登入', 'err'); var card = document.getElementById('role-grid'); card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); return; }
+            var staff = KB.auth._isStaff(cur.role);
+            if (dest === 'forum') { window.location.href = KBFILES.forum; }
+            else if (dest === 'analytics') {
+                if (cur.role === 'guest') { KBUI.toast('訪客只能瀏覽論壇,不開放分析頁', 'err'); return; }
+                window.location.href = staff ? KBFILES.teacher : KBFILES.student;
+            } else if (dest === 'student') {
+                if (!staff) { KBUI.toast('學生請用「前往知識羅盤」看自己的分析', 'err'); return; }
+                window.location.href = KBFILES.student;
+            } else if (dest === 'setup') {
+                if (!staff) { KBUI.toast('設定中心僅限老師與管理者', 'err'); return; }
+                window.location.href = KBFILES.setup;
+            }
+        }
+
+        // [Visual] Three.js Möbius Strip Background
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            // Möbius Strip Geometry
+            const geometry = new THREE.ParametricGeometry((u, v, target) => {
+                u = u * 2 * Math.PI;
+                v = v * 2 - 1;
+                v = v * 0.5; // Width
+                const x = (1 + v * Math.cos(u / 2)) * Math.cos(u);
+                const y = (1 + v * Math.cos(u / 2)) * Math.sin(u);
+                const z = v * Math.sin(u / 2);
+                target.set(x, y, z);
+            }, 100, 20);
+
+            const material = new THREE.PointsMaterial({ color: 0x4f46e5, size: 0.05, transparent: true, opacity: 0.8 });
+            const particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            camera.position.z = 3;
+
+            // Mouse interaction
+            let mouseX = 0;
+            let mouseY = 0;
+            document.addEventListener('mousemove', (event) => {
+                mouseX = (event.clientX - window.innerWidth / 2) * 0.001;
+                mouseY = (event.clientY - window.innerHeight / 2) * 0.001;
+            });
+
+            function animate() {
+                requestAnimationFrame(animate);
+                particles.rotation.x += 0.002;
+                particles.rotation.y += 0.003;
+                particles.rotation.x += mouseY * 0.05;
+                particles.rotation.y += mouseX * 0.05;
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+    </script>
+</body>
+</html>

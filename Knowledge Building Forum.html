@@ -1,0 +1,2053 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>知識論壇 | KB 知識建構平台</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%234f46e5%27/%3E%3Ctext x=%2732%27 y=%2743%27 font-family=%27sans-serif%27 font-size=%2728%27 font-weight=%27700%27 fill=%27white%27 text-anchor=%27middle%27%3EKB%3C/text%3E%3C/svg%3E">
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+<script src="kb-config.js"></script>
+<script src="kb-core.js"></script>
+<script src="kb-cloud.js"></script>
+    <script src="kb-ui.js"></script>
+    <script src="kb-voice.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Noto Sans TC', 'sans-serif'] },
+                    colors: { kb: { blue: '#3b82f6', yellow: '#eab308', green: '#22c55e', red: '#ef4444', purple: '#a855f7' } },
+                    animation: { 'bounce-slow': 'bounce 3s infinite' }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        html, body { height: 100%; width: 100%; overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+        #canvas-bg { background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: -1; }
+        .custom-scroll { -webkit-overflow-scrolling: touch; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+        .node-card { transition: box-shadow 0.2s, transform 0.2s; user-select: none; touch-action: none; -webkit-user-select: none; will-change: left, top; }
+        .node-card:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); z-index: 50; }
+        .node-card.selected-node { box-shadow: 0 0 0 3px #3b82f6, 0 10px 15px -3px rgba(59, 130, 246, 0.2); border-color: #3b82f6; z-index: 60; }
+        .promising-node { box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.4), 0 0 25px rgba(249, 115, 22, 0.5); border-color: #f97316 !important; transform: translateY(-2px); z-index: 45; }
+        .cluster-zone { position: absolute; border: 2px dashed rgba(203, 213, 225, 0.6); border-radius: 24px; display: flex; flex-direction: column; align-items: center; padding-top: 1rem; pointer-events: none; transition: all 0.5s ease-in-out; background: rgba(255, 255, 255, 0.4); }
+        .cluster-title { font-weight: 700; font-size: 1rem; padding: 0.5rem 1.5rem; border-radius: 9999px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); background: white; color: #475569; border: 1px solid #e2e8f0; }
+        path.connection { fill: none; stroke-width: 2; transition: stroke 0.3s; pointer-events: none; }
+        #selection-box { position: fixed; background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.5); pointer-events: none; z-index: 100; display: none; }
+        .noselect { -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+        @keyframes pulse-gentle { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .ai-pulse { animation: pulse-gentle 2s infinite; }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fade-in-up 0.5s ease-out forwards; }
+        .category-scroll-container { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .category-scroll-container::-webkit-scrollbar { display: none; }
+        @media (min-width: 768px) { .category-scroll-container { overflow-x: visible; } }
+        .nav-btn.active { color: #4f46e5; background-color: #e0e7ff; }
+        .mobile-nav-btn.active { color: #4f46e5; }
+        .filter-btn { transition: background-color 0.2s, color 0.2s, border-color 0.2s; border-color: rgb(226, 232, 240); }
+        .filter-btn.active { background-color: rgb(238, 242, 255); color: rgb(79, 70, 229); border-color: rgb(165, 180, 252); }
+        #canvas-wrapper { touch-action: none; }
+        .category-tag { cursor: pointer; transition: all 0.2s; user-select: none; }
+        .category-tag.selected { background-color: #e0e7ff; color: #4338ca; border-color: #818cf8; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-full w-full flex flex-col font-sans">
+    <!-- Top Navbar -->
+    <nav class="h-14 md:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 z-50 shadow-sm relative shrink-0">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='index.html'">
+            <div class="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg md:text-xl shrink-0">KB</div>
+            <div>
+                <h1 class="font-bold text-base md:text-lg leading-tight text-slate-800 truncate max-w-[120px] md:max-w-none">知識建構平台</h1>
+                <p class="text-[10px] md:text-xs text-slate-500 hidden md:block">Knowledge Building Environment (v2.30)</p>
+            </div>
+        </div>
+
+        <!-- Desktop Nav -->
+        <div class="hidden md:flex items-center bg-slate-100 p-1 rounded-lg gap-1">
+            <button onclick="window.location.href='index.html'" class="nav-btn px-4 py-1.5 text-sm font-medium rounded-md text-slate-500 hover:text-slate-900 transition flex items-center gap-1"><i class="fa-solid fa-home"></i> 首頁</button>
+            <button onclick="window.app.router('entrance')" data-nav="entrance" class="nav-btn px-4 py-1.5 text-sm font-medium rounded-md text-slate-500 hover:text-slate-900 transition flex items-center gap-1"><i class="fa-solid fa-layer-group"></i> 論壇入口</button>
+            <button onclick="window.app.router('canvas')" data-nav="canvas" class="nav-btn px-4 py-1.5 text-sm font-medium rounded-md text-slate-500 hover:text-slate-900 transition flex items-center gap-1"><i class="fa-solid fa-project-diagram"></i> 知識地圖</button>
+
+            <!-- External Links Dropdown -->
+            <div class="relative group">
+                <button class="nav-btn px-4 py-1.5 text-sm font-medium rounded-md text-slate-500 hover:text-slate-900 transition flex items-center gap-1">
+                    <i class="fa-solid fa-chart-line"></i> 分析中樞 <i class="fa-solid fa-chevron-down text-[10px] ml-1"></i>
+                </button>
+                <div class="absolute top-full right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-100 hidden group-hover:block overflow-hidden z-50">
+                    <a href="ANALYTICS-student.html" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600"><i class="fa-solid fa-user-graduate mr-2"></i> 學生儀表板</a>
+                    <a href="ANALYTICS-teacher.html" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600"><i class="fa-solid fa-chalkboard-user mr-2"></i> 老師儀表板</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 md:gap-4">
+            <div id="ai-persona-indicator" class="hidden md:flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium border border-indigo-100">
+                <i class="fa-solid fa-robot ai-pulse"></i>
+                <span id="active-ai-role">AI 協作中</span>
+            </div>
+            <div class="h-6 w-px bg-slate-200 mx-1 md:mx-2 hidden md:block"></div>
+            <div class="flex items-center gap-2 group relative">
+                <img id="user-avatar" src="" class="w-8 h-8 rounded-full bg-slate-200 object-cover border border-slate-300 shrink-0">
+                <div class="text-right hidden sm:block">
+                    <div id="user-name" class="text-sm font-semibold">User</div>
+                    <div id="user-role" class="text-xs text-slate-500">Role</div>
+                </div>
+                <button onclick="window.app.toggleUserMenu()" class="ml-1 md:ml-2 text-slate-400 hover:text-indigo-600 p-1"><i class="fa-solid fa-chevron-down"></i></button>
+                <div id="user-menu" class="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-100 hidden overflow-hidden z-[100]"></div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main id="app-container" class="flex-1 relative overflow-hidden bg-slate-50 w-full"></main>
+
+    <!-- Desktop Footer -->
+    <footer class="hidden md:flex bg-white border-t border-slate-200 px-4 py-2 text-center z-40 text-[10px] md:text-xs text-slate-500 justify-center items-center gap-2 shrink-0">
+        <i class="fa-solid fa-seedling text-green-500"></i>
+        <span class="truncate">知識建構：在未完成的理解中彼此承擔責任，使想法在社群裡不斷向更好的解釋演化。</span>
+    </footer>
+
+    <!-- Mobile Bottom Navigation (Fixed at bottom) -->
+    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center z-50 pb-safe h-14 box-content">
+        <button onclick="window.location.href='index.html'" class="mobile-nav-btn flex flex-col items-center justify-center w-full h-full pt-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-home text-lg mb-0.5"></i> <span class="text-[10px]">首頁</span></button>
+        <button onclick="window.app.router('entrance')" data-nav="entrance" class="mobile-nav-btn flex flex-col items-center justify-center w-full h-full pt-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-layer-group text-lg mb-0.5"></i> <span class="text-[10px]">論壇</span></button>
+        <button onclick="window.app.router('canvas')" data-nav="canvas" class="mobile-nav-btn flex flex-col items-center justify-center w-full h-full pt-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-project-diagram text-lg mb-0.5"></i> <span class="text-[10px]">地圖</span></button>
+        <button onclick="window.app.openAnalyticsMenu()" class="mobile-nav-btn flex flex-col items-center justify-center w-full h-full pt-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-chart-line text-lg mb-0.5"></i> <span class="text-[10px]">分析</span></button>
+    </div>
+
+    <!-- Mobile Analytics Menu Modal -->
+    <div id="modal-analytics-menu" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] hidden flex items-end justify-center">
+        <div class="bg-white w-full rounded-t-xl p-6 pb-10 space-y-4 animate-fade-in-up">
+            <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-2">前往分析中樞</h3>
+            <a href="ANALYTICS-student.html" class="flex items-center gap-3 p-4 bg-indigo-50 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 transition">
+                <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-xl"><i class="fa-solid fa-user-graduate"></i></div>
+                <span>學生儀表板 (Student)</span>
+            </a>
+            <a href="ANALYTICS-teacher.html" class="flex items-center gap-3 p-4 bg-emerald-50 text-emerald-700 rounded-xl font-bold hover:bg-emerald-100 transition">
+                <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-xl"><i class="fa-solid fa-chalkboard-user"></i></div>
+                <span>老師儀表板 (Teacher)</span>
+            </a>
+            <button onclick="window.ui.closeModal('modal-analytics-menu')" class="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl mt-2">取消</button>
+        </div>
+    </div>
+
+    <!-- Trash Can FAB -->
+    <button onclick="window.app.openTrash()" id="btn-trash-fab" class="fixed bottom-20 left-4 md:bottom-8 md:left-8 z-[60] bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-full w-12 h-12 md:w-14 md:h-14 shadow-lg flex items-center justify-center text-xl transition transform hover:scale-105 group" title="資源回收桶">
+        <i class="fa-solid fa-trash-can group-hover:text-red-500 transition-colors"></i>
+        <span id="trash-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full hidden border-2 border-white">0</span>
+    </button>
+
+    <!-- Modals -->
+    <!-- Topic Create Modal -->
+    <div id="modal-topic" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden flex items-end md:items-center justify-center p-4">
+        <div class="bg-white rounded-t-xl md:rounded-xl shadow-2xl w-full max-w-lg p-6 transform transition-all scale-100 max-h-[85vh] overflow-y-auto mb-safe md:mb-0">
+            <h3 id="modal-topic-title" class="text-xl font-bold mb-4 flex items-center gap-2"><i class="fa-solid fa-folder-plus text-indigo-600"></i> 開啟探究主題</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">核心問題</label>
+                    <input type="text" id="topic-name" placeholder="例如：為什麼天空是藍色的？" class="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500 transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">類別 (可複選)</label>
+                    <div id="topic-category-selector" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scroll p-1"></div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">背景說明</label>
+                    <textarea id="topic-desc" rows="3" class="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500 transition"></textarea>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3 pb-safe">
+                <button onclick="window.ui.closeModal('modal-topic')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                <button id="btn-topic-save" onclick="window.app.saveTopic()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700">建立</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Node Composer Modal -->
+    <div id="modal-node" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden flex items-end md:items-center justify-center sm:p-4">
+        <div class="bg-white rounded-t-xl sm:rounded-xl shadow-2xl w-full max-w-2xl p-4 sm:p-6 relative max-h-[90vh] overflow-y-auto flex flex-col mb-safe md:mb-0">
+            <div class="flex justify-between items-center mb-4">
+                 <h3 class="text-lg md:text-xl font-bold">貢獻想法</h3>
+                 <button onclick="window.ui.closeModal('modal-node')" class="text-slate-400 hover:text-slate-600 p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scroll pb-2">
+                <div class="grid grid-cols-5 gap-1 md:gap-2 mb-4"><div id="scaffold-selector" class="contents"></div></div>
+                <div id="scaffold-desc" class="hidden"></div>
+                <div class="mb-3">
+                    <input type="text" id="node-title" class="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none font-bold text-base md:text-lg placeholder:font-normal" placeholder="輸入想法標題...">
+                </div>
+                <div class="relative">
+                    <textarea id="node-content" rows="4" class="w-full px-4 py-3 border border-slate-300 rounded-lg outline-none text-base" placeholder="輸入詳細內容..."></textarea>
+                </div>
+                <div id="ai-suggestion-box" class="hidden mt-2 bg-blue-50 border border-blue-100 text-blue-800 p-3 rounded-lg text-sm flex items-start gap-3 shadow-sm">
+                    <i class="fa-solid fa-lightbulb text-yellow-500 mt-1 shrink-0"></i>
+                    <div>
+                        <span class="font-bold block text-xs uppercase text-blue-400 mb-1">AI 建議</span>
+                        <p class="text-xs md:text-sm">試著用「我的理論是...因為...」來延伸？</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 flex justify-end shrink-0 pt-2 border-t border-slate-100">
+                <button onclick="window.app.submitNode()" class="px-6 py-2.5 bg-slate-900 text-white rounded-lg w-full md:w-auto font-bold">發布</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Node Detail Modal -->
+    <div id="modal-detail" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[65] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+            <div class="px-4 py-3 md:px-6 md:py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50 rounded-t-xl">
+                <div class="flex items-center gap-3">
+                    <div id="detail-scaffold-icon" class="w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-white text-lg"></div>
+                    <div>
+                        <div id="detail-scaffold-label" class="text-xs font-bold uppercase mb-0.5">TYPE</div>
+                        <div class="flex gap-2 text-[10px] md:text-xs text-slate-500"><span id="detail-author"></span><span>•</span><span id="detail-date"></span></div>
+                    </div>
+                </div>
+                <button onclick="window.ui.closeModal('modal-detail')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-4 md:p-6 overflow-y-auto custom-scroll flex-1">
+                <h2 id="detail-title" class="text-lg md:text-2xl font-bold mb-4 text-slate-900 leading-snug"></h2>
+                <p id="detail-content" class="text-sm md:text-lg leading-relaxed whitespace-pre-wrap text-slate-700"></p>
+            </div>
+            <div class="p-3 md:p-4 border-t border-slate-100 bg-slate-50 rounded-b-xl flex justify-end gap-3 shrink-0">
+                <button id="btn-detail-reply" class="px-5 py-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 text-sm font-medium w-full md:w-auto justify-center"><i class="fa-solid fa-reply"></i> 延伸</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="modal-confirm" class="fixed inset-0 bg-black/50 z-[110] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl text-center">
+            <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 text-xl"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3 class="text-lg font-bold mb-2">確定要刪除嗎？</h3>
+            <p class="text-slate-500 text-sm mb-6">將連同子節點一併刪除。</p>
+            <div class="flex justify-center gap-3">
+                <button onclick="window.ui.closeModal('modal-confirm')" class="px-4 py-2 border rounded-lg w-full">取消</button>
+                <button id="btn-confirm-action" class="px-4 py-2 bg-red-600 text-white rounded-lg w-full">刪除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div id="modal-addUser" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <h3 class="text-xl font-bold mb-4 flex items-center gap-2"><i class="fa-solid fa-user-plus text-indigo-600"></i> 新增使用者</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">暱稱 (Nickname)</label>
+                    <input type="text" id="new-user-name" placeholder="例如：小明" class="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">角色</label>
+                    <select id="new-user-role" class="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none bg-white">
+                        <option value="student">協同研究員 (學生)</option>
+                        <option value="teacher">首席研究員 (老師)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button onclick="window.ui.closeModal('modal-addUser')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                <button onclick="window.app.createNewUser()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm">新增</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trash Modal -->
+    <div id="modal-trash" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-red-50 rounded-t-xl">
+                <h3 class="text-lg font-bold text-red-700 flex items-center gap-2"><i class="fa-solid fa-trash-can"></i> 資源回收桶</h3>
+                <button onclick="window.ui.closeModal('modal-trash')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-100 text-red-400"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-4 md:p-6 overflow-y-auto custom-scroll flex-1"><div id="trash-list" class="space-y-3"></div></div>
+            <div class="p-4 border-t border-slate-100 bg-slate-50 rounded-b-xl flex justify-between gap-3 shrink-0">
+                <button onclick="window.app.emptyTrash()" class="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-bold"><i class="fa-solid fa-ban"></i> 清空</button>
+                <button onclick="window.ui.closeModal('modal-trash')" class="px-5 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg shadow-sm text-sm">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="selection-box"></div>
+    <div id="toast-container" class="fixed bottom-20 md:bottom-10 right-4 md:right-6 z-[120] flex flex-col gap-2 pointer-events-none w-full max-w-[300px] md:w-auto items-end"></div>
+
+    <script>
+        // 測試版:資料與登入改由 kb-core.js(單機核心)提供,不再連線 Firebase
+
+        window.ROLES = { LEAD: 'teacher', CO: 'student' };
+        window.SCAFFOLDS = {
+            question: { id: 'question', label: 'Question', icon: 'fa-circle-question', color: 'bg-blue-500', border: 'border-blue-500', bgSoft: 'bg-blue-50', text: 'text-blue-700', desc: '提出你感興趣的問題或目前的困惑，邀請夥伴們一起探索答案。' },
+            extend: { id: 'extend', label: 'Build on', icon: 'fa-plus', color: 'bg-yellow-500', border: 'border-yellow-500', bgSoft: 'bg-yellow-50', text: 'text-yellow-700', desc: '參考夥伴的觀點，試著補充更多資訊或接續討論，讓想法更進一步。' },
+            improve: { id: 'improve', label: 'Improve', icon: 'fa-bolt', color: 'bg-green-500', border: 'border-green-500', bgSoft: 'bg-green-50', text: 'text-green-700', desc: '修正或改良現有的觀點，讓解釋更有說服力；或是記錄靈光一閃的新點子。' },
+            counter: { id: 'counter', label: 'Counter', icon: 'fa-triangle-exclamation', color: 'bg-red-500', border: 'border-red-500', bgSoft: 'bg-red-50', text: 'text-red-700', desc: '提出不同的看法、反例或證據，試著挑戰現有的想法，激盪出更多可能。' },
+            riseabove: { id: 'riseabove', label: 'Rise Above', icon: 'fa-rocket', color: 'bg-purple-500', border: 'border-purple-500', bgSoft: 'bg-purple-50', text: 'text-purple-700', desc: '整合大家分散的討論，歸納出一個更完整、層次更高的結論或新發現。' }
+        };
+
+        window.TOPIC_CATEGORIES = {
+            '科學': '🔬 科學', 'STEAM': '💡 STEAM', '專題課': '🎓 專題課', '電機電子': '📡 電機電子',
+            'AI': '🤖 AI', '語言學習': '📙 語言學習', '文學': '📖 文學', '社會議題': '☁️ 社會議題',
+            '物理': '⚛️ 物理學', '動漫': '🎨 動漫', '程式': '💻 程式設計', '歷史': '📜 歷史',
+            '哲學': '🤔 哲學', '藝術': '🎭 藝術', '其他': '📦 其他'
+        };
+
+        window.STORAGE_KEY = 'kb_platform_v15_data';
+
+        window.CLUSTER_CENTERS = {
+            'A': {x: 450, y: 300, title: '核心問題探究區 (Core Question)', width: 600, height: 600},
+            'B': {x: 1250, y: 300, title: '延伸變因討論區 (Variables)', width: 600, height: 600},
+            'C': {x: 850, y: 1000, title: '知識昇華整合區 (Rise-Above)', width: 800, height: 500}
+        };
+
+        const DATES = {
+            W1: new Date('2025-12-10T10:00:00Z').getTime(), W2: new Date('2025-12-17T10:00:00Z').getTime(), W3: new Date('2026-01-07T10:00:00Z').getTime(), W4: new Date('2026-01-14T10:00:00Z').getTime(), W5: new Date('2026-01-21T10:00:00Z').getTime(), W6: new Date('2026-01-28T10:00:00Z').getTime(), W7: new Date('2026-02-04T10:00:00Z').getTime()
+        };
+
+        // Highly compressed SEED_DATA to guarantee payload integrity
+        window.SEED_DATA = { userList: {}, topics: [], nodes: [] }; // 測試版:示範資料已移除,內容由 kb-core.js 管理
+
+        window.state = {
+            user: null,
+            userList: {},
+            topics: [], nodes: [], trash: [], currentView: 'entrance', currentTopicId: null,
+            activeFilter: '全部', tempSelectedCategories: [],
+            editingTopicId: null,
+            canvas: {
+                scale: 1, offsetX: 0, offsetY: 0,
+                isDragging: false, lastX: 0, lastY: 0,
+                draggedNodeId: null, isClusterMode: false, isHeatmapMode: false,
+                animFrame: null,
+                isSelecting: false, selectionStart: {x: 0, y: 0}, selectionCurrent: {x: 0, y: 0},
+                isPanMode: false,
+                isPinching: false, lastPinchDist: 0, startPinchScale: 1
+            },
+            selectedNodeIds: [],
+            composer: { parentId: null, selectedScaffold: null }, profile: null
+        };
+
+        // 測試版資料層:讀寫 kb-core.js(同一台電腦、同一個瀏覽器的多個分頁會即時同步)
+        window.dataManager = {
+            applyFromCore: () => {
+                const c = KB.content.get();
+                window.state.topics = JSON.parse(JSON.stringify(c.topics));
+                window.state.nodes = JSON.parse(JSON.stringify(c.nodes));
+                window.state.trash = JSON.parse(JSON.stringify(c.trash));
+                const cu = KB.compat.currentUser();
+                window.state.userList = KB.compat.userList(cu ? cu.realRole : 'student');
+                window.state.user = cu;
+            },
+            save: () => {
+                const cu = KB.auth.current();
+                if (!cu || !KB.can('forum.read') || cu.role === 'guest') return;
+                KB.content.save({ topics: window.state.topics, nodes: window.state.nodes, trash: window.state.trash });
+            },
+            saveLocalSession: () => {
+                try { localStorage.setItem('kb_local_session', JSON.stringify({ currentView: window.state.currentView, currentTopicId: window.state.currentTopicId })); } catch (e) {}
+            },
+            load: () => {
+                window.dataManager.applyFromCore();
+                let goHome = false;
+                try {   // 從分析頁、首頁等「回到論壇」:一律回論壇第一頁(討論區列表),不是回到上次看的某個討論區
+                    goHome = new URLSearchParams(location.search).get('home') === '1';
+                    if (goHome) { window.state.currentView = 'entrance'; window.state.currentTopicId = null; window.dataManager.saveLocalSession(); history.replaceState(null, '', location.pathname); }
+                } catch (e) {}
+                let deep = null;
+                try {   // 從分析頁「回到這則貼文」:網址帶 ?topic=討論區&node=貼文,直接開到那個討論區並打開那則貼文
+                    const q = new URLSearchParams(location.search), tp = q.get('topic'), nd = q.get('node');
+                    if (tp && !goHome && window.state.topics.some(t => t.id === tp)) { deep = { topic: tp, node: nd }; window.state.currentView = 'canvas'; window.state.currentTopicId = tp; window.__kbDeep = deep; window.dataManager.saveLocalSession(); history.replaceState(null, '', location.pathname); }
+                } catch (e) {}
+                try {
+                    const parsed = (goHome || deep) ? null : JSON.parse(localStorage.getItem('kb_local_session') || 'null');
+                    if (parsed) { window.state.currentView = parsed.currentView || 'entrance'; window.state.currentTopicId = parsed.currentTopicId || null; }
+                } catch (e) {}
+                // 其他分頁(例如設定中心、另一位使用者的視窗)有變動時,同步更新這裡的畫面
+                KB.on((keys, remote) => {
+                    if (!remote) return;
+                    if (!KB.auth.current()) return;
+                    window.dataManager.applyFromCore();
+                    if (window.state.currentView === 'entrance') window.ui.renderEntrance();
+                    else if (window.state.currentView === 'canvas') window.ui.renderCanvas();
+                    window.ui.renderUserInfo(); window.ui.renderUserMenu(); window.app.updateTrashBadge();
+                });
+            },
+            reset: () => { window.ui.showToast('資料重置請到「設定中心 → 資料與備份」操作(會先自動備份)', 'error'); }
+        };
+
+        window.app = {};
+
+        window.app.generateCategoryOptions = () => Object.entries(window.TOPIC_CATEGORIES).map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+
+        window.app.generateCategoryFilters = () => {
+            let html = `<button class="px-4 py-1.5 rounded-full text-sm font-medium filter-btn transition ${window.state.activeFilter === '全部' ? 'active bg-slate-200 text-slate-900 border-slate-300' : 'bg-white text-slate-500 border border-slate-200'}" data-category="全部">所有主題</button>`;
+            html += Object.keys(window.TOPIC_CATEGORIES).map(key => {
+                const isActive = window.state.activeFilter === key;
+                const label = window.TOPIC_CATEGORIES[key];
+                return `<button class="px-4 py-1.5 rounded-full text-sm font-medium filter-btn transition ${isActive ? 'active bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border border-slate-200'}" data-category="${key}">${label}</button>`;
+            }).join('');
+            return html;
+        };
+
+        window.app.setFilter = (category) => {
+            window.state.activeFilter = category;
+            window.ui.renderEntrance();
+        };
+
+        window.app.initCategorySelector = () => { };
+
+        window.app.renderCategorySelector = () => {
+            const container = document.getElementById('topic-category-selector');
+            if(!container) return;
+            container.innerHTML = Object.keys(window.TOPIC_CATEGORIES).map(key => {
+                const isSelected = window.state.tempSelectedCategories.includes(key);
+                return `<span onclick="window.app.toggleTempCategory('${key}')" class="category-tag px-3 py-1 rounded-full text-xs font-bold border ${isSelected ? 'selected' : 'bg-white text-slate-500 border-slate-200'}">${window.TOPIC_CATEGORIES[key]}</span>`;
+            }).join('');
+        };
+
+        window.app.toggleTempCategory = (key) => {
+            if (window.state.tempSelectedCategories.includes(key)) {
+                window.state.tempSelectedCategories = window.state.tempSelectedCategories.filter(c => c !== key);
+            } else {
+                window.state.tempSelectedCategories.push(key);
+            }
+            window.app.renderCategorySelector();
+        };
+
+        window.app.router = (view) => {
+            if (view === 'canvas' && !window.state.currentTopicId) {
+                window.ui.showToast('請先從主題入口選擇一個探究主題', 'error');
+                window.app.router('entrance');
+                return;
+            }
+            window.state.currentView = view;
+            if(view === 'entrance') { window.state.currentTopicId = null; }
+            window.dataManager.saveLocalSession();
+            window.ui.updateNav(view);
+
+            const userMenu = document.getElementById('user-menu');
+            if (userMenu) userMenu.classList.add('hidden');
+            const analyticsDrop = document.getElementById('analytics-dropdown');
+            if (analyticsDrop) analyticsDrop.classList.add('hidden');
+
+            if(view === 'entrance') { window.ui.renderEntrance(); }
+            else if(view === 'canvas') { window.ui.renderCanvas(); }
+        };
+
+        window.app.toggleUserMenu = (e) => {
+            if(e) e.stopPropagation();
+            const userMenu = document.getElementById('user-menu');
+            if (userMenu) userMenu.classList.toggle('hidden');
+            const analyticsDrop = document.getElementById('analytics-dropdown');
+            if (analyticsDrop) analyticsDrop.classList.add('hidden');
+        };
+
+        // 驅動分析中樞選單的關鍵邏輯
+        window.app.toggleAnalyticsDropdown = (e) => {
+            if(e) e.stopPropagation();
+            const analyticsDrop = document.getElementById('analytics-dropdown');
+            if (analyticsDrop) analyticsDrop.classList.toggle('hidden');
+            const userMenu = document.getElementById('user-menu');
+            if (userMenu) userMenu.classList.add('hidden');
+        };
+
+        // 點擊畫面空白處自動收起所有選單的防呆機制
+        document.addEventListener('click', (e) => {
+            const userMenu = document.getElementById('user-menu');
+            const analyticsDrop = document.getElementById('analytics-dropdown');
+            if (userMenu && !e.target.closest('#user-menu') && !e.target.closest('button[onclick*="toggleUserMenu"]')) {
+                userMenu.classList.add('hidden');
+            }
+            if (analyticsDrop && !e.target.closest('#analytics-dropdown') && !e.target.closest('button[onclick*="toggleAnalyticsDropdown"]')) {
+                analyticsDrop.classList.add('hidden');
+            }
+        });
+
+        window.app.openAnalyticsMenu = () => {
+            document.getElementById('modal-analytics-menu').classList.remove('hidden');
+        };
+
+        window.app.openAddUserModal = () => {
+            document.getElementById('modal-addUser').classList.remove('hidden');
+            document.getElementById('user-menu').classList.add('hidden');
+            document.getElementById('new-user-name').focus();
+        };
+
+        window.app.createNewUser = () => {
+            const nameInput = document.getElementById('new-user-name');
+            const roleInput = document.getElementById('new-user-role');
+            const name = nameInput.value.trim();
+            if (!name) return window.ui.showToast('暱稱不能為空', 'error');
+            const newKey = `user${Date.now()}`;
+            const newId = `u${Date.now()}`;
+            window.state.userList[newKey] = { id: newId, name, role: roleInput.value, avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${name}` };
+            window.dataManager.save();
+            window.ui.closeModal('modal-addUser');
+            window.ui.renderUserMenu();
+            window.ui.showToast('新增成功');
+            window.app.switchUser(newKey);
+        };
+
+        window.app.deleteUser = (key) => {
+            if (window.state.userList[key].id === window.state.user.id) return window.ui.showToast('無法刪除當前登入的使用者', 'error');
+            if (Object.keys(window.state.userList).length <= 1) return window.ui.showToast('無法刪除最後一位使用者', 'error');
+            window.ui.confirm('確定刪除使用者？', '此操作無法復原。', () => {
+                delete window.state.userList[key];
+                window.dataManager.save();
+                window.ui.renderUserMenu();
+                window.ui.showToast('使用者已刪除');
+                window.ui.closeModal('modal-confirm');
+            });
+        };
+
+        window.app.switchUser = (userKey) => {
+            if (!window.state.userList[userKey]) return;
+            window.state.user = window.state.userList[userKey];
+            window.state.profile = null;
+            window.dataManager.saveLocalSession();
+            window.dataManager.save();
+            window.ui.renderUserInfo();
+            window.ui.renderUserMenu();
+            window.ui.showToast(`已切換：${window.state.user.name}`);
+            document.getElementById('user-menu').classList.add('hidden');
+            if(window.state.currentView === 'canvas') window.ui.renderCanvas();
+            else if(window.state.currentView === 'profile') window.ui.renderProfile();
+            else window.ui.renderEntrance();
+        };
+
+        window.app.openCreateTopic = () => {
+            if (!KB.can('topic.manage')) return window.ui.showToast('只有老師與管理者可以建立主題', 'error');
+            window.state.editingTopicId = null;
+            document.getElementById('modal-topic-title').innerHTML = '<i class="fa-solid fa-folder-plus text-indigo-600"></i> 開啟探究主題';
+            document.getElementById('btn-topic-save').innerText = '建立';
+            document.getElementById('topic-name').value = '';
+            document.getElementById('topic-desc').value = '';
+            window.state.tempSelectedCategories = [];
+            window.app.renderCategorySelector();
+            document.getElementById('modal-topic').classList.remove('hidden');
+        };
+
+        window.app.openEditTopic = (id) => {
+            if (!KB.can('topic.manage')) return window.ui.showToast('只有老師與管理者可以編輯主題', 'error');
+            const topic = window.state.topics.find(t => t.id === id);
+            if (!topic) return;
+            window.state.editingTopicId = id;
+            document.getElementById('modal-topic-title').innerHTML = '<i class="fa-solid fa-pen-to-square text-indigo-600"></i> 編輯探究主題';
+            document.getElementById('btn-topic-save').innerText = '儲存修改';
+            document.getElementById('topic-name').value = topic.name;
+            document.getElementById('topic-desc').value = topic.desc;
+            window.state.tempSelectedCategories = [...(topic.categories || [])];
+            window.app.renderCategorySelector();
+            document.getElementById('modal-topic').classList.remove('hidden');
+        };
+
+        window.app.saveTopic = () => {
+            if (!KB.can('topic.manage')) return window.ui.showToast('沒有權限', 'error');
+            const name = document.getElementById('topic-name').value;
+            if(!name) return window.ui.showToast('請輸入問題', 'error');
+            const categories = window.state.tempSelectedCategories.length > 0 ? window.state.tempSelectedCategories : ['其他'];
+            const desc = document.getElementById('topic-desc').value;
+
+            if (window.state.editingTopicId) {
+                const topicIndex = window.state.topics.findIndex(t => t.id === window.state.editingTopicId);
+                if (topicIndex !== -1) {
+                    window.state.topics[topicIndex].name = name;
+                    window.state.topics[topicIndex].categories = categories;
+                    window.state.topics[topicIndex].desc = desc;
+                    window.ui.showToast('主題已更新');
+                }
+            } else {
+                const safeUserId = window.state.user?.id || 'unknown';
+                window.state.topics.unshift({
+                    id: 't'+Date.now(),
+                    name,
+                    categories: categories,
+                    desc: desc,
+                    author: safeUserId,
+                    date: new Date().toISOString()
+                });
+                window.ui.showToast('主題已建立');
+            }
+            window.dataManager.save();
+            window.ui.closeModal('modal-topic');
+            window.ui.renderEntrance();
+        };
+
+        window.app.updateTrashBadge = () => {
+            const badge = document.getElementById('trash-count-badge');
+            if(!badge) return;
+            const count = window.state.trash.length;
+            if(count > 0) { badge.innerText = count; badge.classList.remove('hidden'); }
+            else { badge.classList.add('hidden'); }
+        };
+
+        window.app.openTrash = () => {
+            if (!KB.can('forum.deleteAny')) return window.ui.showToast('只有老師與管理者可以使用回收桶', 'error');
+            window.ui.renderTrashList();
+            document.getElementById('modal-trash').classList.remove('hidden');
+            document.getElementById('user-menu').classList.add('hidden');
+        };
+
+        window.app.restoreTrashItem = (trashId) => {
+            if (!KB.can('forum.deleteAny')) return window.ui.showToast('沒有權限', 'error');
+            const itemIndex = window.state.trash.findIndex(t => t.id === trashId);
+            if(itemIndex === -1) return;
+            const item = window.state.trash[itemIndex];
+            if (item.type === 'topic') {
+                window.state.topics.unshift(item.data);
+                window.state.nodes.push(...item.relatedNodes);
+            } else {
+                window.state.nodes.push(...item.data);
+            }
+            window.state.trash.splice(itemIndex, 1);
+            window.dataManager.save();
+            window.ui.renderTrashList();
+            window.app.updateTrashBadge();
+            if(window.state.currentView === 'entrance') window.ui.renderEntrance();
+            if(window.state.currentView === 'canvas') window.ui.renderCanvas();
+            window.ui.showToast('已還原項目', 'success');
+        };
+
+        window.app.deleteTrashItem = (trashId) => {
+            if (!KB.can('forum.deleteAny')) return window.ui.showToast('沒有權限', 'error');
+            window.ui.confirm('確定永久刪除？', '此動作無法復原！', () => {
+                window.state.trash = window.state.trash.filter(t => t.id !== trashId);
+                window.dataManager.save();
+                window.ui.renderTrashList();
+                window.app.updateTrashBadge();
+                window.ui.closeModal('modal-confirm');
+                window.ui.showToast('已永久刪除');
+            });
+        };
+
+        window.app.emptyTrash = () => {
+            if (!KB.can('forum.deleteAny')) return window.ui.showToast('沒有權限', 'error');
+            if(window.state.trash.length === 0) return;
+            window.ui.confirm('確定清空回收桶？', '所有項目將永久消失！', () => {
+                window.state.trash = [];
+                window.dataManager.save();
+                window.ui.renderTrashList();
+                window.app.updateTrashBadge();
+                window.ui.closeModal('modal-confirm');
+                window.ui.showToast('回收桶已清空');
+            });
+        };
+
+        window.app.deleteTopic = (id) => {
+            if (!KB.can('topic.manage')) return window.ui.showToast('只有老師與管理者可以刪除主題', 'error');
+            window.ui.confirm('確定要刪除嗎？', '主題將被移至資源回收桶。', () => {
+                const topic = window.state.topics.find(t => t.id === id);
+                if (!topic) return;
+                const associatedNodes = window.state.nodes.filter(n => n.topicId === id);
+                const safeUserId = window.state.user?.id || 'unknown';
+                window.state.trash.unshift({ id: `trash-${Date.now()}`, type: 'topic', data: topic, relatedNodes: associatedNodes, deletedAt: Date.now(), deletedBy: safeUserId });
+                window.state.topics = window.state.topics.filter(t => t.id !== id);
+                window.state.nodes = window.state.nodes.filter(n => n.topicId !== id);
+                window.dataManager.save();
+                window.app.updateTrashBadge();
+                window.ui.closeModal('modal-confirm');
+                window.ui.renderEntrance();
+                window.ui.showToast('主題已移至回收桶');
+            });
+        };
+
+        window.app.deleteNode = (id) => {
+            const tgt = window.state.nodes.find(n => n.id === id);
+            if (!tgt) return;
+            const hasReplies = window.state.nodes.some(n => n.parentId === id);
+            if (!KB.can('forum.deleteOwn', { author: tgt.author, hasReplies: hasReplies })) {
+                return window.ui.showToast(hasReplies && tgt.author === (window.state.user && window.state.user.id) ? '這則貼文已有人回覆,不能自行刪除,請洽老師' : '你沒有刪除這則貼文的權限', 'error');
+            }
+            window.ui.confirm('確定要刪除嗎？', '想法將被移至資源回收桶。', () => {
+                KB.content.audit('post.delete', id, (tgt.title || '').slice(0, 40));
+                const toDel = [];
+                const findChildren = (pid) => { window.state.nodes.filter(n => n.parentId === pid).forEach(c => { toDel.push(c); findChildren(c.id); }); };
+                const target = window.state.nodes.find(n => n.id === id);
+                if(target) { toDel.push(target); findChildren(id); }
+                const safeUserId = window.state.user?.id || 'unknown';
+                window.state.trash.unshift({ id: `trash-${Date.now()}`, type: 'node', data: toDel, deletedAt: Date.now(), deletedBy: safeUserId });
+                const idsToDelete = toDel.map(n => n.id);
+                window.state.nodes = window.state.nodes.filter(n => !idsToDelete.includes(n.id));
+                window.dataManager.save();
+                window.app.updateTrashBadge();
+                window.ui.closeModal('modal-confirm');
+                window.ui.renderCanvas();
+                window.ui.showToast('想法已移至回收桶');
+            });
+        };
+
+        window.app.enterTopic = (id) => {
+            window.state.currentTopicId = id;
+            window.state.canvas.scale=1;
+            window.state.needsCentering = true;
+            window.app.router('canvas');
+        };
+
+        window.app.centerOnFirstNode = (animate = false) => {
+            if (!window.state.currentTopicId) return;
+            const nodes = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId);
+            if (nodes.length === 0) return;
+
+            // 尋找第一篇想法 (沒有 parentId 的根節點，或時間最早的節點)
+            let firstNode = nodes.find(n => !n.parentId) || nodes.reduce((earliest, current) => (current.date < earliest.date ? current : earliest), nodes[0]);
+
+            if (firstNode) {
+                const wrapper = document.getElementById('canvas-wrapper');
+                const cw = wrapper ? wrapper.clientWidth : window.innerWidth;
+                const ch = wrapper ? wrapper.clientHeight : window.innerHeight;
+
+                // 節點卡片的預估尺寸 (寬 288px, 高約 200px)，計算置中目標點
+                const nodeW = 288;
+                const nodeH = 200;
+                const targetX = (cw / 2) - (firstNode.x + nodeW / 2) * window.state.canvas.scale;
+                const targetY = (ch / 2) - (firstNode.y + nodeH / 2) * window.state.canvas.scale;
+
+                if (animate) {
+                    window.app.canvas.animatePanTo(targetX, targetY);
+                } else {
+                    window.state.canvas.offsetX = targetX;
+                    window.state.canvas.offsetY = targetY;
+                    if (wrapper) window.app.canvas.applyTransform();
+                }
+            }
+        };
+
+        // 小學生版的五個選項:中文名稱大一點、符號一看就懂(? + ↗ ! ↑)、柔和的顏色
+        const KIDS_SCAFFOLD = { question: ['提問', '?', '#8aa9e8'], extend: ['延伸', '+', '#e6c96a'], improve: ['改進', '↗', '#82c69b'], counter: ['反例', '!', '#d9828a'], riseabove: ['昇華', '↑', '#b08ae0'] };
+        Object.keys(KIDS_SCAFFOLD).forEach(k => { if (window.SCAFFOLDS[k]) { window.SCAFFOLDS[k].zh = KIDS_SCAFFOLD[k][0]; window.SCAFFOLDS[k].glyph = KIDS_SCAFFOLD[k][1]; window.SCAFFOLDS[k].chip = KIDS_SCAFFOLD[k][2]; } });
+        window.app.openComposer = (pid) => {
+            if (!KB.can('forum.post')) {
+                const cu = window.state.user;
+                return window.ui.showToast(cu && cu.realRole === 'guest' ? '訪客只能瀏覽,請登入後再發文' : '目前論壇暫時無法發文(已鎖定或不在開放時間)', 'error');
+            }
+            if (pid) { try { KB.content.markRead(pid); } catch (e) {} }   // 要回覆別人的想法,一定先讀過了(分析頁的「閱讀他人」)
+            window.state.composer.editingId = null;
+            try { if (window.KBVoice) { KBVoice.reset(); KBVoice.refresh(); } } catch (e) {}
+            const hh = document.querySelector('#modal-node h3'); if (hh) hh.textContent = '貢獻想法';
+            const pb = document.querySelector('#modal-node button[onclick*="submitNode"]'); if (pb) pb.textContent = '發布';
+            window.state.composer.parentId = pid;
+            document.getElementById('scaffold-selector').innerHTML = Object.values(window.SCAFFOLDS).map(s => `
+                <button type="button" onclick="window.app.selectScaffold('${s.id}')" id="btn-scaffold-${s.id}" title="${s.zh || s.label}(${s.label})" aria-label="${s.zh || s.label}" class="flex flex-col items-center justify-start px-1 py-2 md:p-2 rounded-2xl border-2 border-slate-100 opacity-80 transition hover:opacity-100">
+                    <div class="w-11 h-11 sm:w-14 sm:h-14 rounded-full text-white flex justify-center items-center mb-1 text-2xl sm:text-3xl font-black leading-none" style="background:${s.chip || ''}" aria-hidden="true">${s.glyph || '?'}</div>
+                    <span class="text-sm sm:text-base font-black text-slate-800 leading-tight">${s.zh || s.label}</span>
+                    <span class="text-[10px] sm:text-xs text-slate-400 font-semibold leading-tight mt-0.5" style="word-break:keep-all">${s.label}</span>
+                </button>`).join('');
+            const descEl = document.getElementById('scaffold-desc');
+            if(descEl) { descEl.innerHTML = ''; descEl.className = 'hidden'; }
+            document.getElementById('modal-node').classList.remove('hidden');
+        };
+
+        window.app.openEditNode = (id) => {
+            const n = window.state.nodes.find(x => x.id === id); if (!n) return;
+            if (!KB.can('forum.editOwn', { author: n.author })) return window.ui.showToast('你沒有編輯這則貼文的權限', 'error');
+            window.app.openComposer(n.parentId || null);
+            window.state.composer.editingId = id;
+            window.app.selectScaffold(n.type);
+            try { if (window.KBVoice) { KBVoice.reset(); KBVoice.refresh(); } } catch (e) {}
+            document.getElementById('node-title').value = n.title || '';
+            document.getElementById('node-content').value = n.content || '';
+            const hh = document.querySelector('#modal-node h3'); if (hh) hh.textContent = '編輯我的貼文';
+            const pb = document.querySelector('#modal-node button[onclick*="submitNode"]'); if (pb) pb.textContent = '儲存修改';
+        };
+
+        window.app.selectScaffold = (t) => {
+            window.state.composer.selectedScaffold = t;
+            Object.values(window.SCAFFOLDS).forEach(s => {
+                const btn = document.getElementById(`btn-scaffold-${s.id}`);
+                if(s.id === t) {
+                    btn.classList.remove('opacity-80', 'border-slate-100');
+                    btn.classList.add('opacity-100', window.SCAFFOLDS[t].border, window.SCAFFOLDS[t].bgSoft);
+                } else {
+                    btn.classList.add('opacity-80', 'border-slate-100');
+                    btn.classList.remove('opacity-100', window.SCAFFOLDS[s.id].border, window.SCAFFOLDS[s.id].bgSoft);
+                }
+            });
+            const s = window.SCAFFOLDS[t];
+            const descEl = document.getElementById('scaffold-desc');
+            if(descEl) {
+                descEl.innerHTML = `<i class="fa-solid fa-circle-info mr-2"></i><span>${s.desc}</span>`;
+                descEl.className = `text-xs md:text-sm mb-4 px-3 py-2 md:px-4 md:py-3 rounded-lg border flex items-start animate-fade-in ${s.bgSoft} ${s.text} ${s.border}`;
+                descEl.classList.remove('hidden');
+            }
+        };
+
+        window.app.checkAIIntervention = (e) => {
+            if (!e || !e.target) return;
+            const len = e.target.value.length;
+            const box = document.getElementById('ai-suggestion-box');
+            if(len > 5 && len < 20) box.classList.remove('hidden'); else box.classList.add('hidden');
+        };
+
+        window.app.submitNode = () => {
+            if(!window.state.composer.selectedScaffold) return window.ui.showToast('請選擇意圖', 'error');
+            const title = document.getElementById('node-title').value;
+            const content = document.getElementById('node-content').value;
+            if(!title) return window.ui.showToast('請輸入標題', 'error');
+            if(!content) return window.ui.showToast('請輸入內容', 'error');
+            if (window.state.composer.editingId) {
+                const en = window.state.nodes.find(x => x.id === window.state.composer.editingId);
+                if (!en || !KB.can('forum.editOwn', { author: en.author })) return window.ui.showToast('你沒有編輯這則貼文的權限', 'error');
+                en.title = title; en.content = content; en.type = window.state.composer.selectedScaffold; en.editedAt = Date.now();
+                try { const vm = window.KBVoice && KBVoice.collect(); if (vm) en.voice = vm; } catch (e) {}
+                KB.content.audit('post.edit', en.id, (title || '').slice(0, 40));
+                window.state.composer.editingId = null;
+                window.dataManager.save();
+                window.ui.closeModal('modal-node');
+                window.ui.renderCanvas();
+                window.ui.showToast('已更新你的貼文', 'success');
+                return;
+            }
+            if (!KB.can('forum.post')) return window.ui.showToast('目前無法發文', 'error');
+
+            const pid = window.state.composer.parentId;
+            let nx, ny;
+            if(pid) {
+                const p = window.state.nodes.find(n => n.id === pid);
+                if (p) {
+                    nx = p.x + (Math.random()*100 - 50); ny = p.y + 200;
+                } else {
+                    nx = 100; ny = 100; // Safe fallback if parent is missing
+                }
+            } else {
+                const wrap = document.getElementById('canvas-wrapper');
+                nx = -window.state.canvas.offsetX + (wrap?.clientWidth || 800)/2 - 140;
+                ny = -window.state.canvas.offsetY + (wrap?.clientHeight || 600)/2 - 100;
+            }
+            const randomCluster = ['A', 'B', 'C'][Math.floor(Math.random() * 3)];
+
+            const defaultPromisingness = 50;
+            const safeUserId = window.state.user?.id || 'unknown';
+
+            let voiceMeta = null; try { voiceMeta = window.KBVoice ? KBVoice.collect() : null; } catch (e) {}   // 語音辨識的原始文字與是否再修改(忠實保存學生原始想法)
+            window.state.nodes.push(Object.assign({
+                id: 'n'+Date.now(),
+                topicId: window.state.currentTopicId,
+                type: window.state.composer.selectedScaffold,
+                title: title,
+                content: content,
+                author: safeUserId,
+                date: Date.now(),
+                x: nx, y: ny,
+                parentId: pid,
+                cluster: randomCluster,
+                promisingness: defaultPromisingness
+            }, voiceMeta ? { voice: voiceMeta } : {}));
+            KB.content.audit('post.create', window.state.currentTopicId || '', (title || '').slice(0, 40));
+            window.dataManager.save();
+            window.ui.closeModal('modal-node');
+            window.ui.renderCanvas();
+        };
+
+        window.app.openNodeDetail = (id) => {
+            const n = window.state.nodes.find(x => x.id === id); if(!n) return;
+            try { KB.content.markRead(id); } catch (e) {}   // 記下「學生看過別人的這則想法」(分析頁的「閱讀他人」用)
+            const s = window.SCAFFOLDS[n.type] || window.SCAFFOLDS['question'];
+            const u = Object.values(window.state.userList).find(u => u.id === n.author) || {name: '未知', avatar: 'https://api.dicebear.com/9.x/notionists/svg?seed=Unknown'};
+            const icon = document.getElementById('detail-scaffold-icon');
+            icon.className = `w-8 h-8 md:w-10 md:h-10 rounded-full flex justify-center items-center text-white text-lg ${s.color}`;
+            icon.innerHTML = `<i class="fa-solid ${s.icon}"></i>`;
+            document.getElementById('detail-scaffold-label').innerText = s.label;
+            document.getElementById('detail-scaffold-label').className = `text-xs font-bold uppercase mb-0.5 ${s.text}`;
+            document.getElementById('detail-title').innerText = n.title || '無標題';
+            document.getElementById('detail-author').innerText = u.name;
+            document.getElementById('detail-date').innerText = new Date(n.date).toLocaleDateString('zh-TW');
+            document.getElementById('detail-content').innerText = n.content;
+            document.getElementById('btn-detail-reply').style.display = KB.can('forum.post') ? '' : 'none';
+            document.getElementById('btn-detail-reply').onclick = () => {
+                window.ui.closeModal('modal-detail');
+                setTimeout(() => window.app.openComposer(n.id), 200);
+            };
+            document.getElementById('modal-detail').classList.remove('hidden');
+        };
+
+        window.app.generateAIProfile = () => {
+            const btn = document.getElementById('btn-gen-profile');
+            const loading = document.getElementById('ai-loading');
+            btn.classList.add('hidden');
+            loading.classList.remove('hidden');
+            document.getElementById('ai-profile-result').classList.add('hidden');
+            setTimeout(() => {
+                const safeUserId = window.state.user?.id || '';
+                const myNodes = window.state.nodes.filter(n => n.author === safeUserId);
+                const profileData = window.app.mockGeminiAnalysis(window.state.user, myNodes);
+                window.state.profile = profileData;
+                window.ui.renderProfileContent(profileData);
+                loading.classList.add('hidden');
+            }, 1500);
+        };
+
+        window.app.mockGeminiAnalysis = (user, nodes) => {
+            const counts = { question:0, extend:0, improve:0, counter:0, riseabove:0 };
+            nodes.forEach(n => { if(counts[n.type] !== undefined) counts[n.type]++; });
+            const total = nodes.length || 1;
+            let role, desc, icon;
+            const maxType = Object.keys(counts).length > 0 ? Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b) : 'question';
+            if (maxType === 'question') { role = "前瞻探索者 (Epistemic Explorer)"; desc = "你善於發掘問題的本質..."; icon = "fa-compass"; }
+            else if (maxType === 'riseabove') { role = "觀點昇華者 (Idea Synthesizer)"; desc = "你擁有卓越的整合能力..."; icon = "fa-layer-group"; }
+            else if (maxType === 'counter') { role = "建設性批判者 (Constructive Critic)"; desc = "你勇於挑戰既有假設..."; icon = "fa-gavel"; }
+            else if (maxType === 'improve') { role = "理論優化者 (Theory Improver)"; desc = "你持續致力於改善他人的想法..."; icon = "fa-wrench"; }
+            else { role = "積極連結者 (Active Connector)"; desc = "你積極串聯各種想法..."; icon = "fa-link"; }
+
+            let trajectoryHTML = "";
+            if (nodes.length === 0) {
+                trajectoryHTML = "<p class='text-slate-500 italic'>尚無足夠資料來分析演化軌跡，快去貢獻想法吧！</p>";
+            } else {
+                const sorted = nodes.map((n,i)=>[n,i]).sort((a,b) => (b[0].date - a[0].date) || (b[1]-a[1])).map(x=>x[0]).slice(0, 3);
+                trajectoryHTML = sorted.map((n, i) => {
+                    const s = window.SCAFFOLDS[n.type] || window.SCAFFOLDS['question'];
+                    return `<div class="flex items-start gap-3 relative pb-4 last:pb-0">
+                        ${i !== sorted.length -1 ? '<div class="absolute left-[14px] top-8 bottom-0 w-0.5 bg-slate-200"></div>' : ''}
+                        <div class="w-7 h-7 rounded-full ${s.color} text-white flex items-center justify-center shrink-0 z-10 text-xs"><i class="fa-solid ${s.icon}"></i></div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-xs font-bold px-2 py-0.5 rounded-full ${s.bgSoft} ${s.text}">${s.label}</span>
+                                <span class="text-[10px] text-slate-400">${new Date(n.date).toLocaleDateString()}</span>
+                            </div>
+                            <p class="text-slate-900 font-bold text-xs mb-1">${n.title || ''}</p>
+                            <p class="text-slate-700 text-sm bg-slate-50 p-2 rounded border border-slate-100">${n.content}</p>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            const replyCount = nodes.filter(n => n.parentId).length;
+            const sparkedCount = Math.floor(total * 0.8);
+            const communityHTML = `
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                    <div class="bg-blue-50 p-3 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-blue-600">${replyCount}</div>
+                        <div class="text-xs text-blue-800">承接他人想法</div>
+                    </div>
+                    <div class="bg-indigo-50 p-3 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-indigo-600">${sparkedCount}</div>
+                        <div class="text-xs text-indigo-800">激發後續討論</div>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-600 leading-relaxed">
+                    ${replyCount > sparkedCount ? "你傾向於<span class='font-bold text-blue-600'>站在巨人的肩膀上</span>，善於消化並延續他人的觀點..." : "你的想法具有<span class='font-bold text-indigo-600'>高度啟發性</span>，經常成為社群熱烈討論的核心..."}
+                </p>`;
+
+            const statsHTML = Object.entries(counts).map(([k, v]) => {
+                const pct = (v / total) * 100;
+                const s = window.SCAFFOLDS[k] || window.SCAFFOLDS['question'];
+                return `
+                <div class="mb-2">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="font-medium text-slate-600 flex items-center gap-1"><i class="fa-solid ${s.icon} ${s.text}"></i> ${s.label}</span>
+                        <span class="text-slate-400">${Math.round(pct)}%</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-1.5">
+                        <div class="${s.color} h-1.5 rounded-full transition-all duration-1000" style="width: ${pct}%"></div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            return { role, desc, icon, trajectoryHTML, communityHTML, statsHTML };
+        };
+
+        // --- 4. Canvas Logic ---
+        window.app.canvas = {
+            virtualWidth: 36000,
+            virtualHeight: 4800,
+
+            renderLoop: () => {
+                if (window.state.currentView === 'canvas') {
+                    const nodes = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId);
+                    if (window.state.canvas.draggedNodeId || window.state.canvas.isAnimating) {
+                            window.ui.drawConnections(nodes);
+                    }
+                }
+                requestAnimationFrame(window.app.canvas.renderLoop);
+            },
+
+            // Scrollbar Logic
+            updateScrollbars: () => {
+                const wrapper = document.getElementById('canvas-wrapper');
+                if(!wrapper) return;
+                const cw = wrapper.clientWidth;
+                const ch = wrapper.clientHeight;
+                const scale = window.state.canvas.scale;
+                const vw = window.app.canvas.virtualWidth * scale;
+                const vh = window.app.canvas.virtualHeight * scale;
+
+                const hScroll = document.getElementById('h-scrollbar');
+                const vScroll = document.getElementById('v-scrollbar');
+                const hThumb = document.getElementById('h-thumb');
+                const vThumb = document.getElementById('v-thumb');
+
+                if (!hScroll || !vScroll || !cw) return;
+
+                // 增加 80% 螢幕的邊界彈性 (Padding)
+                const paddingX = cw * 0.8;
+                const paddingY = ch * 0.8;
+
+                let minX = Math.min(0, cw - vw) - paddingX;
+                let maxX = paddingX;
+                let minY = Math.min(0, ch - vh) - paddingY;
+                let maxY = paddingY;
+
+                // X Axis
+                if (vw > cw) {
+                    hScroll.style.opacity = '1';
+                    hScroll.style.pointerEvents = 'auto';
+                    let thumbW = Math.max(40, (cw / (vw + paddingX * 2)) * hScroll.clientWidth);
+                    hThumb.style.width = `${thumbW}px`;
+
+                    let progressX = (maxX - window.state.canvas.offsetX) / (maxX - minX);
+                    progressX = Math.max(0, Math.min(1, progressX));
+                    hThumb.style.left = `${progressX * (hScroll.clientWidth - thumbW)}px`;
+                } else {
+                    hScroll.style.opacity = '0';
+                    hScroll.style.pointerEvents = 'none';
+                    window.state.canvas.offsetX = 0;
+                }
+
+                // Y Axis
+                if (vh > ch) {
+                    vScroll.style.opacity = '1';
+                    vScroll.style.pointerEvents = 'auto';
+                    let thumbH = Math.max(40, (ch / (vh + paddingY * 2)) * vScroll.clientHeight);
+                    vThumb.style.height = `${thumbH}px`;
+
+                    let progressY = (maxY - window.state.canvas.offsetY) / (maxY - minY);
+                    progressY = Math.max(0, Math.min(1, progressY));
+                    vThumb.style.top = `${progressY * (vScroll.clientHeight - thumbH)}px`;
+                } else {
+                    vScroll.style.opacity = '0';
+                    vScroll.style.pointerEvents = 'none';
+                    window.state.canvas.offsetY = 0;
+                }
+            },
+
+            initScrollbars: () => {
+                const hThumb = document.getElementById('h-thumb');
+                const vThumb = document.getElementById('v-thumb');
+                const hTrack = document.getElementById('h-scrollbar');
+                const vTrack = document.getElementById('v-scrollbar');
+                if(!hThumb || !vThumb) return;
+
+                let isDraggingH = false;
+                let isDraggingV = false;
+                let startX, startY, startOffsetX, startOffsetY, startRatioX, startRatioY;
+
+                const onMove = (e) => {
+                    if(!isDraggingH && !isDraggingV) return;
+                    const c = window.app.canvas.getCoords(e);
+                    const w = document.getElementById('canvas-wrapper');
+                    const cw = w.clientWidth;
+                    const ch = w.clientHeight;
+                    const scale = window.state.canvas.scale;
+                    const vw = window.app.canvas.virtualWidth * scale;
+                    const vh = window.app.canvas.virtualHeight * scale;
+
+                    const paddingX = cw * 0.8;
+                    const paddingY = ch * 0.8;
+                    let minX = Math.min(0, cw - vw) - paddingX;
+                    let maxX = paddingX;
+                    let minY = Math.min(0, ch - vh) - paddingY;
+                    let maxY = paddingY;
+
+                    if(isDraggingH) {
+                        const dx = c.x - startX;
+                        const trackW = hTrack.clientWidth;
+                        const thumbW = hThumb.clientWidth;
+                        const ratioDelta = dx / (trackW - thumbW);
+                        const newRatio = startRatioX + ratioDelta;
+                        window.state.canvas.offsetX = maxX - newRatio * (maxX - minX);
+                        window.state.canvas.offsetX = Math.max(minX, Math.min(maxX, window.state.canvas.offsetX));
+                    }
+                    if(isDraggingV) {
+                        const dy = c.y - startY;
+                        const trackH = vTrack.clientHeight;
+                        const thumbH = vThumb.clientHeight;
+                        const ratioDelta = dy / (trackH - thumbH);
+                        const newRatio = startRatioY + ratioDelta;
+                        window.state.canvas.offsetY = maxY - newRatio * (maxY - minY);
+                        window.state.canvas.offsetY = Math.max(minY, Math.min(maxY, window.state.canvas.offsetY));
+                    }
+                    window.app.canvas.applyTransform();
+                };
+
+                const onEnd = () => {
+                    isDraggingH = false;
+                    isDraggingV = false;
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('touchmove', onMove);
+                    document.removeEventListener('mouseup', onEnd);
+                    document.removeEventListener('touchend', onEnd);
+                };
+
+                const bindDrag = (thumb, isH) => {
+                    const startDrag = (e) => {
+                        e.stopPropagation();
+                        if(isH) isDraggingH = true; else isDraggingV = true;
+                        const c = window.app.canvas.getCoords(e);
+                        startX = c.x; startY = c.y;
+                        startOffsetX = window.state.canvas.offsetX;
+                        startOffsetY = window.state.canvas.offsetY;
+
+                        const w = document.getElementById('canvas-wrapper');
+                        const cw = w.clientWidth;
+                        const ch = w.clientHeight;
+                        const scale = window.state.canvas.scale;
+                        const vw = window.app.canvas.virtualWidth * scale;
+                        const vh = window.app.canvas.virtualHeight * scale;
+
+                        const paddingX = cw * 0.8;
+                        const paddingY = ch * 0.8;
+                        let minX = Math.min(0, cw - vw) - paddingX;
+                        let maxX = paddingX;
+                        let minY = Math.min(0, ch - vh) - paddingY;
+                        let maxY = paddingY;
+
+                        startRatioX = (maxX - startOffsetX) / (maxX - minX);
+                        startRatioY = (maxY - startOffsetY) / (maxY - minY);
+
+                        document.addEventListener('mousemove', onMove);
+                        document.addEventListener('touchmove', onMove, {passive: false});
+                        document.addEventListener('mouseup', onEnd);
+                        document.addEventListener('touchend', onEnd);
+                    };
+                    thumb.addEventListener('mousedown', startDrag);
+                    thumb.addEventListener('touchstart', startDrag, {passive: false});
+                };
+
+                bindDrag(hThumb, true);
+                bindDrag(vThumb, false);
+            },
+
+            applyTransform: () => {
+                const w = document.getElementById('canvas-wrapper');
+                if(!w) return;
+                const cw = w.clientWidth;
+                const ch = w.clientHeight;
+                const scale = window.state.canvas.scale;
+                const vw = window.app.canvas.virtualWidth * scale;
+                const vh = window.app.canvas.virtualHeight * scale;
+
+                // Bounds enforcement 允許大幅度拖曳出邊界
+                const paddingX = cw * 0.8;
+                const paddingY = ch * 0.8;
+
+                let minX = Math.min(0, cw - vw) - paddingX;
+                let maxX = paddingX;
+                let minY = Math.min(0, ch - vh) - paddingY;
+                let maxY = paddingY;
+
+                window.state.canvas.offsetX = Math.max(minX, Math.min(maxX, window.state.canvas.offsetX));
+                window.state.canvas.offsetY = Math.max(minY, Math.min(maxY, window.state.canvas.offsetY));
+
+                const el = document.getElementById('canvas-content');
+                if(el) el.style.transform = `translate(${window.state.canvas.offsetX}px, ${window.state.canvas.offsetY}px) scale(${window.state.canvas.scale})`;
+                const bg = document.getElementById('canvas-bg');
+                if(bg) bg.style.backgroundPosition = `${window.state.canvas.offsetX}px ${window.state.canvas.offsetY}px`;
+
+                window.app.canvas.updateScrollbars();
+            },
+
+            getCoords: (e) => (e.touches && e.touches.length > 0) ? {x: e.touches[0].clientX, y: e.touches[0].clientY} : {x: e.clientX, y: e.clientY},
+            getDistance: (touches) => {
+                if (!touches || touches.length < 2) return 1;
+                return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+            },
+            toggleMode: () => {
+                window.state.canvas.isPanMode = !window.state.canvas.isPanMode;
+                const w = document.getElementById('canvas-wrapper');
+                if (window.state.canvas.isPanMode) {
+                    if(w) w.style.cursor = 'grab';
+                    window.state.canvas.isSelecting = false;
+                    const sb = document.getElementById('selection-box');
+                    if(sb) sb.style.display = 'none';
+                    window.ui.showToast('已切換為：拖曳模式 (按左鍵拖曳)', 'success');
+                } else {
+                    if(w) w.style.cursor = 'default';
+                    window.ui.showToast('已切換為：選取模式 (按左鍵框選)', 'info');
+                }
+                window.ui.renderCanvas();
+            },
+            handleDoubleClick: (e) => {
+                if (e.target.closest('.node-card')) return;
+                window.app.canvas.toggleMode();
+            },
+            startPan: (e) => {
+                if (e.touches && e.touches.length === 2) {
+                    window.state.canvas.isPinching = true;
+                    window.state.canvas.lastPinchDist = window.app.canvas.getDistance(e.touches);
+                    window.state.canvas.startPinchScale = window.state.canvas.scale;
+                    return;
+                }
+
+                if(e.target.closest('.node-card')) {
+                    const nodeId = e.target.closest('.node-card').id.replace('node-', '');
+                    if (!e.shiftKey && !e.ctrlKey && !window.state.selectedNodeIds.includes(nodeId)) {
+                        window.state.selectedNodeIds = [];
+                        document.querySelectorAll('.node-card.selected-node').forEach(el => el.classList.remove('selected-node'));
+                    }
+                    if (!window.state.selectedNodeIds.includes(nodeId)) {
+                        window.state.selectedNodeIds.push(nodeId);
+                        const card = document.getElementById(`node-${nodeId}`);
+                        if(card) card.classList.add('selected-node');
+                    }
+                    return;
+                }
+
+                if (e.ctrlKey || window.state.canvas.isPanMode) {
+                    window.state.canvas.isDragging = true;
+                    const c = window.app.canvas.getCoords(e);
+                    window.state.canvas.lastX = c.x;
+                    window.state.canvas.lastY = c.y;
+                    const w = document.getElementById('canvas-wrapper');
+                    if(w) w.style.cursor = 'grabbing';
+                    return;
+                }
+
+                window.state.canvas.isSelecting = true;
+                const c = window.app.canvas.getCoords(e);
+                window.state.canvas.selectionStart = {x: c.x, y: c.y};
+                window.state.canvas.selectionCurrent = {x: c.x, y: c.y};
+                const box = document.getElementById('selection-box');
+                box.style.left = c.x + 'px';
+                box.style.top = c.y + 'px';
+                box.style.width = '0px';
+                box.style.height = '0px';
+                box.style.display = 'block';
+
+                if (!e.shiftKey) {
+                    window.state.selectedNodeIds = [];
+                    document.querySelectorAll('.node-card.selected-node').forEach(el => el.classList.remove('selected-node'));
+                }
+            },
+            pan: (e) => {
+                if (window.state.canvas.isPinching && e.touches && e.touches.length === 2) {
+                    const dist = window.app.canvas.getDistance(e.touches);
+                    const zoomFactor = dist / window.state.canvas.lastPinchDist;
+                    const oldScale = window.state.canvas.scale;
+                    const newScale = Math.min(Math.max(0.2, window.state.canvas.startPinchScale * zoomFactor), 3);
+
+                    if (newScale !== oldScale) {
+                        const wrapper = document.getElementById('canvas-wrapper');
+                        const rect = wrapper.getBoundingClientRect();
+                        const mx = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+                        const my = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - rect.top;
+
+                        const scaleChange = newScale / oldScale;
+                        window.state.canvas.offsetX = mx - (mx - window.state.canvas.offsetX) * scaleChange;
+                        window.state.canvas.offsetY = my - (my - window.state.canvas.offsetY) * scaleChange;
+                        window.state.canvas.scale = newScale;
+                    }
+
+                    // 持續更新雙指捏合的狀態，確保平滑過渡
+                    window.state.canvas.lastPinchDist = dist;
+                    window.state.canvas.startPinchScale = newScale;
+
+                    window.app.canvas.applyTransform();
+                    return;
+                }
+
+                const c = window.app.canvas.getCoords(e);
+                if(window.state.canvas.isDragging) {
+                    window.state.canvas.offsetX += c.x - window.state.canvas.lastX;
+                    window.state.canvas.offsetY += c.y - window.state.canvas.lastY;
+                    window.state.canvas.lastX = c.x; window.state.canvas.lastY = c.y;
+                    window.app.canvas.applyTransform();
+                } else if(window.state.canvas.draggedNodeId) {
+                    const dx = (c.x - window.state.canvas.lastX) / window.state.canvas.scale;
+                    const dy = (c.y - window.state.canvas.lastY) / window.state.canvas.scale;
+
+                    let nodesToMoveIds = [window.state.canvas.draggedNodeId];
+                    if (window.state.selectedNodeIds.includes(window.state.canvas.draggedNodeId)) {
+                        nodesToMoveIds = window.state.selectedNodeIds;
+                    }
+
+                    nodesToMoveIds.forEach(id => {
+                        const node = window.state.nodes.find(n => n.id === id);
+                        if(node) {
+                            node.x += dx;
+                            node.y += dy;
+                            const el = document.getElementById(`node-${node.id}`);
+                            if(el) {
+                                el.style.left = `${node.x}px`;
+                                el.style.top = `${node.y}px`;
+                            }
+                        }
+                    });
+
+                    window.state.canvas.lastX = c.x; window.state.canvas.lastY = c.y;
+                    const nodes = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId);
+                    window.ui.drawConnections(nodes);
+                } else if (window.state.canvas.isSelecting) {
+                    window.state.canvas.selectionCurrent = {x: c.x, y: c.y};
+                    const start = window.state.canvas.selectionStart;
+                    const current = window.state.canvas.selectionCurrent;
+                    const x = Math.min(start.x, current.x);
+                    const y = Math.min(start.y, current.y);
+                    const w = Math.abs(current.x - start.x);
+                    const h = Math.abs(current.y - start.y);
+                    const box = document.getElementById('selection-box');
+                    box.style.left = x + 'px';
+                    box.style.top = y + 'px';
+                    box.style.width = w + 'px';
+                    box.style.height = h + 'px';
+                }
+            },
+            handleEnd: (e) => {
+                if (window.state.canvas.isPinching && (!e.touches || e.touches.length < 2)) {
+                    window.state.canvas.isPinching = false;
+                }
+
+                if (window.state.canvas.isDragging) {
+                    window.state.canvas.isDragging = false;
+                    const cursor = window.state.canvas.isPanMode ? 'grab' : 'default';
+                    const w = document.getElementById('canvas-wrapper');
+                    if(w) w.style.cursor = cursor;
+                }
+                if (window.state.canvas.draggedNodeId) {
+                    window.state.canvas.draggedNodeId = null;
+                }
+                if (window.state.canvas.isSelecting) {
+                    const start = window.state.canvas.selectionStart;
+                    const current = window.state.canvas.selectionCurrent;
+                    const selRect = {
+                        left: Math.min(start.x, current.x),
+                        top: Math.min(start.y, current.y),
+                        right: Math.max(start.x, current.x),
+                        bottom: Math.max(start.y, current.y)
+                    };
+
+                    if (Math.abs(selRect.right - selRect.left) < 5 && Math.abs(selRect.bottom - selRect.top) < 5) {
+                            window.state.canvas.isSelecting = false;
+                            document.getElementById('selection-box').style.display = 'none';
+                            return;
+                    }
+
+                    const nodeElements = document.querySelectorAll('.node-card');
+                    const newSelectedIds = [];
+                    nodeElements.forEach(el => {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.left < selRect.right && rect.right > selRect.left &&
+                            rect.top < selRect.bottom && rect.bottom > selRect.top) {
+                            const id = el.id.replace('node-', '');
+                            newSelectedIds.push(id);
+                        }
+                    });
+
+                    newSelectedIds.forEach(id => {
+                        if (!window.state.selectedNodeIds.includes(id)) window.state.selectedNodeIds.push(id);
+                    });
+
+                    document.querySelectorAll('.node-card.selected-node').forEach(el => {
+                        const id = el.id.replace('node-', '');
+                        if(!window.state.selectedNodeIds.includes(id)) {
+                             el.classList.remove('selected-node');
+                        }
+                    });
+
+                    window.state.selectedNodeIds.forEach(id => {
+                        const el = document.getElementById(`node-${id}`);
+                        if(el) el.classList.add('selected-node');
+                    });
+
+                    window.state.canvas.isSelecting = false;
+                    document.getElementById('selection-box').style.display = 'none';
+                }
+            },
+            handleWheel: (e) => {
+                e.preventDefault();
+                const wrapper = document.getElementById('canvas-wrapper');
+                if (!wrapper) return;
+
+                // 取得滑鼠相對於畫布容器的座標
+                const rect = wrapper.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+
+                const oldScale = window.state.canvas.scale;
+                const d = -e.deltaY * 0.001;
+                const newScale = Math.min(Math.max(0.2, oldScale + d), 3);
+
+                if (newScale !== oldScale) {
+                    // 計算縮放變化率，並動態補償 offsetX 和 offsetY
+                    const scaleChange = newScale / oldScale;
+                    window.state.canvas.offsetX = mx - (mx - window.state.canvas.offsetX) * scaleChange;
+                    window.state.canvas.offsetY = my - (my - window.state.canvas.offsetY) * scaleChange;
+                    window.state.canvas.scale = newScale;
+                    window.app.canvas.applyTransform();
+                }
+            },
+            zoom: (d) => {
+                const wrapper = document.getElementById('canvas-wrapper');
+                if (!wrapper) return;
+
+                // 按鈕縮放預設以畫面正中央為中心
+                const mx = wrapper.clientWidth / 2;
+                const my = wrapper.clientHeight / 2;
+
+                const oldScale = window.state.canvas.scale;
+                const newScale = Math.min(Math.max(0.2, oldScale + d), 3);
+
+                if (newScale !== oldScale) {
+                    const scaleChange = newScale / oldScale;
+                    window.state.canvas.offsetX = mx - (mx - window.state.canvas.offsetX) * scaleChange;
+                    window.state.canvas.offsetY = my - (my - window.state.canvas.offsetY) * scaleChange;
+                    window.state.canvas.scale = newScale;
+                    window.app.canvas.applyTransform();
+                }
+            },
+            fitView: () => {
+                window.state.canvas.scale = window.innerWidth < 768 ? 0.8 : 1;
+                window.state.canvas.offsetX = 0;
+                window.state.canvas.offsetY = 0;
+                window.app.canvas.applyTransform();
+            },
+            startDrag: (e, id) => {
+                window.state.canvas.draggedNodeId = id;
+                const c = window.app.canvas.getCoords(e);
+                window.state.canvas.lastX = c.x;
+                window.state.canvas.lastY = c.y;
+
+                if (!window.state.selectedNodeIds.includes(id)) {
+                    if (!e.shiftKey) window.state.selectedNodeIds = [];
+                    window.state.selectedNodeIds.push(id);
+
+                    document.querySelectorAll('.node-card').forEach(el => el.classList.remove('selected-node'));
+                    window.state.selectedNodeIds.forEach(i => {
+                         const el = document.getElementById(`node-${i}`);
+                         if(el) el.classList.add('selected-node');
+                    });
+                }
+            },
+            toggleHeatmap: () => {
+                window.state.canvas.isHeatmapMode = !window.state.canvas.isHeatmapMode;
+                window.ui.renderCanvas();
+            },
+            toggleCluster: () => {
+                const isCluster = !window.state.canvas.isClusterMode;
+                window.state.canvas.isClusterMode = isCluster;
+                const nodes = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId);
+
+                if (isCluster) {
+                    const clusterGroups = { 'A': [], 'B': [], 'C': [], 'Other': [] };
+                    nodes.forEach(n => {
+                        if (window.CLUSTER_CENTERS[n.cluster]) clusterGroups[n.cluster].push(n);
+                        else clusterGroups['Other'].push(n);
+                    });
+
+                    const targets = [];
+                    const nodeW = 320;
+                    const nodeH = 200;
+                    Object.entries(clusterGroups).forEach(([key, groupNodes]) => {
+                        const center = window.CLUSTER_CENTERS[key] || {x: 0, y: 0, width: 1000, height: 1000};
+                        const cols = Math.max(1, Math.floor(center.width / nodeW));
+                        groupNodes.forEach((n, idx) => {
+                            if (n.savedX === undefined) { n.savedX = n.x; n.savedY = n.y; }
+                            const col = idx % cols;
+                            const row = Math.floor(idx / cols);
+                            const startX = center.x - ((cols * nodeW) / 2) + (nodeW / 2);
+                            const startY = center.y - (center.height / 2) + 100;
+                            const tx = startX + (col * nodeW);
+                            const ty = startY + (row * nodeH);
+                            targets.push({ id: n.id, x: tx, y: ty });
+                        });
+                    });
+                    window.app.canvas.animateNodes(targets);
+                } else {
+                    const targets = nodes.map(n => ({
+                        id: n.id,
+                        x: n.savedX !== undefined ? n.savedX : n.x,
+                        y: n.savedY !== undefined ? n.savedY : n.y
+                    }));
+                    window.app.canvas.animateNodes(targets);
+                }
+                window.ui.renderCanvas();
+            },
+            animateNodes: (targets) => {
+                const startPositions = {};
+                const nodes = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId);
+                nodes.forEach(n => { startPositions[n.id] = {x: n.x, y: n.y}; });
+
+                const duration = 800;
+                const startTime = performance.now();
+                window.state.canvas.isAnimating = true;
+
+                const animate = (time) => {
+                    const elapsed = time - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const ease = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+
+                    targets.forEach(target => {
+                        const node = nodes.find(n => n.id === target.id);
+                        if (node) {
+                            const start = startPositions[target.id];
+                            node.x = start.x + (target.x - start.x) * ease;
+                            node.y = start.y + (target.y - start.y) * ease;
+                            const el = document.getElementById(`node-${node.id}`);
+                            if (el) {
+                                el.style.left = `${node.x}px`;
+                                el.style.top = `${node.y}px`;
+                            }
+                        }
+                    });
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        window.state.canvas.isAnimating = false;
+                        targets.forEach(target => {
+                            const node = nodes.find(n => n.id === target.id);
+                            if(node) { node.x = target.x; node.y = target.y; }
+                        });
+                        window.ui.drawConnections(nodes);
+                    }
+                };
+                requestAnimationFrame(animate);
+            },
+            animatePanTo: (targetX, targetY) => {
+                const startX = window.state.canvas.offsetX;
+                const startY = window.state.canvas.offsetY;
+                const duration = 600;
+                const startTime = performance.now();
+
+                const animate = (time) => {
+                    const elapsed = time - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const ease = 1 - Math.pow(1 - progress, 3); // ease-out cubic 曲線
+
+                    window.state.canvas.offsetX = startX + (targetX - startX) * ease;
+                    window.state.canvas.offsetY = startY + (targetY - startY) * ease;
+                    window.app.canvas.applyTransform();
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    }
+                };
+                requestAnimationFrame(animate);
+            }
+        };
+
+        window.ui = {};
+        window.ui.init = () => {
+            // 登入守門:未登入先回首頁;訪客可進入(唯讀)
+            if (!KBUI.requireLogin({ allowGuest: true, roles: ['master', 'teacher', 'student'] })) return;
+            if (!KB.can('forum.read')) { KBUI.toast('目前未開放訪客瀏覽論壇', 'err'); setTimeout(() => location.replace('index.html'), 900); return; }
+            window.dataManager.load();
+            try {   // 語音輸入:在「標題」「內容」旁邊加「🎤 用說的」(原本的打字輸入不變)
+                if (window.KBVoice) KBVoice.init({
+                    fields: [{ el: document.getElementById('node-title'), id: 'node-title', label: '標題' }, { el: document.getElementById('node-content'), id: 'node-content', label: '內容' }],
+                    getContext: () => {
+                        const t = window.state.topics.find(x => x.id === window.state.currentTopicId) || {};
+                        const texts = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId).map(n => (n.title || '') + ' ' + (n.content || ''));
+                        return { topicName: t.name || '', topicDesc: t.desc || '', texts, type: window.state.composer.selectedScaffold };
+                    }
+                });
+            } catch (e) { console.error(e); }
+            window.app.updateTrashBadge();
+            window.app.initCategorySelector();
+            window.ui.renderUserInfo();
+            window.ui.renderUserMenu();
+
+            if (window.state.currentView === 'canvas' && window.state.currentTopicId && window.state.topics.find(t => t.id === window.state.currentTopicId)) {
+                window.app.router('canvas');
+            } else if (window.state.currentView === 'profile') {
+                window.app.router('profile');
+            } else {
+                window.app.router('entrance');
+            }
+
+            try {   // 深層連結:打開指定的貼文
+                const dp = window.__kbDeep; window.__kbDeep = null;
+                if (dp && dp.node && window.state.nodes.some(n => n.id === dp.node)) setTimeout(() => { try { window.app.openNodeDetail(dp.node); } catch (e) {} }, 450);
+            } catch (e) {}
+            window.addEventListener('mouseup', window.app.canvas.handleEnd);
+            window.addEventListener('touchend', window.app.canvas.handleEnd);
+            window.addEventListener('resize', () => {
+                if(window.state.currentView === 'canvas') {
+                    window.ui.renderCanvas();
+                    window.app.canvas.applyTransform();
+                }
+            });
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const modals = ['modal-topic', 'modal-node', 'modal-detail', 'modal-confirm', 'modal-addUser', 'modal-trash', 'modal-analytics-menu'];
+                    modals.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el && !el.classList.contains('hidden')) {
+                            window.ui.closeModal(id);
+                        }
+                    });
+                }
+            });
+
+            window.app.canvas.renderLoop();
+        };
+
+        window.ui.renderUserInfo = () => {
+            const u = window.state.user;
+            if (!u) return;
+            KBUI.injectCSS();
+            const real = u.realRole;
+            const avatarEl = document.getElementById('user-avatar');
+            if (avatarEl) avatarEl.src = u.avatar;
+            const nameEl = document.getElementById('user-name');
+            if (nameEl) nameEl.innerText = u.name; // 只顯示:管理者 / 老師 / 學號 / 訪客
+            const roleEl = document.getElementById('user-role');
+            if (roleEl) roleEl.innerText = real === 'student' ? '學生' : (real === 'guest' ? '唯讀瀏覽' : '全部功能');
+            const h1 = document.querySelector('nav h1'); if (h1) h1.textContent = KB.settings.get().platformName || '知識建構平台';
+            // 依權限顯示導覽
+            const staff = KB.can('analytics.teacher'), guest = real === 'guest';
+            document.querySelectorAll('a[href="ANALYTICS-teacher.html"]').forEach(a => { a.style.display = staff ? '' : 'none'; });
+            document.querySelectorAll('a[href="ANALYTICS-student.html"]').forEach(a => { a.style.display = guest ? 'none' : ''; });
+            document.querySelectorAll('button[onclick*="toggleAnalyticsDropdown"], button[onclick*="openAnalyticsMenu"]').forEach(b => { b.style.display = guest ? 'none' : ''; });
+            const dd = document.querySelector('nav .relative.group'); if (dd) dd.style.display = guest ? 'none' : '';
+            const trash = document.getElementById('btn-trash-fab'); if (trash) trash.style.display = staff ? '' : 'none';
+        };
+
+        window.ui.renderUserMenu = () => {
+            if (!window.state.user) return;
+            const menuEl = document.getElementById('user-menu');
+            if (menuEl) { menuEl.innerHTML = KBUI.menuHTML(); KBUI.wireMenu(menuEl); }
+        };
+
+        window.ui.renderTrashList = () => {
+            const list = document.getElementById('trash-list');
+            if (!list) return;
+            if (window.state.trash.length === 0) {
+                list.innerHTML = `<div class="text-center py-10 text-slate-400"><i class="fa-regular fa-trash-can text-4xl mb-3 opacity-50"></i><p>回收桶是空的</p></div>`;
+                return;
+            }
+            list.innerHTML = window.state.trash.map(item => {
+                const isTopic = item.type === 'topic';
+                const scaffoldInfo = window.SCAFFOLDS[item.data[0]?.type] || window.SCAFFOLDS['question'];
+                const icon = isTopic ? 'fa-folder' : scaffoldInfo.icon;
+                const color = isTopic ? 'text-indigo-500 bg-indigo-100' : 'text-slate-500 bg-slate-100';
+                const name = isTopic ? item.data.name : (item.data[0]?.content.substring(0, 30) + '...');
+                const date = new Date(item.deletedAt).toLocaleDateString('zh-TW');
+                return `
+                <div class="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full ${color} flex items-center justify-center shrink-0"><i class="fa-solid ${icon}"></i></div>
+                        <div>
+                            <div class="font-bold text-slate-800 text-sm">${name}</div>
+                            <div class="text-xs text-slate-400">刪除於: ${date}</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="window.app.restoreTrashItem('${item.id}')" class="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded hover:bg-green-100 transition border border-green-200">還原</button>
+                        <button onclick="window.app.deleteTrashItem('${item.id}')" class="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded hover:bg-red-100 transition border border-red-200">永久刪除</button>
+                    </div>
+                </div>`;
+            }).join('');
+        };
+
+        window.ui.closeModal = (id) => {
+            document.getElementById(id).classList.add('hidden');
+            if(id === 'modal-node') {
+                try { if (window.KBVoice) KBVoice.reset(); } catch (e) {}
+                document.getElementById('node-title').value = '';
+                document.getElementById('node-content').value = '';
+                document.getElementById('ai-suggestion-box').classList.add('hidden');
+                window.state.composer.parentId = null;
+                window.state.composer.selectedScaffold = null;
+            }
+            if (id === 'modal-addUser') { document.getElementById('new-user-name').value = ''; }
+            if (id === 'modal-topic') {
+                window.state.tempSelectedCategories = [];
+                window.state.editingTopicId = null;
+                window.app.renderCategorySelector();
+                document.getElementById('topic-name').value = '';
+                document.getElementById('topic-desc').value = '';
+            }
+        };
+
+        window.ui.showToast = (msg, type = 'info') => {
+            const container = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            const colors = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-green-600' : 'bg-slate-800');
+            el.className = `${colors} text-white px-4 py-2 rounded-lg shadow-xl text-sm flex items-center gap-2 transform transition-all translate-y-2 opacity-0`;
+            el.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check' : 'fa-info-circle'}"></i> ${msg}`;
+            container.appendChild(el);
+            requestAnimationFrame(() => el.classList.remove('translate-y-2', 'opacity-0'));
+            setTimeout(() => {
+                el.classList.add('opacity-0', 'translate-x-full');
+                setTimeout(() => el.remove(), 300);
+            }, 3000);
+        };
+
+        window.ui.confirm = (title, desc, action) => {
+            document.querySelector('#modal-confirm h3').innerText = title;
+            document.querySelector('#modal-confirm p').innerText = desc;
+            document.getElementById('btn-confirm-action').onclick = action;
+            document.getElementById('modal-confirm').classList.remove('hidden');
+        };
+
+        window.ui.updateNav = (view) => {
+            document.querySelectorAll('.nav-btn, .mobile-nav-btn').forEach(btn => {
+                if(btn.dataset.nav === view) {
+                    btn.classList.add('active');
+                    if(btn.classList.contains('mobile-nav-btn')) btn.classList.add('text-indigo-600');
+                } else {
+                    btn.classList.remove('active', 'text-indigo-600');
+                    if(btn.classList.contains('mobile-nav-btn')) btn.classList.add('text-slate-400');
+                }
+            });
+        };
+
+        window.ui.renderEntrance = () => {
+            const container = document.getElementById('app-container');
+            const visibleTopics = window.state.activeFilter === '全部'
+                ? window.state.topics
+                : window.state.topics.filter(t => t.categories && t.categories.includes(window.state.activeFilter));
+
+            const currentUserRole = window.state.user?.role || 'student';
+
+            container.innerHTML = `
+            <div class="max-w-7xl mx-auto px-4 md:px-6 py-8 h-full overflow-y-auto custom-scroll pb-24">
+                <div class="mb-6 text-center">
+                    <h2 class="text-2xl md:text-3xl font-bold text-slate-900">知識建構論壇 Knowledge Building Forum</h2>
+                    <p class="text-slate-500 text-sm">"知識建構不是追求答案，而是以改善想法為共同使命，讓社群思維持續朝向更深刻的理解。"</p>
+                </div>
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <div class="w-full md:w-auto category-scroll-container">
+                        <div id="category-filters" class="flex gap-2 whitespace-nowrap md:flex-wrap">
+                            ${window.app.generateCategoryFilters()}
+                        </div>
+                    </div>
+                    ${currentUserRole === window.ROLES.LEAD ? `<button onclick="window.app.openCreateTopic()" class="bg-indigo-600 text-white px-5 py-2 rounded-lg shadow text-sm hover:bg-indigo-700 transition flex-shrink-0"><i class="fa-solid fa-plus"></i> 新增主題</button>` : ''}
+                </div>
+                ${(window.state.nodes.length === 0 && (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))) ? `
+                <div id="empty-demo-hint" class="mb-5 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 text-sm leading-relaxed">
+                    <b>目前這個瀏覽器裡還沒有任何人發言。</b>測試版的資料只存在你這台電腦的這個瀏覽器,要看到 25 位學生的討論,請先到
+                    <a href="載入示範資料.html" class="font-bold underline text-indigo-700">「載入示範資料」頁</a>
+                    按一次「載入示範資料」,再回到這裡重新整理。
+                </div>` : ''}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
+                    ${visibleTopics.length === 0 ? `<div class="col-span-full text-center text-slate-400 py-10">此分類暫無主題，點擊右上角新增一個吧！</div>` : ''}
+                    ${visibleTopics.map(t => {
+                        const count = window.state.nodes.filter(n => n.topicId === t.id).length;
+                        const cats = t.categories || [t.category] || ['其他'];
+                        const tagsHtml = cats.map(c => `<span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-bold mr-1">${window.TOPIC_CATEGORIES[c] || c}</span>`).join('');
+                        const adminControls = currentUserRole === window.ROLES.LEAD ? `
+                            <div class="flex gap-2">
+                                <button onclick="event.stopPropagation(); window.app.openEditTopic('${t.id}')" class="text-slate-300 hover:text-indigo-500 transition" title="編輯主題"><i class="fa-solid fa-pen-to-square"></i></button>
+                                <button onclick="event.stopPropagation(); window.app.deleteTopic('${t.id}')" class="text-slate-300 hover:text-red-500 transition" title="刪除主題"><i class="fa-solid fa-trash"></i></button>
+                            </div>` : '';
+
+                        const authorName = window.state.userList[t.author] ? window.state.userList[t.author].name : 'Unknown';
+
+                        return `
+                        <div onclick="window.app.enterTopic('${t.id}')" class="bg-white rounded-xl border p-5 cursor-pointer hover:shadow-lg relative overflow-hidden group transition">
+                            <div class="flex justify-between mb-3 items-start">
+                                <div class="flex flex-wrap gap-1">${tagsHtml}</div>
+                                ${adminControls}
+                            </div>
+                            <h3 class="font-bold text-lg mb-2 group-hover:text-indigo-600 transition">${t.name}</h3>
+                            <p class="text-slate-500 text-sm mb-4 line-clamp-2">${t.desc}</p>
+                            <div class="flex justify-between text-xs text-slate-400 pt-3 border-t">
+                                <span><i class="fa-solid fa-user"></i> ${authorName}</span>
+                                <span>${count} 想法</span>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`;
+
+            setTimeout(() => {
+                document.querySelectorAll('.filter-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        window.app.setFilter(e.currentTarget.dataset.category);
+                    });
+                });
+            }, 0);
+        };
+
+        window.ui.renderCanvas = () => {
+            const topic = window.state.topics.find(t => t.id === window.state.currentTopicId);
+            const nodes = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId);
+            const container = document.getElementById('app-container');
+
+            const isPanMode = window.state.canvas.isPanMode;
+            const modeLabel = isPanMode ? '✋ 拖曳' : '⬚ 選取';
+            const modeClass = isPanMode ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-white text-slate-600 border border-slate-200';
+            const modeIcon = isPanMode ? '<i class="fa-solid fa-hand"></i>' : '<i class="fa-regular fa-square"></i>';
+
+            container.innerHTML = `
+            <div class="absolute top-2 left-2 right-2 md:top-4 md:left-4 md:right-4 z-40 flex justify-between pointer-events-none">
+                <div class="bg-white/90 backdrop-blur shadow-sm border rounded-lg p-2 pointer-events-auto flex items-center gap-2 max-w-[40%] md:max-w-[50%]">
+                    <button onclick="window.app.router('entrance')" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500"><i class="fa-solid fa-arrow-left"></i></button>
+                    <div class="h-6 w-px bg-slate-200"></div>
+                    <h2 class="font-bold text-xs md:text-sm truncate px-1">${topic.name}</h2>
+                </div>
+                <div class="flex gap-2 pointer-events-auto">
+                    <button onclick="window.app.canvas.toggleHeatmap()" id="btn-heatmap" class="${window.state.canvas.isHeatmapMode ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white/90 text-slate-500 border-slate-200'} backdrop-blur shadow-sm border rounded-lg px-3 py-1 text-xs font-bold flex items-center gap-1 transition-all hover:scale-105">
+                        <i class="fa-solid fa-fire ${window.state.canvas.isHeatmapMode ? 'animate-pulse' : ''}"></i>
+                        <span class="text-[10px] md:text-xs">潛力熱點</span>
+                    </button>
+                    <button onclick="window.app.canvas.toggleCluster()" id="btn-cluster" class="${window.state.canvas.isClusterMode ? 'bg-purple-100 text-purple-600 border-purple-200' : 'bg-white/90 text-slate-500 border-slate-200'} backdrop-blur shadow-sm border rounded-lg px-3 py-1 text-xs font-bold flex items-center gap-1 transition-all hover:scale-105">
+                        <i class="fa-solid fa-sparkles ${window.state.canvas.isClusterMode ? 'text-purple-500' : ''}"></i>
+                        <span class="text-[10px] md:text-xs">語意聚類</span>
+                    </button>
+                    <div class="bg-white/90 backdrop-blur shadow-sm border rounded-lg p-1 flex items-center">
+                        <button onclick="window.app.centerOnFirstNode(true)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-kb-blue" title="回到起點"><i class="fa-solid fa-location-crosshairs"></i></button>
+                        <div class="w-px h-5 bg-slate-200 mx-1"></div>
+                        <button onclick="window.app.canvas.fitView()" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100"><i class="fa-solid fa-expand"></i></button>
+                        <button onclick="window.app.canvas.zoom(0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 hidden md:flex"><i class="fa-solid fa-plus"></i></button>
+                        <button onclick="window.app.canvas.zoom(-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 hidden md:flex"><i class="fa-solid fa-minus"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="absolute bottom-20 md:bottom-6 left-1/2 transform -translate-x-1/2 z-40 pointer-events-auto transition-all duration-300">
+                <button onclick="window.app.canvas.toggleMode()" class="${modeClass} pointer-events-auto cursor-pointer px-4 py-2 rounded-full shadow-md flex items-center gap-2 text-sm font-bold transition-all duration-300 hover:scale-105 active:scale-95">
+                    ${modeIcon} <span>${modeLabel}</span>
+                </button>
+            </div>
+
+            <div class="absolute bottom-20 right-4 md:bottom-8 md:right-8 z-40" style="${KB.can('forum.post') ? '' : 'display:none'}">
+                 <button onclick="window.app.openComposer(null)" class="bg-indigo-600 text-white rounded-full w-12 h-12 md:w-14 md:h-14 shadow-xl flex items-center justify-center text-xl transition transform hover:scale-105"><i class="fa-solid fa-plus"></i></button>
+            </div>
+
+            <div class="hidden md:block absolute bottom-24 left-4 md:bottom-8 md:left-24 z-30 pointer-events-none">
+                <div class="bg-white/80 backdrop-blur-sm border border-slate-200 p-3 rounded-lg shadow-sm text-xs text-slate-600 pointer-events-auto space-y-1">
+                    <h4 class="font-bold text-slate-700 mb-1 flex items-center gap-1"><i class="fa-solid fa-circle-question text-indigo-500"></i> 操作指南</h4>
+                    <div class="flex items-center justify-between gap-3"><span class="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500">左鍵拖曳</span> <span>框選範圍</span></div>
+                    <div class="flex items-center justify-between gap-3"><span class="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500">Ctrl + 拖曳</span> <span>移動畫布</span></div>
+                    <div class="flex items-center justify-between gap-3"><span class="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500">雙擊空白</span> <span>切換 拖曳/選取</span></div>
+                    <div class="flex items-center justify-between gap-3"><span class="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-500">滾輪</span> <span>縮放視角</span></div>
+                </div>
+            </div>
+
+            <!-- Scrollbars Layer -->
+            <div id="h-scrollbar" class="absolute bottom-20 md:bottom-8 left-4 right-20 md:left-24 md:right-24 h-3 bg-slate-300/50 rounded-full z-[45] pointer-events-auto backdrop-blur-sm" style="opacity: 0; transition: opacity 0.3s;">
+                <div id="h-thumb" class="absolute top-0 h-full bg-slate-600/80 hover:bg-slate-800 rounded-full cursor-pointer shadow"></div>
+            </div>
+            <div id="v-scrollbar" class="absolute top-20 bottom-32 right-2 md:top-24 md:bottom-24 md:right-4 w-3 bg-slate-300/50 rounded-full z-[45] pointer-events-auto backdrop-blur-sm" style="opacity: 0; transition: opacity 0.3s;">
+                <div id="v-thumb" class="absolute left-0 w-full bg-slate-600/80 hover:bg-slate-800 rounded-full cursor-pointer shadow"></div>
+            </div>
+
+            <div id="canvas-wrapper" class="w-full h-full overflow-hidden relative touch-none noselect"
+                 style="cursor: ${isPanMode ? 'grab' : 'default'}"
+                 ondblclick="window.app.canvas.handleDoubleClick(event)"
+                 onmousedown="window.app.canvas.startPan(event)"
+                 ontouchstart="window.app.canvas.startPan(event)"
+                 onmousemove="window.app.canvas.pan(event)"
+                 ontouchmove="window.app.canvas.pan(event)"
+                 onwheel="window.app.canvas.handleWheel(event)">
+                <div id="canvas-bg"></div>
+                <div id="canvas-content" class="absolute top-0 left-0 w-full h-full origin-top-left will-change-transform">
+                    <div id="cluster-labels-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-0 transition-opacity duration-500 opacity-0"></div>
+                    <svg id="connections-layer" class="absolute top-0 left-0 w-[10000px] h-[5000px] pointer-events-none overflow-visible z-0"></svg>
+                    <div id="nodes-layer" class="z-10"></div>
+                </div>
+            </div>`;
+
+            if (window.state.canvas.isClusterMode) {
+                const labelLayer = document.getElementById('cluster-labels-layer');
+                if (labelLayer) {
+                    labelLayer.innerHTML = Object.values(window.CLUSTER_CENTERS).map(c => `
+                        <div class="cluster-zone" style="left: ${c.x - c.width/2}px; top: ${c.y - c.height/2}px; width: ${c.width}px; height: ${c.height}px;">
+                            <div class="cluster-title">${c.title}</div>
+                        </div>`).join('');
+                    labelLayer.classList.remove('opacity-0');
+                    labelLayer.style.opacity = '1';
+                }
+            }
+
+            window.ui.drawNodes(nodes);
+
+            setTimeout(() => {
+                window.ui.drawConnections(nodes);
+                if (window.state.needsCentering) {
+                    window.app.centerOnFirstNode(false);
+                    window.state.needsCentering = false;
+                } else {
+                    window.app.canvas.applyTransform();
+                }
+                window.app.canvas.initScrollbars();
+            }, 0);
+        };
+
+        window.ui.renderProfile = () => {
+            const container = document.getElementById('app-container');
+            const u = window.state.user;
+            container.innerHTML = `
+            <div class="max-w-2xl mx-auto px-6 py-8 h-full overflow-y-auto custom-scroll pb-24">
+                <div class="bg-gradient-to-br from-indigo-50 to-white rounded-2xl p-6 shadow-sm border border-indigo-100 text-center mb-6 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-400 via-purple-500 to-indigo-500"></div>
+                    <img src="${u.avatar}" class="w-20 h-20 rounded-full mx-auto mb-3 border-4 border-white shadow-md">
+                    <h2 class="text-2xl font-bold text-slate-800">${u.name}</h2>
+                    <p class="text-slate-500 text-sm mb-1">${u.role === window.ROLES.LEAD ? '首席研究員' : '協同研究員'}</p>
+                    <div class="flex justify-center gap-2 mt-4">
+                        <span class="bg-white/80 border px-3 py-1 rounded-full text-xs font-bold text-slate-600 shadow-sm">ID: ${u.id}</span>
+                    </div>
+                </div>
+                <div class="space-y-6">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-robot text-indigo-600"></i> 我的知識建構檔案 (KB Profile)</h3>
+                        <button onclick="window.app.generateAIProfile()" id="btn-gen-profile" class="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition flex items-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> <span>生成分析</span>
+                        </button>
+                    </div>
+                    <div id="ai-loading" class="hidden p-8 text-center bg-white rounded-2xl border border-slate-100">
+                        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
+                        <p class="text-sm text-slate-500 animate-pulse">正在回顧你的知識演化軌跡...</p>
+                    </div>
+                    <div id="ai-profile-result" class="hidden space-y-4"></div>
+                </div>
+            </div>`;
+
+            if (window.state.profile && document.getElementById('ai-profile-result')) {
+                window.ui.renderProfileContent(window.state.profile);
+            }
+        };
+
+        window.ui.renderProfileContent = (data) => {
+            const result = document.getElementById('ai-profile-result');
+            result.innerHTML = `
+            <div class="animate-fade-in bg-white p-5 rounded-xl shadow-sm border-l-4 border-indigo-500 relative overflow-hidden">
+                <div class="absolute right-0 top-0 opacity-5 transform translate-x-4 -translate-y-4">
+                    <i class="fa-solid ${data.icon} text-9xl text-indigo-900"></i>
+                </div>
+                <h4 class="text-sm font-bold text-indigo-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-fire"></i> 使用者知識角色
+                </h4>
+                <div class="relative z-10">
+                    <p class="text-xl font-bold text-slate-800 mb-2">${data.role}</p>
+                    <p class="text-sm text-slate-600 leading-relaxed">${data.desc}</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="animate-fade-in bg-white p-5 rounded-xl shadow-sm border-l-4 border-green-500" style="animation-delay: 0.1s">
+                    <h4 class="text-sm font-bold text-green-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-seedling"></i> 想法演化軌跡
+                    </h4>
+                    <div class="pl-2">${data.trajectoryHTML}</div>
+                </div>
+                <div class="animate-fade-in bg-white p-5 rounded-xl shadow-sm border-l-4 border-blue-500" style="animation-delay: 0.2s">
+                    <h4 class="text-sm font-bold text-blue-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-puzzle-piece"></i> 社群推動力
+                    </h4>
+                    ${data.communityHTML}
+                </div>
+            </div>
+            <div class="animate-fade-in bg-white p-5 rounded-xl shadow-sm border-l-4 border-purple-500" style="animation-delay: 0.3s">
+                <h4 class="text-sm font-bold text-purple-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie"></i> 知識建構策略分佈
+                </h4>
+                <p class="text-xs text-slate-500 mb-4">這顯示了你在知識建構過程中所使用的認知策略多樣性 (Idea Diversity)：</p>
+                <div class="grid grid-cols-1 gap-2">${data.statsHTML}</div>
+            </div>`;
+            result.classList.remove('hidden');
+        };
+
+        window.ui.drawNodes = (nodes) => {
+            const parentSet = new Set(window.state.nodes.map(n => n.parentId).filter(Boolean));
+            const canPostNow = KB.can('forum.post');
+            document.getElementById('nodes-layer').innerHTML = nodes.map(node => {
+                const s = window.SCAFFOLDS[node.type];
+                const user = Object.values(window.state.userList).find(u => u.id === node.author) || {name: '?'};
+                const canDel = KB.can('forum.deleteOwn', { author: node.author, hasReplies: parentSet.has(node.id) });
+                const canEdit = KB.can('forum.editOwn', { author: node.author });
+
+                // Strictly > 70 threshold
+                const isPromising = window.state.canvas.isHeatmapMode && node.promisingness > 70;
+                const heatmapClass = isPromising ? 'promising-node' : '';
+                const flameBadge = isPromising ? `<div class="absolute -top-3 -right-2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm animate-bounce-slow z-50"><i class="fa-solid fa-fire"></i> 熱點</div>` : '';
+                const isSelected = window.state.selectedNodeIds.includes(node.id) ? 'selected-node' : '';
+
+                return `
+                <div id="node-${node.id}" class="absolute node-card w-64 md:w-72 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-visible ${heatmapClass} ${isSelected}"
+                     style="left: ${node.x}px; top: ${node.y}px;"
+                     onmousedown="event.stopPropagation(); window.app.canvas.startDrag(event, '${node.id}')"
+                     ontouchstart="event.stopPropagation(); window.app.canvas.startDrag(event, '${node.id}')"
+                     ondblclick="event.stopPropagation(); window.app.openNodeDetail('${node.id}')">
+                    ${flameBadge}
+                    <div class="px-3 py-2 ${s.bgSoft} border-b ${s.border} flex justify-between items-center cursor-move rounded-t-xl">
+                        <div class="flex items-center gap-2">
+                            <span class="w-5 h-5 rounded-full ${s.color} text-white flex justify-center items-center text-xs"><i class="fa-solid ${s.icon}"></i></span>
+                            <span class="text-xs font-bold ${s.text}">${s.label}</span>
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="event.stopPropagation(); window.app.openNodeDetail('${node.id}')" class="w-8 h-8 rounded hover:bg-white/50 text-slate-500 flex justify-center items-center"><i class="fa-solid fa-eye"></i></button>
+                            ${canPostNow ? `<button onclick="event.stopPropagation(); window.app.openComposer('${node.id}')" class="w-8 h-8 rounded hover:bg-white/50 text-slate-500 flex justify-center items-center" title="回覆"><i class="fa-solid fa-reply"></i></button>` : ''}
+                            ${canEdit ? `<button onclick="event.stopPropagation(); window.app.openEditNode('${node.id}')" class="w-8 h-8 rounded hover:bg-white/50 text-slate-500 hover:text-indigo-600 flex justify-center items-center" title="編輯我的貼文"><i class="fa-solid fa-pen"></i></button>` : ''}
+                            ${canDel ? `<button onclick="event.stopPropagation(); window.app.deleteNode('${node.id}')" class="w-8 h-8 rounded hover:bg-white/50 text-slate-500 hover:text-red-500 flex justify-center items-center"><i class="fa-solid fa-xmark"></i></button>` : ''}
+                        </div>
+                    </div>
+                    <div class="p-3 text-sm text-slate-700 leading-relaxed min-h-[60px] pointer-events-none bg-white">
+                        <h4 class="font-bold mb-1 text-slate-900 block truncate text-base">${node.title || '無標題'}</h4>
+                        <p class="line-clamp-2 text-slate-600">${node.content}</p>
+                    </div>
+                    <div class="px-3 py-2 bg-slate-50 border-t flex justify-between text-[10px] text-slate-500 items-center rounded-b-xl">
+                        <div class="flex items-center gap-2">
+                            <img src="${user.avatar}" class="w-4 h-4 rounded-full">
+                            <span>${user.name}</span>
+                        </div>
+                        <span>${new Date(node.date).toLocaleDateString()}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        };
+
+        window.ui.drawConnections = (nodes) => {
+            const layer = document.getElementById('connections-layer');
+            if(!layer) return;
+
+            layer.innerHTML = `
+            <defs>
+                ${Object.keys(window.SCAFFOLDS).map(k => {
+                    const c = { question: '#3b82f6', extend: '#eab308', improve: '#22c55e', counter: '#ef4444', riseabove: '#a855f7' }[k];
+                    return `<marker id="arrow-${k}" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${c}" /></marker>`;
+                }).join('')}
+            </defs>`;
+
+            const cardWidth = window.innerWidth < 768 ? 256 : 288;
+            const halfW = cardWidth / 2;
+
+            const paths = nodes.filter(n => n.parentId).map(node => {
+                const parent = window.state.nodes.find(p => p.id === node.parentId);
+                if (!parent) return '';
+                const startX = parent.x + halfW;
+                const startY = parent.y + 140;
+                const endX = node.x + halfW;
+                const endY = node.y;
+
+                const dist = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+                let curveFactor = 0.4;
+                if (endY < startY) curveFactor = 0.6;
+
+                const cp1x = startX;
+                const cp1y = startY + dist * curveFactor;
+                const cp2x = endX;
+                const cp2y = endY - dist * curveFactor;
+
+                const colorMap = { question: '#3b82f6', extend: '#eab308', improve: '#22c55e', counter: '#ef4444', riseabove: '#a855f7' };
+                return `<path d="M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}" stroke="${colorMap[node.type]}" fill="none" stroke-width="2" stroke-opacity="0.6" marker-end="url(#arrow-${node.type})" />`;
+            }).join('');
+
+            layer.innerHTML += paths;
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.ui && typeof window.ui.init === 'function') {
+                window.ui.init();
+            } else {
+                console.error("UI Init failed");
+            }
+        });
+    </script>
+</body>
+</html>
+<script async data-explicit-opt-in="true" data-cookie-opt-in="true" data-deployment-id="dpl_4U4bP91Hr9kcqk6ResXbCKevcFV6" src="https://vercel.live/_next-live/feedback/feedback.js"></script>
