@@ -153,6 +153,9 @@
 <script src="kb-core.js"></script>
 <script src="kb-cloud.js"></script>
     <script src="kb-ui.js"></script>
+<script src="kb-asra-core.js"></script>
+<script src="kb-asra.js"></script>
+<script src="kb-asra-teacher.js"></script>
 <script src="kb-replay.js"></script>
 <script src="kb-ai-story.js"></script>
 <script src="kb-forest.js"></script>
@@ -352,6 +355,7 @@
             <button onclick="switchView('topics')" id="nav-topics" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left"><i class="fas fa-lightbulb w-5"></i><span>主題與觀點 (Ideas)</span></button>
             <button onclick="switchView('quality')" id="nav-quality" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left"><i class="fas fa-microscope w-5"></i><span>言談品質 (Quality)</span></button>
             <button onclick="switchView('academic')" id="nav-academic" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left text-purple-300 hover:text-purple-200"><i class="fas fa-graduation-cap w-5"></i><span>學術深度指標 (Academic)</span></button>
+            <button onclick="switchView('asra')" id="nav-asra" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left text-emerald-300 hover:text-emerald-200"><i class="fas fa-seedling w-5"></i><span>ASRA 反思歷程 (Reflection)</span></button>
 
             <div class="pt-4 mt-4 border-t border-slate-800">
                 <a href="Knowledge Building Forum.html?home=1" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left text-blue-400 hover:text-blue-300">
@@ -793,6 +797,11 @@
                     <div class="space-y-3 overflow-y-auto h-[300px] custom-scrollbar pr-2" id="kb12-check-list"></div>
                 </div>
             </div>
+        </div>
+
+        <!-- VIEW 6: ASRA 反思歷程 -->
+        <div id="view-asra" class="section-view space-y-4 md:space-y-6">
+            <div id="asra-root"></div>
         </div>
 
     </main>
@@ -1688,6 +1697,14 @@ async function geminiFetch(key, init) {
             });
         }
 
+        // ASRA 反思歷程(kb-asra-teacher.js):使用目前選的班級範圍
+        function initAsraView() {
+            try {
+                const st = window.state || {};
+                KBAsraTeacher.render(document.getElementById('asra-root'), { nodes: st.nodes || [], topics: st.topics || [], userList: st.userList || {} });
+            } catch (e) { console.error(e); document.getElementById('asra-root').innerHTML = '<div class="p-4 text-red-600 text-sm">ASRA 反思歷程載入失敗:' + String(e && e.message || e) + '</div>'; }
+        }
+
         function switchView(viewName) {
             document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active'));
             document.getElementById('view-' + viewName).classList.add('active');
@@ -1709,6 +1726,7 @@ async function geminiFetch(key, init) {
                 initTopicContentAnalysis();
             }, 100);
             else if (viewName === 'academic') setTimeout(() => { initAcademicAnalysis(); }, 100);
+            else if (viewName === 'asra') setTimeout(() => { initAsraView(); }, 50);
             else if (viewName === 'overview') setTimeout(() => { initOverview(globalRawDB); }, 100);
             else if (viewName === 'students') {
                 const active = document.querySelector('.active-student');

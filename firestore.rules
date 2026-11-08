@@ -10,13 +10,24 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 使用者、班級、組別、討論區、回收桶、設定、貼文(每 500 則一份文件)
+    // 使用者、班級、組別、討論區、回收桶、設定、貼文(每 500 則一份文件)、ASRA 反思紀錄
     match /kb_v2/{docId} {
       allow read: if true;
       allow create, update: if (docId in ['users', 'classes', 'groups', 'topics', 'trash', 'settings']
                                 || docId.matches('nodes__[A-Za-z0-9_-]+__[0-9]+'))
         && request.resource.data.keys().hasOnly(['items', 'value'])
         && (!('items' in request.resource.data) || (request.resource.data.items is map && request.resource.data.items.size() <= 2000));
+      // ASRA 反思與計畫紀錄:每位學生一份文件 asra__<學號>,內容 { items: { 紀錄編號: 紀錄 } }
+      // 只能新增紀錄;既有的紀錄不能被修改或刪除(保存質性研究資料的原貌與日期)
+      allow create: if docId.matches('asra__[A-Za-z0-9_-]+')
+        && request.resource.data.keys().hasOnly(['items'])
+        && request.resource.data.items is map
+        && request.resource.data.items.size() <= 2000;
+      allow update: if docId.matches('asra__[A-Za-z0-9_-]+')
+        && request.resource.data.keys().hasOnly(['items'])
+        && request.resource.data.items is map
+        && request.resource.data.items.size() <= 2000
+        && request.resource.data.items.diff(resource.data.items).unchangedKeys().size() == resource.data.items.size();
       allow delete: if false;
     }
 

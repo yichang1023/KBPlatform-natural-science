@@ -6,6 +6,7 @@
  *    kb_v2/users | classes | groups | topics | trash   各一份文件,內容 { items: { 編號: 資料 } }
  *    kb_v2/nodes__<討論區>__<序號>                     貼文,每份最多 500 則
  *    kb_v2/settings                                    { value: {...} }
+ *    kb_v2/asra__<學號>                                ASRA 反思與計畫的歷史紀錄 { items: { 紀錄編號: 紀錄 } }(只增不改,見 kb-asra.js)
  *    kb_v2_audit/<日期>                                稽核紀錄,依日期分文件
  *  寫入只改「有變動的那一筆」(欄位層級更新),所以兩個人同時發文不會互相蓋掉。
  *  備份檔只存在各裝置瀏覽器,不上雲端(請定期匯出完整備份)。
@@ -130,6 +131,11 @@
       var prev = synced[key], same = prev && Object.keys(prev).length === Object.keys(m).length && Object.keys(m).every(function (id) { return prev[id] === m[id]; });
       if (!same) { patch[key] = sortFor(key, arr); synced[key] = m; changed = true; }
     });
+    // ASRA 反思/計畫紀錄:交給 kb-asra.js 合併(不放進主要資料)
+    var asra = {};
+    Object.keys(docs).forEach(function (dn) { if (dn.indexOf('asra__') === 0) asra[dn] = docs[dn].items || {}; });
+    KB.cloud.asraDocs = asra;
+    if (global.KBAsra && global.KBAsra._remote) { try { global.KBAsra._remote(asra); } catch (e) {} }
     if (docs.settings && docs.settings.value) {
       var c = canon(docs.settings.value);
       if (synced.settings !== c) { patch.settings = docs.settings.value; synced.settings = c; changed = true; }
@@ -137,6 +143,18 @@
     if (changed) KB._applyRemote(patch);
     return docs;
   }
+  // 新增 ASRA 紀錄(只送「雲端還沒有的」;規則會擋掉修改與刪除)
+  function pushAsra(uid, list) {
+    if (!ready || !db || !list || !list.length) return Promise.resolve(false);
+    var sets = {}; list.forEach(function (e) { if (e && e.id) sets[e.id] = clean(e); });
+    return writeDoc('asra__' + safe(uid), sets, []).then(function () { KB.cloud.asraError = ''; return true; }).catch(function (e) {
+      KB.cloud.asraError = String((e && (e.code || e.message)) || e);
+      try { global.dispatchEvent(new global.CustomEvent('kb-asra-error', { detail: KB.cloud.asraError })); } catch (x) {}
+      if (global.console) console.warn('[KB Cloud] ASRA 紀錄沒有送出', e);
+      return false;
+    });
+  }
+  function asraSync() { if (global.KBAsra && global.KBAsra._sync) { try { global.KBAsra._sync(); } catch (e) {} } }
   function seed() {
     // 雲端還是空的(第一次啟用):把目前的預設資料(管理者、老師、五個討論區)寫上去
     ready = true; synced = {};
@@ -156,13 +174,14 @@
       db = fb.firestore(); FV = fb.firestore.FieldValue; FP = fb.firestore.FieldPath;
       try { db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) {}
       KB._cloudAttach({ push: push, pushAudit: pushAudit, loadAudit: loadAudit });
+      KB.cloud.pushAsra = pushAsra;
       db.collection(COL).onSnapshot({ includeMetadataChanges: false }, function (snap) {
         if (snap.metadata.fromCache && !gotServer) { setState('offline'); return; }
         var first = !gotServer; gotServer = true;
         if (first) {
           if (snap.empty) { seed(); } else { applySnapshot(snap); ready = true; }
-          setState('online'); finishReady(); flushAudit();
-        } else { applySnapshot(snap); if (KB.cloud.state !== 'syncing') setState('online'); }
+          setState('online'); finishReady(); flushAudit(); asraSync();
+        } else { applySnapshot(snap); if (KB.cloud.state !== 'syncing') setState('online'); asraSync(); }
       }, function (err) { fail(err); finishReady(); });
     }).catch(function (e) { setState('offline', String(e && e.message || e)); finishReady(); });
   }

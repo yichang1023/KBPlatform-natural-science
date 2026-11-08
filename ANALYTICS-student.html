@@ -280,6 +280,7 @@
                 <div class="flex items-center gap-2 mr-2">
                     <a href="index.html" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap"><i class="fas fa-home"></i> <span class="hidden sm:inline">首頁</span></a>
 <a href="Knowledge Building Forum.html?home=1" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap"><i class="fas fa-comments"></i> <span class="hidden sm:inline">論壇</span></a>
+                    <a href="ASRA.html" id="nav-asra-link" onclick="return goAsra(event)" class="bg-emerald-400/90 hover:bg-emerald-400 text-slate-900 px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap" title="ASRA 反思評量:用分析當證據,想一想下一步"><i class="fas fa-seedling"></i> <span class="hidden sm:inline">ASRA 反思</span></a>
                     <a href="ANALYTICS-teacher.html" id="nav-teacher-link" style="display:none" class="bg-amber-400/90 hover:bg-amber-400 text-slate-900 px-3 py-1.5 rounded-md text-xs font-bold transition items-center gap-1.5 whitespace-nowrap"><i class="fas fa-chart-line"></i> <span class="hidden sm:inline">老師分析</span></a>
                     <a href="setup.html" id="nav-setup-link" style="display:none" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold transition items-center gap-1.5 whitespace-nowrap"><i class="fas fa-gear"></i> <span class="hidden sm:inline">設定中心</span></a>
                     <button onclick="syncData()" id="sync-btn" class="bg-emerald-500/80 hover:bg-emerald-500 px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap"><i class="fas fa-sync-alt"></i> <span class="hidden sm:inline">更新資料</span></button>
@@ -295,6 +296,18 @@
 
     <!-- 主要內容區 -->
     <main class="container mx-auto px-4 sm:px-6 py-8 space-y-8 fade-in pb-20">
+
+        <!-- ASRA 反思評量入口 -->
+        <a href="ASRA.html" id="asra-banner" onclick="return goAsra(event)" class="block rounded-2xl p-4 sm:p-5 text-white shadow-md hover:shadow-lg transition bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500">
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl flex-shrink-0"><i class="fas fa-seedling"></i></div>
+                <div class="flex-1 min-w-[14rem]">
+                    <div class="text-lg font-black tracking-wide">ASRA 反思評量 <span class="text-xs font-bold opacity-90">看見自己的想法,決定下一步</span></div>
+                    <div class="text-sm opacity-95 mt-0.5">把你的分析圖當證據:看走過的路 → 量進展 → 用證據反思 → 決定下一步 → 回頭再檢查</div>
+                </div>
+                <span class="bg-white text-emerald-700 font-black px-4 py-2 rounded-full text-sm whitespace-nowrap">我要來反思 <i class="fas fa-arrow-right ml-1"></i></span>
+            </div>
+        </a>
 
         <!-- ==========================================
              第一層：總覽與成就 (Hero Section)
@@ -1991,6 +2004,12 @@ async function initApiKey() {
         }
 
         btn.disabled = false; btn.innerHTML = originalText;
+    }
+
+    // 前往 ASRA 反思評量;老師/管理者正在看某位學生時,帶著學號過去
+    function goAsra(ev) {
+        try { const u = (typeof currentUserId !== 'undefined' && currentUserId) ? currentUserId : null; if (gateUser && gateUser.role !== 'student' && u) { location.href = 'ASRA.html?student=' + encodeURIComponent(u); if (ev) ev.preventDefault(); return false; } } catch (e) {}
+        return true;
     }
 
     window.onload = function() {

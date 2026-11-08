@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASRA 反思評量 | KB 知識建構平台</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%234f46e5%27/%3E%3Ctext x=%2732%27 y=%2743%27 font-family=%27sans-serif%27 font-size=%2728%27 font-weight=%27700%27 fill=%27white%27 text-anchor=%27middle%27%3EKB%3C/text%3E%3C/svg%3E">
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+<script src="kb-config.js"></script>
+<script src="kb-core.js"></script>
+<script src="kb-cloud.js"></script>
+<script src="kb-ui.js"></script>
+<script src="kb-asra.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
+:root{--q:#3b8df0;--e:#f2b01e;--i:#27b97a;--c:#ef5b5b;--r:#9a6cf0;--ink:#16315a;--sub:#4b6a97}
+body{font-family:'Noto Sans TC',sans-serif;background:#f6f8fc;color:#334155}
+.card{background:#fff;border-radius:18px;box-shadow:0 4px 8px -2px rgba(30,60,120,.08);border:1px solid #e9eef6;padding:1.25rem}
+.step-btn{display:flex;flex-direction:column;align-items:center;gap:.25rem;min-width:0;flex:1;padding:.5rem .25rem;border-radius:14px;border:2px solid transparent;background:transparent;cursor:pointer;transition:.15s}
+.step-btn .dot{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:1.05rem;background:#e8eefb;color:#5a6fa0;border:2px solid #cfdaf3}
+.step-btn .zh{font-weight:800;font-size:.9rem;color:var(--ink);text-align:center}
+.step-btn .en{font-size:.62rem;color:#8a9bbd;letter-spacing:.04em;text-align:center}
+.step-btn.on{background:#eef3ff;border-color:#c7d6fb}.step-btn.on .dot{background:#4f46e5;color:#fff;border-color:#4f46e5;box-shadow:0 4px 10px rgba(79,70,229,.35)}
+.step-btn.done .dot{background:#27b97a;color:#fff;border-color:#27b97a}
+.bar{height:12px;border-radius:99px;background:#eef2f9;overflow:hidden}.bar>i{display:block;height:100%;border-radius:99px}
+.tile{border-radius:14px;padding:.7rem .8rem;background:#f4f7fd;border:1px solid #e3eaf7}.tile b{display:block;font-size:1.7rem;line-height:1.1;color:var(--ink)}.tile span{font-size:.78rem;color:var(--sub)}
+.pill{display:inline-flex;align-items:center;gap:.3rem;padding:.15rem .6rem;border-radius:99px;font-size:.75rem;font-weight:700;border:1px solid}
+.pill.ok{background:#e8f8f0;color:#0f7a4d;border-color:#b6e9d0}.pill.warn{background:#fff6e0;color:#a06a00;border-color:#f3dc9d}.pill.todo{background:#eaf1ff;color:#2457b8;border-color:#bcd2fb}.pill.dev{background:#f1eaff;color:#6a3fc0;border-color:#d8c7fa}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem 1rem;border-radius:999px;font-weight:800;font-size:.9rem;cursor:pointer;border:none;transition:.15s}
+.btn.p{background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff}.btn.p:hover{filter:brightness(1.08)}.btn.g{background:#eef2fb;color:#3a4f80}.btn.g:hover{background:#e2e9f8}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.say{background:linear-gradient(135deg,#eef3ff,#f6f0ff);border-radius:16px;padding:.9rem 1rem;color:#27407a;line-height:1.75;font-size:.98rem}
+.idea{border:1px solid #e3eaf7;border-radius:14px;padding:.8rem .9rem;background:#fff}
+.idea.sel{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.18)}
+.act{border:2px solid #dbe4f6;border-radius:16px;padding:.9rem;cursor:pointer;background:#fff;transition:.15s;text-align:left}
+.act:hover{border-color:#a5b4fc}.act.on{border-color:#4f46e5;background:#f1f0ff;box-shadow:0 4px 12px rgba(79,70,229,.16)}
+.act .big{font-size:1.5rem;font-weight:900;color:var(--ink)}
+textarea,select,input[type=text]{width:100%;border:2px solid #dbe4f6;border-radius:12px;padding:.55rem .75rem;font-size:.95rem;background:#fff;color:#1e293b;outline:none}
+textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
+.starter{display:inline-block;margin:.2rem .3rem .2rem 0;padding:.25rem .7rem;border-radius:99px;background:#fff;border:1.5px dashed #a5b4fc;color:#4338ca;font-size:.82rem;font-weight:700;cursor:pointer}
+.starter:hover{background:#eef0ff}
+.ty{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;border-radius:50%;color:#fff;font-weight:900;font-size:.8rem}
+.fade{animation:fd .25s ease}@keyframes fd{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body class="pb-24">
+
+<nav class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white shadow-md sticky top-0 z-40">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+    <div class="text-center sm:text-left">
+      <h1 class="text-lg font-bold tracking-wide">ASRA 反思評量 <span class="font-normal opacity-80 text-sm">| 看見自己的想法,決定下一步</span></h1>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap justify-center">
+      <a id="nav-back" href="ANALYTICS-student.html" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5"><i class="fas fa-compass"></i> 知識羅盤</a>
+      <a href="Knowledge Building Forum.html?home=1" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5"><i class="fas fa-comments"></i> 論壇</a>
+      <a href="index.html" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5"><i class="fas fa-home"></i> 首頁</a>
+      <div id="userbar"></div>
+    </div>
+  </div>
+</nav>
+
+<main class="max-w-5xl mx-auto px-4 py-6 space-y-5">
+
+  <!-- 老師/管理者:選一位學生看 -->
+  <div id="staff-box" class="card hidden" style="background:#fffbea;border-color:#f3dc9d">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="font-bold text-amber-800"><i class="fas fa-user-graduate mr-1"></i> 老師檢視:</span>
+      <select id="staff-class" class="hidden" style="width:auto;min-width:10rem"></select>
+      <select id="staff-student" style="width:auto;min-width:12rem"></select>
+      <span class="text-xs text-amber-800">圖表與證據來自論壇紀錄;學生寫的反思與計畫會依日期留下完整紀錄,這裡只能查看、不能代寫。</span>
+    </div>
+  </div>
+
+  <!-- 這是什麼 -->
+  <section class="card" id="intro">
+    <div class="flex flex-wrap items-start gap-4">
+      <div class="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-2xl shadow flex-shrink-0"><i class="fas fa-seedling"></i></div>
+      <div class="flex-1 min-w-[16rem]">
+        <h2 class="text-xl font-black text-slate-800">ASRA 是什麼?</h2>
+        <p class="say mt-2">ASRA 的意思是「用分析幫忙我們<b>反思</b>」。論壇會把你說過的話、同學回應你的話,整理成圖和清單,當作<b>證據</b>。你看著證據想一想:<b>我的想法走到哪裡了?還缺什麼?下一步我要做什麼?</b>然後再去做、再回來檢查,一輪一輪越來越好。</p>
+      </div>
+    </div>
+    <div class="mt-4 flex gap-1 sm:gap-2" id="stepper" role="tablist" aria-label="ASRA 五個步驟"></div>
+    <div class="mt-3 flex items-center justify-between gap-2">
+      <button class="btn g" id="prev"><i class="fas fa-arrow-left"></i> 上一步</button>
+      <div class="text-xs text-slate-500 text-center" id="round-note"></div>
+      <button class="btn p" id="next">下一步 <i class="fas fa-arrow-right"></i></button>
+    </div>
+  </section>
+
+  <section id="panel" class="space-y-4"></section>
+
+  <p class="text-xs text-slate-400 text-center">你寫下的反思與計畫會一筆一筆留下來(含日期時間),老師可以看到。<span id="sync-note"></span></p>
+</main>
+
+<script src="kb-asra-core.js"></script>
+
+<script>
+/* ============ 畫面 ============ */
+(function () {
+  var STEPS = [
+    { zh: '看看走過的路', en: 'Monitoring', k: 'mon' },
+    { zh: '量量走多遠', en: 'Evaluation', k: 'eval' },
+    { zh: '用證據想一想', en: 'Reflection', k: 'refl' },
+    { zh: '決定下一步', en: 'Self-regulation', k: 'plan' },
+    { zh: '回頭再檢查', en: 'Iteration', k: 'iter' }
+  ];
+  var ACTS = {
+    evidence: { big: '補證據', icon: 'fa-magnifying-glass', tip: '去查資料、做實驗、量一量、看一看,把看到的結果記下來。', ph: '例如:我要用溫度計量三次,把數字寫下來。' },
+    revise: { big: '改想法', icon: 'fa-pen-to-square', tip: '把原本的想法改得更清楚、更正確,或寫出新的結論。', ph: '例如:我要把「影子會變短」改成「太陽越高,影子越短」。' },
+    team: { big: '找夥伴', icon: 'fa-people-group', tip: '邀請同學一起想,或去回應一位還沒回應你的同學。', ph: '例如:我要問 S05 的看法,再回應他的想法。' }
+  };
+  var user = null, uid = null, readonly = false, data = null, nodes = [], topics = [], names = {};
+  var cur = 0, selIdea = null, showAll = false;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function nameOf(id) { return names[id] || '同學'; }
+  function cut(s, n) { s = String(s || '').replace(/\s+/g, ' '); return s.length > n ? s.slice(0, n) + '…' : s; }
+
+  /* ---- 這位學生的反思與計畫:每次存檔都「新增一筆有日期的紀錄」,不覆蓋舊的(見 kb-asra.js) ---- */
+  var S = { notes: {}, refl: [], plans: [], seen: {} };
+  function reload() { S = KBAsra.derive(uid); }
+  function ideaSnap(postId) { var i = ideaById(postId); return i ? { ideaTitle: i.title, ideaStatus: i.status, topic: i.topic, topicId: i.topicId } : {}; }
+  function add(e) { var x = KBAsra.append(uid, e); reload(); return x; }
+
+  function link(n) { return 'Knowledge Building Forum.html?topic=' + encodeURIComponent(n.topicId) + '&node=' + encodeURIComponent(n.id); }
+  function tyDot(t) { return '<span class="ty" style="background:' + ASRA.TCOLOR[t] + '">' + (ASRA.TSYM[t] || '·') + '</span>'; }
+  function stPill(s) { return { wait: '<span class="pill todo"><i class="fas fa-hourglass-half"></i> 等同學回應</span>', check: '<span class="pill warn"><i class="fas fa-flask"></i> 待查證</span>', ok: '<span class="pill ok"><i class="fas fa-circle-check"></i> 有證據</span>', grow: '<span class="pill dev"><i class="fas fa-seedling"></i> 在發展</span>' }[s]; }
+  function ideaById(id) { return data.ideas.filter(function (i) { return i.id === id; })[0]; }
+
+  /* ---- 步驟列 ---- */
+  function renderStepper() {
+    $('stepper').innerHTML = STEPS.map(function (s, i) {
+      return '<button type="button" class="step-btn' + (i === cur ? ' on' : '') + (i < cur ? ' done' : '') + '" data-i="' + i + '" role="tab" aria-selected="' + (i === cur) + '"><span class="dot">' + (i < cur ? '<i class="fas fa-check"></i>' : (i + 1)) + '</span><span class="zh">' + s.zh + '</span><span class="en">' + s.en + '</span></button>';
+    }).join('');
+    Array.prototype.forEach.call($('stepper').querySelectorAll('.step-btn'), function (b) { b.onclick = function () { go(+b.getAttribute('data-i')); }; });
+    $('prev').disabled = cur === 0; $('next').disabled = cur === STEPS.length - 1;
+    var rounds = S.plans.filter(function (p) { return p.reeval && p.reeval.length; }).length;
+    syncNote();
+    $('round-note').textContent = '第 ' + (cur + 1) + ' 步 / 共 5 步' + (S.plans.length ? ' · 已訂 ' + S.plans.length + ' 個計畫' : '') + (rounds ? ' · 已再評估 ' + rounds + ' 次' : '');
+  }
+  function syncNote() {
+    var el = $('sync-note'); if (!el) return;
+    var c = (window.KB && KB.cloud && KB.cloud.mode === 'cloud') ? KB.cloud : null, n = uid ? KBAsra.pending(uid) : 0;
+    el.textContent = !c ? '(目前只存在這台電腦)' : (c.asraError ? '(雲端還不能存 ASRA 紀錄,暫存在這台電腦;請管理者更新資料庫規則)' : (n ? '(' + n + ' 筆正在送到雲端…)' : '(已同步到雲端 ☁)'));
+  }
+  function go(i) { cur = Math.max(0, Math.min(STEPS.length - 1, i)); if (!readonly) KBAsra.seenSet(uid, cur); renderStepper(); renderPanel(); var p = $('intro'); try { p.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }
+
+  function head(n, zh, en, icon, story) {
+    return '<div class="card fade"><div class="flex items-center gap-3 mb-2"><span class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black">' + n + '</span><div><h3 class="text-xl font-black text-slate-800">' + zh + ' <span class="text-xs font-bold text-slate-400 tracking-wide">' + en + '</span></h3></div></div><p class="say">' + story + '</p></div>';
+  }
+  function roNote() { return readonly ? '<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3"><i class="fas fa-eye mr-1"></i>你是老師檢視模式:只能看資料,不能代學生寫反思或計畫。</p>' : ''; }
+
+  /* ---- 1. 看看走過的路 ---- */
+  function panelMon() {
+    var d = data, max = Math.max.apply(null, ASRA.TYPES.map(function (t) { return d.byType[t]; }).concat([1]));
+    var top = ASRA.TYPES.slice().sort(function (a, b) { return d.byType[b] - d.byType[a]; })[0];
+    var story = d.posts === 0 ? '你還沒有在論壇發過貼文。先去論壇說說你的想法,回來這裡就能看到你走過的路了!'
+      : '到目前為止,你在論壇一共發了 <b>' + d.posts + '</b> 則貼文,其中 <b>' + d.given + '</b> 則是回應同學。有 <b>' + d.partners + '</b> 位同學回應過你。你最常做的是「<b>' + ASRA.TNAME[top] + '</b>」。';
+    var bars = ASRA.TYPES.map(function (t) {
+      return '<div class="flex items-center gap-2 mb-2">' + tyDot(t) + '<span class="w-10 font-bold text-sm text-slate-700">' + ASRA.TNAME[t] + '</span><div class="bar flex-1"><i style="width:' + Math.round(d.byType[t] / max * 100) + '%;background:' + ASRA.TCOLOR[t] + '"></i></div><span class="w-8 text-right font-black text-slate-700">' + d.byType[t] + '</span></div>';
+    }).join('');
+    var dmax = Math.max.apply(null, d.days.map(function (x) { return x.n; }).concat([1]));
+    var tl = d.days.length ? d.days.map(function (x) { return '<div class="flex flex-col items-center justify-end" style="min-width:26px" title="' + ASRA.mmdd(x.ts) + ':' + x.n + ' 則"><div style="width:16px;height:' + Math.max(6, Math.round(x.n / dmax * 70)) + 'px;border-radius:6px 6px 2px 2px;background:#6366f1"></div><span class="text-[10px] text-slate-500 mt-1">' + ASRA.mmdd(x.ts) + '</span></div>'; }).join('') : '<span class="text-sm text-slate-400">還沒有發言紀錄</span>';
+    var note = S.notes.mon || '';
+    return head(1, '看看走過的路', 'Monitoring · 學習歷程監控', '', story) +
+      '<div class="card fade"><div class="grid grid-cols-2 sm:grid-cols-5 gap-3">' +
+      '<div class="tile"><b>' + d.posts + '</b><span>我發的貼文</span></div><div class="tile"><b>' + d.given + '</b><span>我回應同學</span></div><div class="tile"><b>' + d.received + '</b><span>同學回應我</span></div><div class="tile"><b>' + d.topics + '</b><span>參加的討論區</span></div><div class="tile"><b>' + d.days.length + '</b><span>發言的天數</span></div></div>' +
+      '<div class="grid md:grid-cols-2 gap-5 mt-5"><div><h4 class="font-black text-slate-700 mb-2">我做過哪些事?</h4>' + bars + '</div><div><h4 class="font-black text-slate-700 mb-2">我哪幾天有發言?</h4><div class="flex gap-1 items-end overflow-x-auto pb-1" style="min-height:96px">' + tl + '</div></div></div>' +
+      '<div class="mt-4"><label class="font-black text-slate-700 text-sm">看完圖,你發現了什麼?(寫一句話)</label><input type="text" id="mon-note" maxlength="120" value="' + esc(note) + '" placeholder="例如:我發現我很常提問,但很少用資料說明。"' + (readonly ? ' disabled' : '') + '></div>' + roNote() +
+      '<p class="mt-3 text-sm"><a class="text-indigo-600 font-bold underline" id="more-analytics" href="ANALYTICS-student.html"><i class="fas fa-chart-line mr-1"></i>想看更多圖?到「知識羅盤」</a></p></div>';
+  }
+
+  /* ---- 2. 量量走多遠 ---- */
+  function panelEval() {
+    var d = data, c = d.counts;
+    var story = d.ideas.length === 0 ? '你還沒有想法可以評量。先去論壇發表一個想法吧!'
+      : '我們把你的每個想法看一看:有 <b>' + (c.ok + c.grow) + '</b> 個想法已經有證據,有 <b>' + c.check + '</b> 個想法還需要查證,有 <b>' + c.wait + '</b> 個想法還在等同學回應。想一想:<b>哪一個最需要你先照顧?</b>';
+    var list = d.ideas.slice().sort(function (a, b) { return (b.date || 0) - (a.date || 0); });
+    var shown = showAll ? list : list.slice(0, 8);
+    var cards = shown.map(function (i) {
+      return '<div class="idea"><div class="flex items-start gap-2">' + tyDot(i.type) + '<div class="flex-1 min-w-0"><div class="font-black text-slate-800 truncate">' + esc(i.title) + '</div><div class="text-xs text-slate-500">' + ASRA.mmdd(i.date) + (i.topic ? ' · ' + esc(cut(i.topic, 14)) : '') + '</div></div>' + stPill(i.status) + '</div>' +
+        '<p class="text-sm text-slate-600 mt-2">' + esc(cut(i.content, 70)) + '</p>' +
+        '<div class="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-600"><span><i class="fas fa-reply mr-1"></i>同學回應 ' + i.replies + ' 則</span>' + (i.diff ? '<span class="text-rose-600"><i class="fas fa-triangle-exclamation mr-1"></i>不同看法 ' + i.diff + ' 則</span>' : '') + '<span>' + (i.ownEvid ? '<i class="fas fa-circle-check text-emerald-600 mr-1"></i>我有寫證據' : '<i class="fas fa-circle-question text-amber-600 mr-1"></i>我還沒寫證據') + '</span></div>' +
+        '<div class="flex gap-2 mt-3"><a class="btn g" style="padding:.3rem .8rem;font-size:.8rem" href="' + esc(link(i)) + '">看原文</a><button type="button" class="btn p" style="padding:.3rem .8rem;font-size:.8rem" data-reflect="' + esc(i.id) + '">拿這個去反思 <i class="fas fa-arrow-right"></i></button></div></div>';
+    }).join('');
+    return head(2, '量量走多遠', 'Evaluation · 知識進展評估', '', story) +
+      '<div class="card fade"><div class="flex flex-wrap gap-2 mb-3">' + stPill('ok') + '<span class="text-xs text-slate-500 self-center">有人回應、也有證據</span>' + stPill('check') + '<span class="text-xs text-slate-500 self-center">有人回應但還沒證據</span>' + stPill('wait') + '<span class="text-xs text-slate-500 self-center">還沒人回應</span>' + stPill('grow') + '<span class="text-xs text-slate-500 self-center">已經被改進或整合</span></div>' +
+      '<div class="grid md:grid-cols-2 gap-3">' + (cards || '<p class="text-slate-400 text-sm">還沒有貼文</p>') + '</div>' +
+      (list.length > 8 ? '<div class="text-center mt-3"><button type="button" class="btn g" id="toggle-all">' + (showAll ? '只看最新 8 個' : '看全部 ' + list.length + ' 個想法') + '</button></div>' : '') + '</div>';
+  }
+
+  /* ---- 3. 用證據想一想 ---- */
+  var STARTERS = ['我原本的想法是…', '同學的回應讓我發現…', '我改變(或沒有改變)想法,是因為…', '我的證據是…', '我現在還缺少…'];
+  function panelRefl() {
+    var d = data;
+    if (!d.ideas.length) return head(3, '用證據想一想', 'Evidence-based Reflection · 證據支持的反思', '', '你還沒有想法可以反思。先去論壇發表,再回來這裡吧!');
+    if (!selIdea || !ideaById(selIdea)) selIdea = d.ideas.slice().sort(function (a, b) { return (b.date || 0) - (a.date || 0); })[0].id;
+    var i = ideaById(selIdea);
+    var opts = d.ideas.slice().sort(function (a, b) { return (b.date || 0) - (a.date || 0); }).map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === selIdea ? ' selected' : '') + '>' + ASRA.mmdd(x.date) + ' ' + ASRA.TNAME[x.type] + ':' + esc(cut(x.title, 20)) + '</option>'; }).join('');
+    var reps = i.replyNodes.slice().sort(function (a, b) { return (a.date || 0) - (b.date || 0); }).map(function (r) {
+      return '<div class="flex gap-2 py-2 border-t border-slate-100">' + tyDot(r.type) + '<div class="min-w-0"><div class="text-xs text-slate-500">' + esc(nameOf(r.author)) + ' · ' + ASRA.mmdd(r.date) + '</div><div class="text-sm text-slate-700">' + esc(cut(r.content || r.title, 90)) + '</div></div></div>';
+    }).join('') || '<p class="text-sm text-slate-400 py-2">還沒有同學回應這個想法。</p>';
+    var hints = [];
+    hints.push(i.ownEvid ? '✅ 你的貼文裡有寫到證據(像是實驗、觀察、資料)。' : '❓ 你的貼文裡還沒看到證據。想想:我是怎麼知道的?');
+    hints.push(i.replies ? '💬 有 ' + i.replies + ' 則同學回應' + (i.diff ? ',其中 ' + i.diff + ' 則是不同的看法。' : '。') : '💬 還沒有人回應,也許可以再問得更清楚。');
+    if (i.developed) hints.push('🌱 這個想法後來被改進或整合了。');
+    var mine = S.refl.filter(function (r) { return r.postId === selIdea; }).sort(function (a, b) { return b.ts - a.ts; });
+    var history = mine.map(function (r) { return '<div class="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 mb-2"><div class="text-[11px] text-indigo-500 font-bold">' + KBAsra.fmtTime(r.ts) + '</div><div class="text-sm text-slate-700 whitespace-pre-wrap">' + esc(r.text) + '</div></div>'; }).join('');
+    return head(3, '用證據想一想', 'Evidence-based Reflection · 證據支持的反思', '', '挑一個想法,看看當時的討論(證據)。再用幾句話寫下:<b>我為什麼這樣想?後來有沒有改變?現在還缺什麼?</b>') +
+      '<div class="card fade"><label class="font-black text-slate-700 text-sm">我要反思哪一個想法?</label><select id="idea-sel">' + opts + '</select>' +
+      '<div class="grid md:grid-cols-2 gap-4 mt-4"><div class="idea"><div class="text-xs font-black text-indigo-600 mb-1">我的想法</div><div class="flex gap-2">' + tyDot(i.type) + '<div><div class="font-black text-slate-800">' + esc(i.title) + '</div><p class="text-sm text-slate-600 mt-1">' + esc(i.content) + '</p></div></div><div class="mt-2">' + stPill(i.status) + ' <a class="text-xs text-indigo-600 underline ml-2" href="' + esc(link(i)) + '">到論壇看原文</a></div></div>' +
+      '<div class="idea"><div class="text-xs font-black text-indigo-600 mb-1">同學的回應(證據)</div>' + reps + '</div></div>' +
+      '<div class="say mt-4"><b>分析小提醒</b><br>' + hints.join('<br>') + '</div>' +
+      '<div class="mt-4"><div class="font-black text-slate-700 text-sm mb-1">不知道怎麼開頭?點一點:</div>' + STARTERS.map(function (s) { return '<span class="starter" data-s="' + esc(s) + '">' + esc(s) + '</span>'; }).join('') + '</div>' +
+      '<textarea id="refl-text" rows="5" maxlength="600" class="mt-2" placeholder="用 2~5 句話寫下你的反思…"' + (readonly ? ' disabled' : '') + '></textarea>' +
+      '<div class="flex flex-wrap gap-2 mt-3"><button type="button" class="btn p" id="refl-save"' + (readonly ? ' disabled' : '') + '><i class="fas fa-floppy-disk"></i> 存下我的反思</button><button type="button" class="btn g" id="refl-next">下一步:決定怎麼做 <i class="fas fa-arrow-right"></i></button></div>' + roNote() +
+      (history ? '<div class="mt-4"><div class="font-black text-slate-700 text-sm mb-2">我之前寫過的反思</div>' + history + '</div>' : '') + '</div>';
+  }
+
+  /* ---- 4. 決定下一步 ---- */
+  var chosenAct = null;
+  function panelPlan() {
+    var d = data;
+    if (!d.ideas.length) return head(4, '決定下一步', 'Self-regulation · 自我調整', '', '先有想法才能決定下一步喔!去論壇發表吧。');
+    if (!selIdea || !ideaById(selIdea)) selIdea = d.ideas[d.ideas.length - 1].id;
+    var opts = d.ideas.slice().sort(function (a, b) { return (b.date || 0) - (a.date || 0); }).map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === selIdea ? ' selected' : '') + '>' + ASRA.mmdd(x.date) + ' ' + ASRA.TNAME[x.type] + ':' + esc(cut(x.title, 20)) + '</option>'; }).join('');
+    var i = ideaById(selIdea);
+    var suggest = i.status === 'wait' ? '這個想法還沒人回應,可以考慮「找夥伴」。' : (i.status === 'check' ? '這個想法還沒有證據,可以考慮「補證據」。' : (i.status === 'ok' ? '這個想法有證據了,可以考慮「改想法」寫得更完整。' : '這個想法正在長大,可以繼續「改想法」或「找夥伴」。'));
+    var cards = Object.keys(ACTS).map(function (k) { var a = ACTS[k]; return '<button type="button" class="act' + (chosenAct === k ? ' on' : '') + '" data-act="' + k + '"><div class="big"><i class="fas ' + a.icon + ' mr-2 text-indigo-500"></i>' + a.big + '</div><div class="text-sm text-slate-600 mt-1">' + a.tip + '</div></button>'; }).join('');
+    var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (p) { var t = ideaById(p.postId); return '<div class="idea mb-2"><div class="flex items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span></div><div class="text-sm text-slate-800 mt-1">' + esc(p.text) + '</div>' + (t ? '<div class="text-xs text-slate-500 mt-1">想法:' + esc(cut(t.title, 24)) + '</div>' : '') + '</div>'; }).join('');
+    return head(4, '決定下一步', 'Self-regulation · 自我調整', '', '想完了,就要自己決定接下來怎麼做!你可以<b>補證據</b>、<b>改想法</b>,或<b>找夥伴</b>一起想。選一個,寫下你的小計畫。') +
+      '<div class="card fade"><label class="font-black text-slate-700 text-sm">這個計畫是為了哪一個想法?</label><select id="plan-idea">' + opts + '</select><p class="text-xs text-indigo-700 mt-1">💡 ' + suggest + '</p>' +
+      '<div class="grid sm:grid-cols-3 gap-3 mt-4">' + cards + '</div>' +
+      '<textarea id="plan-text" rows="3" maxlength="300" class="mt-3" placeholder="' + esc(chosenAct ? ACTS[chosenAct].ph : '先選一個做法,再寫下你要怎麼做') + '"' + (readonly ? ' disabled' : '') + '></textarea>' +
+      '<div class="flex flex-wrap gap-2 mt-3"><button type="button" class="btn p" id="plan-save"' + (readonly ? ' disabled' : '') + '><i class="fas fa-flag-checkered"></i> 訂好我的計畫</button><a class="btn g" id="plan-forum" href="' + esc(link(i)) + '"><i class="fas fa-comments"></i> 去論壇行動</a></div>' + roNote() +
+      (plans ? '<div class="mt-4"><div class="font-black text-slate-700 text-sm mb-2">我訂過的計畫</div>' + plans + '</div>' : '') + '</div>';
+  }
+
+  /* ---- 5. 回頭再檢查 ---- */
+  function panelIter() {
+    var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; });
+    if (!plans.length) return head(5, '回頭再檢查', 'Iterative Improvement · 持續改進與再評估', '', '你還沒有訂計畫。到上一步訂一個小計畫、去論壇做做看,再回來檢查有沒有進步!');
+    var cards = plans.map(function (p) {
+      var t = ideaById(p.postId) || { title: '(想法)', topicId: '', id: p.postId }, f = ASRA.followUp(nodes, uid, p), last = p.reeval && p.reeval.length ? p.reeval[p.reeval.length - 1] : null;
+      var msg = f.acted ? '太棒了!計畫訂好後,你在這個討論區又發了 <b>' + f.mine + '</b> 則貼文' + (f.replies ? ',還有 <b>' + f.replies + '</b> 則同學的新回應' : '') + (f.evid ? ',其中 ' + f.evid + ' 則有寫證據' : '') + '。' : '計畫訂好之後,還沒有看到新的貼文或回應。去論壇做一做吧!';
+      return '<div class="idea mb-3" data-plan="' + esc(p.id) + '"><div class="flex flex-wrap items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span><span class="text-xs text-slate-500">想法:' + esc(cut(t.title, 22)) + '</span>' + (last ? '<span class="pill ' + (last.result === 'better' ? 'ok' : 'warn') + '">' + (last.result === 'better' ? '已改善' : '還要努力') + '</span>' : '') + '</div>' +
+        '<div class="text-sm text-slate-800 mt-1">我的計畫:' + esc(p.text) + '</div><div class="say mt-2" style="font-size:.9rem">' + msg + '</div>' +
+        '<div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-sm font-black text-slate-700">再評估:原來的問題有變好嗎?</span><button type="button" class="btn g" style="padding:.3rem .8rem;font-size:.82rem" data-re="better" data-id="' + esc(p.id) + '"' + (readonly ? ' disabled' : '') + '>🌟 變好了</button><button type="button" class="btn g" style="padding:.3rem .8rem;font-size:.82rem" data-re="more" data-id="' + esc(p.id) + '"' + (readonly ? ' disabled' : '') + '>💪 還要再努力</button></div>' +
+        (last && last.result === 'more' ? '<div class="mt-2"><button type="button" class="btn p" style="padding:.3rem .9rem;font-size:.82rem" data-again="' + esc(p.postId) + '">再來一輪:回到第 3 步反思 <i class="fas fa-rotate-right"></i></button></div>' : '') + '</div>';
+    }).join('');
+    return head(5, '回頭再檢查', 'Iterative Improvement · 持續改進與再評估', '', '做完了嗎?我們回頭<b>檢查</b>一下:有沒有新的行動?原本的問題變好了嗎?如果還沒完全好,就再來一輪,一次比一次進步。') +
+      '<div class="card fade">' + cards + roNote() + '</div>' + panelLog();
+  }
+  // 我的完整紀錄(依日期,舊的不會被改掉)
+  function panelLog() {
+    var list = KBAsra.entries(uid).slice().reverse();
+    if (!list.length) return '';
+    var col = { note: 'bg-slate-100 text-slate-600', refl: 'bg-indigo-100 text-indigo-700', plan: 'bg-emerald-100 text-emerald-700', reeval: 'bg-amber-100 text-amber-700' };
+    var rows = list.map(function (e) {
+      var d = KBAsra.describe(e);
+      return '<div class="py-2 border-t border-slate-100 flex gap-3"><div class="w-28 flex-shrink-0 text-xs text-slate-500">' + d.time + '</div><div class="min-w-0"><span class="inline-block text-[11px] font-black px-2 py-0.5 rounded-full ' + (col[e.kind] || '') + '">' + d.label + (d.act ? ':' + d.act : '') + '</span>' +
+        (d.idea ? ' <span class="text-xs text-slate-500">想法:' + esc(cut(d.idea, 22)) + '</span>' : '') + '<div class="text-sm text-slate-700 whitespace-pre-wrap">' + esc(d.text) + '</div></div></div>';
+    }).join('');
+    return '<div class="card fade"><h4 class="font-black text-slate-700 mb-1"><i class="fas fa-clock-rotate-left mr-1 text-indigo-500"></i>我的完整紀錄</h4><p class="text-xs text-slate-500 mb-2">每次存下的內容都會留著,依日期排列;老師也能看到,陪你一起想。</p>' + rows + '</div>';
+  }
+
+  /* ---- 畫面組合與事件 ---- */
+  function renderPanel() {
+    var k = STEPS[cur].k;
+    $('panel').innerHTML = k === 'mon' ? panelMon() : k === 'eval' ? panelEval() : k === 'refl' ? panelRefl() : k === 'plan' ? panelPlan() : panelIter();
+    bind(k);
+  }
+  function bind(k) {
+    var P = $('panel'), q = function (s) { return P.querySelector(s); }, qa = function (s) { return Array.prototype.slice.call(P.querySelectorAll(s)); };
+    if (k === 'mon') { var mn = q('#mon-note'); if (mn && !readonly) mn.onchange = function () { var v = mn.value.trim(); if (v === (S.notes.mon || '')) return; add({ kind: 'note', ref: 'mon', text: v }); renderStepper(); }; var ma = q('#more-analytics'); if (ma) ma.href = backHref(); }
+    if (k === 'eval') {
+      var ta = q('#toggle-all'); if (ta) ta.onclick = function () { showAll = !showAll; renderPanel(); };
+      qa('[data-reflect]').forEach(function (b) { b.onclick = function () { selIdea = b.getAttribute('data-reflect'); go(2); }; });
+    }
+    if (k === 'refl') {
+      var sel = q('#idea-sel'); if (sel) sel.onchange = function () { selIdea = sel.value; renderPanel(); };
+      var tx = q('#refl-text');
+      qa('.starter').forEach(function (s) { s.onclick = function () { if (readonly) return; tx.value = (tx.value ? tx.value + '\n' : '') + s.getAttribute('data-s'); tx.focus(); }; });
+      var sv = q('#refl-save'); if (sv) sv.onclick = function () { var v = tx.value.trim(); if (!v) { tx.focus(); return; } add(Object.assign({ kind: 'refl', postId: selIdea, text: v }, ideaSnap(selIdea))); renderStepper(); renderPanel(); toast('已存下你的反思 ✓'); };
+      var nx = q('#refl-next'); if (nx) nx.onclick = function () { go(3); };
+    }
+    if (k === 'plan') {
+      var pi = q('#plan-idea'); if (pi) pi.onchange = function () { selIdea = pi.value; renderPanel(); };
+      qa('[data-act]').forEach(function (b) { b.onclick = function () { if (readonly) return; chosenAct = b.getAttribute('data-act'); var keep = (q('#plan-text') || {}).value; renderPanel(); if (keep) q('#plan-text').value = keep; }; });
+      var ps = q('#plan-save'); if (ps) ps.onclick = function () {
+        var tx2 = q('#plan-text'), v = tx2.value.trim();
+        if (!chosenAct) { toast('先選一個做法喔 👆'); return; }
+        if (!v) { tx2.focus(); return; }
+        add(Object.assign({ kind: 'plan', postId: selIdea, act: chosenAct, text: v }, ideaSnap(selIdea))); chosenAct = null; renderStepper(); renderPanel(); toast('計畫訂好了!去論壇做做看 🚀');
+      };
+    }
+    if (k === 'iter') {
+      qa('[data-re]').forEach(function (b) { b.onclick = function () { var p = S.plans.filter(function (x) { return x.id === b.getAttribute('data-id'); })[0]; if (!p) return; var fu = ASRA.followUp(nodes, uid, p); add({ kind: 'reeval', planId: p.id, result: b.getAttribute('data-re'), follow: { mine: fu.mine, replies: fu.replies, evid: fu.evid }, postId: p.postId, ideaTitle: p.ideaTitle }); renderStepper(); renderPanel(); toast(b.getAttribute('data-re') === 'better' ? '太好了,繼續保持!🌟' : '沒關係,再來一輪就會更好 💪'); }; });
+      qa('[data-again]').forEach(function (b) { b.onclick = function () { selIdea = b.getAttribute('data-again'); go(2); }; });
+    }
+  }
+  function toast(msg) {
+    var t = document.createElement('div'); t.textContent = msg; t.setAttribute('role', 'status');
+    t.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1e293b;color:#fff;padding:.6rem 1.2rem;border-radius:99px;font-weight:700;z-index:90;box-shadow:0 8px 20px rgba(0,0,0,.25)';
+    document.body.appendChild(t); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 1800);
+  }
+  function backHref() { return 'ANALYTICS-student.html' + (readonly && uid ? '?student=' + encodeURIComponent(uid) : ''); }
+
+  /* ---- 資料載入 ---- */
+  function build() {
+    var c = KB.content.get(); nodes = c.nodes || []; topics = c.topics || [];
+    var ul = KB.compat.userList(user.role); names = {}; Object.keys(ul).forEach(function (k) { names[k] = ul[k].name; });
+    data = ASRA.analyze(nodes, uid, topics);
+    reload();
+    $('nav-back').href = backHref();
+    renderStepper(); renderPanel();
+  }
+  function setupStaff() {
+    var ul = KB.compat.userList(user.role), students = Object.keys(ul).map(function (k) { return ul[k]; }).filter(function (u) { return u.role !== 'teacher'; });
+    $('staff-box').classList.remove('hidden');
+    var cs = $('staff-class'), clsOf = function (u) { return u.classId || '__none__'; }, groups = {};
+    students.forEach(function (u) { (groups[clsOf(u)] = groups[clsOf(u)] || { name: u.className || '(還沒分班)', n: 0 }).n++; });
+    var keys = Object.keys(groups), want = null; try { want = new URLSearchParams(location.search).get('student'); } catch (e) {}
+    var wantU = want && students.filter(function (u) { return u.id === want; })[0], filt = 'all';
+    try { filt = localStorage.getItem('kb_class_filter') || 'all'; } catch (e) {}
+    if (keys.length < 2 || !groups[filt]) filt = 'all'; if (wantU && keys.length >= 2) filt = clsOf(wantU);
+    var fill = function () {
+      var list = students.filter(function (u) { return filt === 'all' || clsOf(u) === filt; });
+      $('staff-student').innerHTML = list.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>'; }).join('') || '<option>無學生資料</option>';
+      return list;
+    };
+    if (keys.length >= 2) {
+      cs.classList.remove('hidden');
+      cs.innerHTML = '<option value="all">全部班級(' + students.length + ' 人)</option>' + keys.sort(function (a, b) { return groups[a].name.localeCompare(groups[b].name, 'zh-Hant'); }).map(function (k) { return '<option value="' + esc(k) + '">' + esc(groups[k].name) + '(' + groups[k].n + ' 人)</option>'; }).join('');
+      cs.value = filt;
+      cs.onchange = function () { filt = cs.value; try { localStorage.setItem('kb_class_filter', filt); } catch (e) {} var l = fill(); if (l.length) { uid = l[0].id; $('staff-student').value = uid; selIdea = null; build(); } };
+    }
+    var list = fill(); uid = wantU ? wantU.id : (list[0] && list[0].id);
+    if (uid) $('staff-student').value = uid;
+    $('staff-student').onchange = function () { uid = this.value; selIdea = null; build(); };
+  }
+  function init() {
+    user = KBUI.requireLogin({ roles: ['master', 'teacher', 'student'] });
+    if (!user) return;
+    KBUI.mountUserBar({ container: $('userbar') });
+    readonly = user.role !== 'student';
+    $('prev').onclick = function () { go(cur - 1); }; $('next').onclick = function () { go(cur + 1); };
+    if (readonly) setupStaff(); else uid = user.id;
+    if (!uid) { $('panel').innerHTML = '<div class="card">目前沒有學生資料。</div>'; return; }
+    if (!readonly) KBAsra.seenSet(uid, 0); build();
+    KB.on(function (keys, remote) { if (remote && KB.auth.current()) { try { build(); } catch (e) {} } });
+    window.addEventListener('kb-asra-error', function () { syncNote(); });
+    KBAsra.onChange(function () { if (uid) { try { reload(); renderStepper(); if (STEPS[cur].k === 'iter' || STEPS[cur].k === 'refl' || STEPS[cur].k === 'plan') renderPanel(); } catch (e) {} } });
+  }
+  window.addEventListener('load', init);
+  window.ASRAPage = { go: go, state: function () { return { cur: cur, uid: uid, S: S, data: data, readonly: readonly }; } };
+})();
+</script>
+</body>
+</html>
