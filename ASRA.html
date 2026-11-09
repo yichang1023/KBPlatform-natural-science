@@ -44,6 +44,9 @@ textarea,select,input[type=text]{width:100%;border:2px solid #dbe4f6;border-radi
 textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
 .starter{display:inline-block;margin:.2rem .3rem .2rem 0;padding:.25rem .7rem;border-radius:99px;background:#fff;border:1.5px dashed #a5b4fc;color:#4338ca;font-size:.82rem;font-weight:700;cursor:pointer}
 .starter:hover{background:#eef0ff}
+.phase{display:inline-block;font-size:.7rem;font-weight:900;padding:.1rem .6rem;border-radius:99px}
+.qlab{display:flex;gap:.55rem;align-items:flex-start;font-weight:900;color:#334155;font-size:.95rem;line-height:1.5}
+.qno{flex:none;width:1.55rem;height:1.55rem;border-radius:50%;background:#4f46e5;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;margin-top:.05rem}
 .ty{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;border-radius:50%;color:#fff;font-weight:900;font-size:.8rem}
 .fade{animation:fd .25s ease}@keyframes fd{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 </style>
@@ -152,8 +155,11 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   }
   function go(i) { cur = Math.max(0, Math.min(STEPS.length - 1, i)); if (!readonly) KBAsra.seenSet(uid, cur); renderStepper(); renderPanel(); var p = $('intro'); try { p.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }
 
+  var PH_OF = { 1: 'analysis', 2: 'analysis', 3: 'problem', 4: 'plan' }, PH_COL = { analysis: 'background:#e0f2fe;color:#0369a1', problem: 'background:#ffe4e6;color:#be123c', plan: 'background:#d1fae5;color:#047857' };
+  function phaseChip(n) { var p = PH_OF[n]; if (!p) return ''; return '<div class="mt-0.5"><span class="phase" style="' + PH_COL[p] + '">' + KBAsra.PHASE[p][0] + ' <span style="opacity:.7">' + KBAsra.PHASE[p][1] + '</span></span></div>'; }
+  function qlab(k) { var q = KBAsra.QS[k]; return '<span class="qlab"><span class="qno">' + q.no + '</span><span>' + q.zh + '</span></span>'; }
   function head(n, zh, en, icon, story) {
-    return '<div class="card fade"><div class="flex items-center gap-3 mb-2"><span class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black">' + n + '</span><div><h3 class="text-xl font-black text-slate-800">' + zh + ' <span class="text-xs font-bold text-slate-400 tracking-wide">' + en + '</span></h3></div></div><p class="say">' + story + '</p></div>';
+    return '<div class="card fade"><div class="flex items-center gap-3 mb-2"><span class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black">' + n + '</span><div><h3 class="text-xl font-black text-slate-800">' + zh + ' <span class="text-xs font-bold text-slate-400 tracking-wide">' + en + '</span></h3>' + phaseChip(n) + '</div></div><p class="say">' + story + '</p></div>';
   }
   function roNote() { return readonly ? '<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3"><i class="fas fa-eye mr-1"></i>你是老師檢視模式:只能看資料,不能代學生寫反思或計畫。</p>' : ''; }
 
@@ -173,7 +179,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
       '<div class="card fade"><div class="grid grid-cols-2 sm:grid-cols-5 gap-3">' +
       '<div class="tile"><b>' + d.posts + '</b><span>我發的貼文</span></div><div class="tile"><b>' + d.given + '</b><span>我回應同學</span></div><div class="tile"><b>' + d.received + '</b><span>同學回應我</span></div><div class="tile"><b>' + d.topics + '</b><span>參加的討論區</span></div><div class="tile"><b>' + d.days.length + '</b><span>發言的天數</span></div></div>' +
       '<div class="grid md:grid-cols-2 gap-5 mt-5"><div><h4 class="font-black text-slate-700 mb-2">我做過哪些事?</h4>' + bars + '</div><div><h4 class="font-black text-slate-700 mb-2">我哪幾天有發言?</h4><div class="flex gap-1 items-end overflow-x-auto pb-1" style="min-height:96px">' + tl + '</div></div></div>' +
-      '<div class="mt-4"><label class="font-black text-slate-700 text-sm">看完圖,你發現了什麼?(寫一句話)</label><input type="text" id="mon-note" maxlength="120" value="' + esc(note) + '" placeholder="例如:我發現我很常提問,但很少用資料說明。"' + (readonly ? ' disabled' : '') + '></div>' + roNote() +
+      '<div class="mt-4"><label for="mon-note">' + qlab('q1') + '</label><p class="text-xs text-slate-500 mb-1">看看上面的圖和「哪幾天有發言」,寫一句話就好。</p><input type="text" id="mon-note" maxlength="120" value="' + esc(note) + '" placeholder="例如:我發現我很常提問,但很少用資料說明。"' + (readonly ? ' disabled' : '') + '></div>' + roNote() +
       '<p class="mt-3 text-sm"><a class="text-indigo-600 font-bold underline" id="more-analytics" href="ANALYTICS-student.html"><i class="fas fa-chart-line mr-1"></i>想看更多圖?到「知識羅盤」</a></p></div>';
   }
 
@@ -190,14 +196,20 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
         '<div class="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-600"><span><i class="fas fa-reply mr-1"></i>同學回應 ' + i.replies + ' 則</span>' + (i.diff ? '<span class="text-rose-600"><i class="fas fa-triangle-exclamation mr-1"></i>不同看法 ' + i.diff + ' 則</span>' : '') + '<span>' + (i.ownEvid ? '<i class="fas fa-circle-check text-emerald-600 mr-1"></i>我有寫證據' : '<i class="fas fa-circle-question text-amber-600 mr-1"></i>我還沒寫證據') + '</span></div>' +
         '<div class="flex gap-2 mt-3"><a class="btn g" style="padding:.3rem .8rem;font-size:.8rem" href="' + esc(link(i)) + '">看原文</a><button type="button" class="btn p" style="padding:.3rem .8rem;font-size:.8rem" data-reflect="' + esc(i.id) + '">拿這個去反思 <i class="fas fa-arrow-right"></i></button></div></div>';
     }).join('');
+    var byTopic = {}; d.ideas.forEach(function (x) { var k = x.topic || '(沒有分類)'; byTopic[k] = (byTopic[k] || 0) + 1; });
+    var tchips = Object.keys(byTopic).sort(function (a, b) { return byTopic[b] - byTopic[a]; }).map(function (k) { return '<span class="pill todo">' + esc(cut(k, 14)) + ' · ' + byTopic[k] + ' 個想法</span>'; }).join(' ');
+    var q2 = '<div class="card fade"><label for="q2-note">' + qlab('q2') + '</label><p class="text-xs text-slate-500 mb-2">看看上面的想法:你在哪些討論區說得最多?哪些很少提到?</p>' + (tchips ? '<div class="flex flex-wrap gap-1 mb-2">' + tchips + '</div>' : '') +
+      '<textarea id="q2-note" rows="2" maxlength="200" placeholder="例如:我講「光」講得最多,「影子」講得很少。"' + (readonly ? ' disabled' : '') + '>' + esc(S.notes.q2 || '') + '</textarea></div>';
     return head(2, '量量走多遠', 'Evaluation · 知識進展評估', '', story) +
       '<div class="card fade"><div class="flex flex-wrap gap-2 mb-3">' + stPill('ok') + '<span class="text-xs text-slate-500 self-center">有人回應、也有證據</span>' + stPill('check') + '<span class="text-xs text-slate-500 self-center">有人回應但還沒證據</span>' + stPill('wait') + '<span class="text-xs text-slate-500 self-center">還沒人回應</span>' + stPill('grow') + '<span class="text-xs text-slate-500 self-center">已經被改進或整合</span></div>' +
       '<div class="grid md:grid-cols-2 gap-3">' + (cards || '<p class="text-slate-400 text-sm">還沒有貼文</p>') + '</div>' +
-      (list.length > 8 ? '<div class="text-center mt-3"><button type="button" class="btn g" id="toggle-all">' + (showAll ? '只看最新 8 個' : '看全部 ' + list.length + ' 個想法') + '</button></div>' : '') + '</div>';
+      (list.length > 8 ? '<div class="text-center mt-3"><button type="button" class="btn g" id="toggle-all">' + (showAll ? '只看最新 8 個' : '看全部 ' + list.length + ' 個想法') + '</button></div>' : '') + '</div>' + q2;
   }
 
   /* ---- 3. 用證據想一想 ---- */
   var STARTERS = ['我原本的想法是…', '同學的回應讓我發現…', '我改變(或沒有改變)想法,是因為…', '我的證據是…', '我現在還缺少…'];
+  var STARTERS4 = ['我們很少討論到…', '我還不知道…', '這很重要,因為…', '我想知道…'];
+  function starterRow(list, target) { return list.map(function (s) { return '<span class="starter" data-s="' + esc(s) + '" data-for="' + target + '">' + esc(s) + '</span>'; }).join(''); }
   function panelRefl() {
     var d = data;
     if (!d.ideas.length) return head(3, '用證據想一想', 'Evidence-based Reflection · 證據支持的反思', '', '你還沒有想法可以反思。先去論壇發表,再回來這裡吧!');
@@ -213,19 +225,21 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     if (i.developed) hints.push('🌱 這個想法後來被改進或整合了。');
     var mine = S.refl.filter(function (r) { return r.postId === selIdea; }).sort(function (a, b) { return b.ts - a.ts; });
     var history = mine.map(function (r) { return '<div class="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 mb-2"><div class="text-[11px] text-indigo-500 font-bold">' + KBAsra.fmtTime(r.ts) + '</div><div class="text-sm text-slate-700 whitespace-pre-wrap">' + esc(r.text) + '</div></div>'; }).join('');
-    return head(3, '用證據想一想', 'Evidence-based Reflection · 證據支持的反思', '', '挑一個想法,看看當時的討論(證據)。再用幾句話寫下:<b>我為什麼這樣想?後來有沒有改變?現在還缺什麼?</b>') +
+    return head(3, '用證據想一想', 'Evidence-based Reflection · 證據支持的反思', '', '挑一個想法,看看當時的討論(證據)。再回答兩個問題:<b>我的想法有越想越深入嗎?還有哪些地方要再想深一點?</b>') +
       '<div class="card fade"><label class="font-black text-slate-700 text-sm">我要反思哪一個想法?</label><select id="idea-sel">' + opts + '</select>' +
       '<div class="grid md:grid-cols-2 gap-4 mt-4"><div class="idea"><div class="text-xs font-black text-indigo-600 mb-1">我的想法</div><div class="flex gap-2">' + tyDot(i.type) + '<div><div class="font-black text-slate-800">' + esc(i.title) + '</div><p class="text-sm text-slate-600 mt-1">' + esc(i.content) + '</p></div></div><div class="mt-2">' + stPill(i.status) + ' <a class="text-xs text-indigo-600 underline ml-2" href="' + esc(link(i)) + '">到論壇看原文</a></div></div>' +
       '<div class="idea"><div class="text-xs font-black text-indigo-600 mb-1">同學的回應(證據)</div>' + reps + '</div></div>' +
       '<div class="say mt-4"><b>分析小提醒</b><br>' + hints.join('<br>') + '</div>' +
-      '<div class="mt-4"><div class="font-black text-slate-700 text-sm mb-1">不知道怎麼開頭?點一點:</div>' + STARTERS.map(function (s) { return '<span class="starter" data-s="' + esc(s) + '">' + esc(s) + '</span>'; }).join('') + '</div>' +
-      '<textarea id="refl-text" rows="5" maxlength="600" class="mt-2" placeholder="用 2~5 句話寫下你的反思…"' + (readonly ? ' disabled' : '') + '></textarea>' +
+      '<div class="mt-4"><label for="refl-text">' + qlab('q3') + '</label><div class="mt-1 text-xs text-slate-500">不知道怎麼開頭?點一點:</div><div>' + starterRow(STARTERS, 'refl-text') + '</div>' +
+      '<textarea id="refl-text" rows="3" maxlength="400" class="mt-1" placeholder="例如:有。一開始我只說結論,後來加了實驗,所以更深入了。"' + (readonly ? ' disabled' : '') + '></textarea></div>' +
+      '<div class="mt-4"><label for="refl-q4">' + qlab('q4') + '</label><div class="mt-1"><div>' + starterRow(STARTERS4, 'refl-q4') + '</div></div>' +
+      '<textarea id="refl-q4" rows="3" maxlength="400" class="mt-1" placeholder="例如:我們很少討論到「為什麼會這樣」,因為還沒有人做實驗。"' + (readonly ? ' disabled' : '') + '></textarea></div>' +
       '<div class="flex flex-wrap gap-2 mt-3"><button type="button" class="btn p" id="refl-save"' + (readonly ? ' disabled' : '') + '><i class="fas fa-floppy-disk"></i> 存下我的反思</button><button type="button" class="btn g" id="refl-next">下一步:決定怎麼做 <i class="fas fa-arrow-right"></i></button></div>' + roNote() +
       (history ? '<div class="mt-4"><div class="font-black text-slate-700 text-sm mb-2">我之前寫過的反思</div>' + history + '</div>' : '') + '</div>';
   }
 
   /* ---- 4. 決定下一步 ---- */
-  var chosenAct = null;
+  var chosenAct = null, planWhy = '';
   function panelPlan() {
     var d = data;
     if (!d.ideas.length) return head(4, '決定下一步', 'Self-regulation · 自我調整', '', '先有想法才能決定下一步喔!去論壇發表吧。');
@@ -234,11 +248,13 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var i = ideaById(selIdea);
     var suggest = i.status === 'wait' ? '這個想法還沒人回應,可以考慮「找夥伴」。' : (i.status === 'check' ? '這個想法還沒有證據,可以考慮「補證據」。' : (i.status === 'ok' ? '這個想法有證據了,可以考慮「改想法」寫得更完整。' : '這個想法正在長大,可以繼續「改想法」或「找夥伴」。'));
     var cards = Object.keys(ACTS).map(function (k) { var a = ACTS[k]; return '<button type="button" class="act' + (chosenAct === k ? ' on' : '') + '" data-act="' + k + '"><div class="big"><i class="fas ' + a.icon + ' mr-2 text-indigo-500"></i>' + a.big + '</div><div class="text-sm text-slate-600 mt-1">' + a.tip + '</div></button>'; }).join('');
-    var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (p) { var t = ideaById(p.postId); return '<div class="idea mb-2"><div class="flex items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span></div><div class="text-sm text-slate-800 mt-1">' + esc(p.text) + '</div>' + (t ? '<div class="text-xs text-slate-500 mt-1">想法:' + esc(cut(t.title, 24)) + '</div>' : '') + '</div>'; }).join('');
+    var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (p) { var t = ideaById(p.postId); return '<div class="idea mb-2"><div class="flex items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span></div>' + (p.q5 ? '<div class="text-xs text-slate-500 mt-1">想深化:' + esc(p.q5) + '</div>' : '') + '<div class="text-sm text-slate-800 mt-1">' + esc(p.text) + '</div>' + (t ? '<div class="text-xs text-slate-500 mt-1">想法:' + esc(cut(t.title, 24)) + '</div>' : '') + '</div>'; }).join('');
     return head(4, '決定下一步', 'Self-regulation · 自我調整', '', '想完了,就要自己決定接下來怎麼做!你可以<b>補證據</b>、<b>改想法</b>,或<b>找夥伴</b>一起想。選一個,寫下你的小計畫。') +
       '<div class="card fade"><label class="font-black text-slate-700 text-sm">這個計畫是為了哪一個想法?</label><select id="plan-idea">' + opts + '</select><p class="text-xs text-indigo-700 mt-1">💡 ' + suggest + '</p>' +
+      '<div class="mt-4"><label for="plan-why">' + qlab('q5') + '</label><textarea id="plan-why" rows="2" maxlength="300" class="mt-1" placeholder="例如:我想把「影子為什麼會變長」想得更深,因為還沒有實驗證明。"' + (readonly ? ' disabled' : '') + '>' + esc(planWhy) + '</textarea></div>' +
       '<div class="grid sm:grid-cols-3 gap-3 mt-4">' + cards + '</div>' +
-      '<textarea id="plan-text" rows="3" maxlength="300" class="mt-3" placeholder="' + esc(chosenAct ? ACTS[chosenAct].ph : '先選一個做法,再寫下你要怎麼做') + '"' + (readonly ? ' disabled' : '') + '></textarea>' +
+      '<div class="mt-4"><label for="plan-text">' + qlab('q6') + '</label><p class="text-xs text-slate-500">先選上面一個做法,再寫下你要怎麼做。</p></div>' +
+      '<textarea id="plan-text" rows="3" maxlength="300" class="mt-1" placeholder="' + esc(chosenAct ? ACTS[chosenAct].ph : '先選一個做法,再寫下你要怎麼做') + '"' + (readonly ? ' disabled' : '') + '></textarea>' +
       '<div class="flex flex-wrap gap-2 mt-3"><button type="button" class="btn p" id="plan-save"' + (readonly ? ' disabled' : '') + '><i class="fas fa-flag-checkered"></i> 訂好我的計畫</button><a class="btn g" id="plan-forum" href="' + esc(link(i)) + '"><i class="fas fa-comments"></i> 去論壇行動</a></div>' + roNote() +
       (plans ? '<div class="mt-4"><div class="font-black text-slate-700 text-sm mb-2">我訂過的計畫</div>' + plans + '</div>' : '') + '</div>';
   }
@@ -251,7 +267,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
       var t = ideaById(p.postId) || { title: '(想法)', topicId: '', id: p.postId }, f = ASRA.followUp(nodes, uid, p), last = p.reeval && p.reeval.length ? p.reeval[p.reeval.length - 1] : null;
       var msg = f.acted ? '太棒了!計畫訂好後,你在這個討論區又發了 <b>' + f.mine + '</b> 則貼文' + (f.replies ? ',還有 <b>' + f.replies + '</b> 則同學的新回應' : '') + (f.evid ? ',其中 ' + f.evid + ' 則有寫證據' : '') + '。' : '計畫訂好之後,還沒有看到新的貼文或回應。去論壇做一做吧!';
       return '<div class="idea mb-3" data-plan="' + esc(p.id) + '"><div class="flex flex-wrap items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span><span class="text-xs text-slate-500">想法:' + esc(cut(t.title, 22)) + '</span>' + (last ? '<span class="pill ' + (last.result === 'better' ? 'ok' : 'warn') + '">' + (last.result === 'better' ? '已改善' : '還要努力') + '</span>' : '') + '</div>' +
-        '<div class="text-sm text-slate-800 mt-1">我的計畫:' + esc(p.text) + '</div><div class="say mt-2" style="font-size:.9rem">' + msg + '</div>' +
+        (p.q5 ? '<div class="text-xs text-slate-500 mt-1">想深化:' + esc(p.q5) + '</div>' : '') + '<div class="text-sm text-slate-800 mt-1">我的計畫:' + esc(p.text) + '</div><div class="say mt-2" style="font-size:.9rem">' + msg + '</div>' +
         '<div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-sm font-black text-slate-700">再評估:原來的問題有變好嗎?</span><button type="button" class="btn g" style="padding:.3rem .8rem;font-size:.82rem" data-re="better" data-id="' + esc(p.id) + '"' + (readonly ? ' disabled' : '') + '>🌟 變好了</button><button type="button" class="btn g" style="padding:.3rem .8rem;font-size:.82rem" data-re="more" data-id="' + esc(p.id) + '"' + (readonly ? ' disabled' : '') + '>💪 還要再努力</button></div>' +
         (last && last.result === 'more' ? '<div class="mt-2"><button type="button" class="btn p" style="padding:.3rem .9rem;font-size:.82rem" data-again="' + esc(p.postId) + '">再來一輪:回到第 3 步反思 <i class="fas fa-rotate-right"></i></button></div>' : '') + '</div>';
     }).join('');
@@ -266,7 +282,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var rows = list.map(function (e) {
       var d = KBAsra.describe(e);
       return '<div class="py-2 border-t border-slate-100 flex gap-3"><div class="w-28 flex-shrink-0 text-xs text-slate-500">' + d.time + '</div><div class="min-w-0"><span class="inline-block text-[11px] font-black px-2 py-0.5 rounded-full ' + (col[e.kind] || '') + '">' + d.label + (d.act ? ':' + d.act : '') + '</span>' +
-        (d.idea ? ' <span class="text-xs text-slate-500">想法:' + esc(cut(d.idea, 22)) + '</span>' : '') + '<div class="text-sm text-slate-700 whitespace-pre-wrap">' + esc(d.text) + '</div></div></div>';
+        (d.idea ? ' <span class="text-xs text-slate-500">想法:' + esc(cut(d.idea, 22)) + '</span>' : '') + '<div class="text-sm text-slate-700 whitespace-pre-wrap">' + esc(d.text) + '</div>' + (d.q5 ? '<div class="text-xs text-slate-500">想深化:' + esc(d.q5) + '</div>' : '') + '</div></div>';
     }).join('');
     return '<div class="card fade"><h4 class="font-black text-slate-700 mb-1"><i class="fas fa-clock-rotate-left mr-1 text-indigo-500"></i>我的完整紀錄</h4><p class="text-xs text-slate-500 mb-2">每次存下的內容都會留著,依日期排列;老師也能看到,陪你一起想。</p>' + rows + '</div>';
   }
@@ -281,24 +297,26 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var P = $('panel'), q = function (s) { return P.querySelector(s); }, qa = function (s) { return Array.prototype.slice.call(P.querySelectorAll(s)); };
     if (k === 'mon') { var mn = q('#mon-note'); if (mn && !readonly) mn.onchange = function () { var v = mn.value.trim(); if (v === (S.notes.mon || '')) return; add({ kind: 'note', ref: 'mon', text: v }); renderStepper(); }; var ma = q('#more-analytics'); if (ma) ma.href = backHref(); }
     if (k === 'eval') {
+      var qn = q('#q2-note'); if (qn && !readonly) qn.onchange = function () { var v = qn.value.trim(); if (v === (S.notes.q2 || '')) return; add({ kind: 'note', ref: 'q2', text: v }); renderStepper(); };
       var ta = q('#toggle-all'); if (ta) ta.onclick = function () { showAll = !showAll; renderPanel(); };
       qa('[data-reflect]').forEach(function (b) { b.onclick = function () { selIdea = b.getAttribute('data-reflect'); go(2); }; });
     }
     if (k === 'refl') {
       var sel = q('#idea-sel'); if (sel) sel.onchange = function () { selIdea = sel.value; renderPanel(); };
       var tx = q('#refl-text');
-      qa('.starter').forEach(function (s) { s.onclick = function () { if (readonly) return; tx.value = (tx.value ? tx.value + '\n' : '') + s.getAttribute('data-s'); tx.focus(); }; });
-      var sv = q('#refl-save'); if (sv) sv.onclick = function () { var v = tx.value.trim(); if (!v) { tx.focus(); return; } add(Object.assign({ kind: 'refl', postId: selIdea, text: v }, ideaSnap(selIdea))); renderStepper(); renderPanel(); toast('已存下你的反思 ✓'); };
+      qa('.starter').forEach(function (s) { s.onclick = function () { if (readonly) return; var tt = q('#' + (s.getAttribute('data-for') || 'refl-text')) || tx; tt.value = (tt.value ? tt.value + '\n' : '') + s.getAttribute('data-s'); tt.focus(); }; });
+      var sv = q('#refl-save'); if (sv) sv.onclick = function () { var v = tx.value.trim(), t4 = q('#refl-q4'), v4 = t4 ? t4.value.trim() : ''; if (!v && !v4) { tx.focus(); return; } var txt = (v && v4) ? '【越想越深入嗎?】' + v + '\n【還要再想深的地方】' + v4 : (v || '【還要再想深的地方】' + v4); add(Object.assign({ kind: 'refl', postId: selIdea, text: txt, q3: v || undefined, q4: v4 || undefined }, ideaSnap(selIdea))); renderStepper(); renderPanel(); toast('已存下你的反思 ✓'); };
       var nx = q('#refl-next'); if (nx) nx.onclick = function () { go(3); };
     }
     if (k === 'plan') {
-      var pi = q('#plan-idea'); if (pi) pi.onchange = function () { selIdea = pi.value; renderPanel(); };
+      var pi = q('#plan-idea'); if (pi) pi.onchange = function () { selIdea = pi.value; planWhy = ''; renderPanel(); };
+      var pw = q('#plan-why'); if (pw) pw.oninput = function () { planWhy = pw.value; };
       qa('[data-act]').forEach(function (b) { b.onclick = function () { if (readonly) return; chosenAct = b.getAttribute('data-act'); var keep = (q('#plan-text') || {}).value; renderPanel(); if (keep) q('#plan-text').value = keep; }; });
       var ps = q('#plan-save'); if (ps) ps.onclick = function () {
         var tx2 = q('#plan-text'), v = tx2.value.trim();
         if (!chosenAct) { toast('先選一個做法喔 👆'); return; }
         if (!v) { tx2.focus(); return; }
-        add(Object.assign({ kind: 'plan', postId: selIdea, act: chosenAct, text: v }, ideaSnap(selIdea))); chosenAct = null; renderStepper(); renderPanel(); toast('計畫訂好了!去論壇做做看 🚀');
+        var why = (q('#plan-why') || { value: '' }).value.trim(); add(Object.assign({ kind: 'plan', postId: selIdea, act: chosenAct, text: v, q5: why || undefined }, ideaSnap(selIdea))); chosenAct = null; planWhy = ''; renderStepper(); renderPanel(); toast('計畫訂好了!去論壇做做看 🚀');
       };
     }
     if (k === 'iter') {

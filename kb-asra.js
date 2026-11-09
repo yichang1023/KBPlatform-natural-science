@@ -21,6 +21,17 @@
   var PREFIX = 'kb_asra_v1_';
   var KINDS = { note: '一句話', refl: '反思', plan: '計畫', reeval: '再評估' };
   var ACT_NAME = { evidence: '補證據', revise: '改想法', team: '找夥伴' };
+  // 六個反思題:改寫自國際研究使用的反思單(Yang et al., 2026, 附錄 B),用國小學生看得懂的說法;分成「分析 → 問題 → 計畫」三階段
+  var QS = {
+    q1: { no: 1, phase: 'analysis', short: '走過的路', zh: '看完圖,你覺得自己這段時間的探究過程怎麼樣?', step: 1, orig: '從累積度中心性成長曲線,如何看待小組探究的過程?' },
+    q2: { no: 2, phase: 'analysis', short: '討論哪些方面', zh: '我討論了哪些方面?哪些講得比較多?', step: 2, orig: '從關鍵詞網絡圖,小組討論了哪些面向、哪些討論得比較多?' },
+    q3: { no: 3, phase: 'problem', short: '越想越深入嗎', zh: '我的想法有越想越深入嗎?為什麼?', step: 3, orig: '探究是否逐漸深入?為什麼?' },
+    q4: { no: 4, phase: 'problem', short: '還要再想深的地方', zh: '哪些地方應該再想深一點,卻還討論得很少?為什麼?', step: 3, orig: '哪些應深入的面向目前討論得較少?為什麼?' },
+    q5: { no: 5, phase: 'plan', short: '想深化的方向', zh: '接下來我想把哪一部分想得更深?為什麼?', step: 4, orig: '接下來準備深化哪些探究面向?為什麼?' },
+    q6: { no: 6, phase: 'plan', short: '我的行動計畫', zh: '我要怎麼做?寫下具體的行動計畫。', step: 4, orig: '延伸與深化探究的具體行動計畫是什麼?' }
+  };
+  var PHASE = { analysis: ['我們的分析', 'Our Analysis'], problem: ['我們發現的問題', 'Our Problems'], plan: ['我們的計畫', 'Our Plan'] };
+  var NOTE_Q = { mon: 'q1', q2: 'q2' };   // 「一句話」類紀錄的 ref 對應到第幾題
   var remote = {};            // uid -> { id: entry }(從雲端收到的)
   var listeners = [];
 
@@ -93,15 +104,16 @@
     var list = entries(uid), S = { notes: {}, refl: [], plans: [], seen: seenGet(uid) }, byPlan = {};
     list.forEach(function (e) {
       if (e.kind === 'note') S.notes[e.ref || 'mon'] = e.text;
-      else if (e.kind === 'refl') S.refl.push({ id: e.id, postId: e.postId, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle });
-      else if (e.kind === 'plan') { var p = { id: e.id, postId: e.postId, act: e.act, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle, reeval: [] }; S.plans.push(p); byPlan[e.id] = p; }
+      else if (e.kind === 'refl') S.refl.push({ id: e.id, postId: e.postId, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle, q3: e.q3 || '', q4: e.q4 || '' });
+      else if (e.kind === 'plan') { var p = { id: e.id, postId: e.postId, act: e.act, text: e.text, q5: e.q5 || '', ts: e.ts, ideaTitle: e.ideaTitle, reeval: [] }; S.plans.push(p); byPlan[e.id] = p; }
     });
     list.forEach(function (e) { if (e.kind === 'reeval' && byPlan[e.planId]) byPlan[e.planId].reeval.push({ result: e.result, ts: e.ts, follow: e.follow }); });
     return S;
   }
   // 一筆紀錄的文字說明(畫面與匯出共用)
   function describe(e) {
-    var base = { kind: e.kind, label: KINDS[e.kind] || e.kind, time: fmtTime(e.ts), date: fmtDate(e.ts), idea: e.ideaTitle || '', topic: e.topic || '', text: e.text || '', act: '', result: '', follow: e.follow || null };
+    var base = { kind: e.kind, label: KINDS[e.kind] || e.kind, time: fmtTime(e.ts), date: fmtDate(e.ts), idea: e.ideaTitle || '', topic: e.topic || '', text: e.text || '', act: '', result: '', follow: e.follow || null, q3: e.q3 || '', q4: e.q4 || '', q5: e.q5 || '' };
+    if (e.kind === 'note' && QS[NOTE_Q[e.ref || 'mon']]) { var qq = QS[NOTE_Q[e.ref || 'mon']]; base.label = '第' + qq.no + '題:' + qq.short; }
     if (e.kind === 'plan') { base.act = ACT_NAME[e.act] || e.act || ''; }
     if (e.kind === 'reeval') { base.result = e.result === 'better' ? '變好了' : '還要再努力'; base.text = base.result; }
     return base;
@@ -139,20 +151,20 @@
   // opts.info(uid) → { name, className };opts.uids 指定哪些學生
   function toCSV(opts) {
     opts = opts || {};
-    var head = ['日期時間', '學號', '姓名', '班級', '類型', '想法標題', '討論區', '做法', '內容', '再評估結果', '計畫後新貼文數', '計畫後新回應數', '計畫後有證據的貼文數'];
+    var head = ['日期時間', '學號', '姓名', '班級', '類型', '想法標題', '討論區', '做法', '內容', '再評估結果', '計畫後新貼文數', '計畫後新回應數', '計畫後有證據的貼文數', '第3題:想法有越想越深入嗎?為什麼', '第4題:哪些該再想深卻討論很少', '第5題:想深化哪一部分?為什麼'];
     var rows = [head], list = opts.uids || uids();
     list.forEach(function (u) {
       var info = (opts.info && opts.info(u)) || {};
       entries(u).forEach(function (e) {
         var d = describe(e);
-        rows.push([d.time, u, info.name || '', info.className || '', d.label, d.idea, d.topic, d.act, e.kind === 'reeval' ? '' : d.text, d.result, d.follow ? d.follow.mine : '', d.follow ? d.follow.replies : '', d.follow ? d.follow.evid : '']);
+        rows.push([d.time, u, info.name || '', info.className || '', d.label, d.idea, d.topic, d.act, e.kind === 'reeval' ? '' : d.text, d.result, d.follow ? d.follow.mine : '', d.follow ? d.follow.replies : '', d.follow ? d.follow.evid : '', d.q3, d.q4, d.q5]);
       });
     });
     return '﻿' + rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
   }
 
   global.KBAsra = {
-    KINDS: KINDS, ACT_NAME: ACT_NAME,
+    KINDS: KINDS, ACT_NAME: ACT_NAME, QS: QS, PHASE: PHASE,
     append: append, entries: entries, uids: uids, derive: derive, describe: describe, pending: pending,
     seenGet: seenGet, seenSet: seenSet, fmtTime: fmtTime, fmtDate: fmtDate, toCSV: toCSV,
     onChange: function (f) { if (typeof f === 'function') listeners.push(f); },

@@ -152,7 +152,7 @@
     return '<div class="py-3 border-t border-slate-100 flex gap-3"><div class="w-32 shrink-0 text-xs text-slate-500"><div class="font-bold text-slate-700">' + d.time + '</div></div><div class="min-w-0 flex-1">' +
       '<div class="flex flex-wrap items-center gap-2"><span class="font-bold text-slate-800">' + nameOf(r) + '</span>' + pill(d.label + (d.act ? ':' + d.act : ''), KCOL[e.kind] || '') + (e.ideaStatus ? pill('當時:' + (SNAME[e.ideaStatus] || e.ideaStatus), 'bg-slate-100 text-slate-500') : '') + '</div>' +
       (d.idea ? '<div class="text-xs text-slate-500 mt-0.5">想法:' + esc(cut(d.idea, 40)) + (d.topic ? ' · ' + esc(cut(d.topic, 16)) : '') + '</div>' : '') +
-      '<div class="text-sm text-slate-800 whitespace-pre-wrap mt-1">' + esc(d.text) + '</div>' + extra + '</div></div>';
+      '<div class="text-sm text-slate-800 whitespace-pre-wrap mt-1">' + esc(d.text) + '</div>' + (d.q5 ? '<div class="text-xs text-slate-600 mt-1">想深化(第 5 題):' + esc(d.q5) + '</div>' : '') + extra + '</div></div>';
   }
   function tabLog(D) {
     var list = visibleEntries(D), shown = list.slice(0, UI.limit);
@@ -182,6 +182,8 @@
       ['國小學生看得懂的說法', '用「看看走過的路」這類說法,不用專有名詞。']
     ];
     var aimHtml = '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-2">這個設計想補什麼?</h4><ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">' + aim.map(function (a) { return '<li><b>' + a[0] + '</b>:' + a[1] + '</li>'; }).join('') + '</ul><p class="text-xs text-slate-400 mt-2">這是設計的方向,不是已經證明有效。效果要靠實際使用的資料來檢驗。</p></section>';
+    var qsHtml = '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-1">學生的六個反思題(三個階段)</h4><p class="text-xs text-slate-500 mb-2">改寫自國際研究使用的反思單(Yang 等人,2026,附錄 B),把題目換成國小學生看得懂的說法,並放進本平台的五個步驟。原研究的對象是大學職前教師、以小組為單位,反思單是請學生看 KBDeX 的「累積度中心性曲線」與「關鍵詞網絡圖」來回答;本平台沒有那兩張圖,改用「哪幾天有發言」與想法清單當依據,而且是個人填寫。這個改寫還沒有驗證過成效。</p><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-slate-500 text-left"><th class="pb-2 pr-3">階段</th><th class="pb-2 pr-3">學生看到的題目</th><th class="pb-2 pr-3">在第幾步</th><th class="pb-2">原研究的題目(意譯)</th></tr></thead><tbody>' +
+      ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'].map(function (k) { var q = KBAsra.QS[k], ph = KBAsra.PHASE[q.phase]; return '<tr class="border-t border-slate-100 align-top"><td class="py-2 pr-3 text-xs font-bold text-slate-600 whitespace-nowrap">' + ph[0] + '<br><span class="text-slate-400">' + ph[1] + '</span></td><td class="py-2 pr-3 font-bold text-slate-800">第 ' + q.no + ' 題 ' + esc(q.zh) + '</td><td class="py-2 pr-3 text-slate-600 whitespace-nowrap">第 ' + q.step + ' 步</td><td class="py-2 text-slate-500">' + esc(q.orig) + '</td></tr>'; }).join('') + '</tbody></table></div></section>';
     var need = [
       '沒有發過貼文;或距離全班最新發言已 7 天以上',
       '貼文 3 則以上,但從來沒有回應過同學;或同學都沒有回應過他',
@@ -192,7 +194,7 @@
     return '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800 mb-1">匯出給研究用(CSV,可用 Excel 開啟)</h4><p class="text-xs text-slate-500 mb-3">包含日期時間、學號、姓名、班級、類型、想法標題、內容、做法、再評估結果與計畫後的行動數。檔案只存在你的電腦,不會上傳。</p>' +
       '<div class="flex flex-wrap gap-2"><button type="button" data-act="csv" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold"><i class="fas fa-download mr-1"></i>匯出目前範圍的全部紀錄</button><span class="text-xs text-slate-500 self-center">範圍:' + (UI.stu === 'all' ? '目前畫面上的全部學生' : '只有選取的學生(到「反思與計畫紀錄」分頁選)') + '</span></div></section>' +
       '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-2">每個指標對應哪些國際研究的概念?<span class="ml-2 text-xs font-bold text-slate-400">與限制</span></h4><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-slate-500 text-left"><th class="pb-2 pr-3">本平台指標</th><th class="pb-2 pr-3">研究裡的對應概念</th><th class="pb-2">目前的限制</th></tr></thead><tbody>' +
-      rows.map(function (r) { return '<tr class="border-t border-slate-100 align-top"><td class="py-2 pr-3 font-bold text-slate-800">' + r[0] + '</td><td class="py-2 pr-3 text-slate-600">' + r[1] + '</td><td class="py-2 text-slate-500">' + r[2] + '</td></tr>'; }).join('') + '</tbody></table></div></section>' + aimHtml +
+      rows.map(function (r) { return '<tr class="border-t border-slate-100 align-top"><td class="py-2 pr-3 font-bold text-slate-800">' + r[0] + '</td><td class="py-2 pr-3 text-slate-600">' + r[1] + '</td><td class="py-2 text-slate-500">' + r[2] + '</td></tr>'; }).join('') + '</tbody></table></div></section>' + qsHtml + aimHtml +
       '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-2">「建議多關心」的判斷規則</h4><ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">' + need.map(function (n) { return '<li>' + n + '</li>'; }).join('') + '</ul><p class="text-xs text-slate-400 mt-2">這些只是提醒老師多看一眼,不是對學生的評價。</p></section>' +
       '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-1">資料怎麼保存?</h4><p class="text-sm text-slate-600">學生每按一次「存下」就新增一筆紀錄,舊的紀錄不會被覆蓋或刪除(資料庫規則也會擋住修改與刪除)。所以同一位學生對同一個想法的反思,可以看到一次比一次的變化。</p></section>';
   }
