@@ -584,7 +584,7 @@
             </header>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="card h-[350px] md:h-[400px]">
-                    <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">1. 潛力觀點熱點圖</h3><p class="text-xs text-slate-500">Interest vs. Gap</p></div><button class="ref-btn" onclick="openRef('promisingness')"><i class="fas fa-book"></i> Ref:</button></div>
+                    <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">1. 觀點關注度分布圖</h3><p class="text-xs text-slate-500">回覆數 × 貼文類型(並非學生評選)</p></div><button class="ref-btn" onclick="openRef('promisingness')"><i class="fas fa-book"></i> Ref:</button></div>
                     <div class="relative flex-1 bg-slate-50 border border-slate-200 rounded-lg p-4" id="promisingness-container"></div>
                 </div>
                 <div class="card h-[350px] md:h-[400px]">
@@ -595,7 +595,7 @@
                     <div id="concept-network-container" class="h-full bg-slate-50 rounded border border-slate-100"></div>
                 </div>
                 <div class="card h-[300px] md:h-[400px]">
-                    <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">3. 學術詞彙成長 (Lexical Growth)</h3><p class="text-xs text-slate-500">專業術語累積趨勢</p></div><button class="ref-btn" onclick="openRef('lexical_growth')"><i class="fas fa-book"></i> Ref:</button></div>
+                    <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">3. 文字量累積 (Text Volume)</h3><p class="text-xs text-slate-500">全班累積字數(不是詞彙量)</p></div><button class="ref-btn" onclick="openRef('lexical_growth')"><i class="fas fa-book"></i> Ref:</button></div>
                     <div class="h-full relative"><canvas id="lexicalChart"></canvas></div>
                 </div>
                 <div class="card h-[350px] md:h-[400px] overflow-y-auto custom-scrollbar">
@@ -700,29 +700,29 @@
                 <div class="card border-t-4 border-pink-400">
                     <div class="flex justify-between items-center mb-4">
                         <div>
-                            <h3 class="font-bold text-slate-800 text-sm">1. 認知情緒溫譜</h3>
-                            <p class="text-[10px] text-slate-500">Epistemic Emotion Spectrum</p>
+                            <h3 class="font-bold text-slate-800 text-sm">1. 語句類型分布(好奇/疑惑/驚訝)</h3>
+                            <p class="text-[10px] text-slate-500">Keyword-based sentence types</p>
                         </div>
                         <button class="ref-btn px-2 py-1 text-[10px]" onclick="openRef('emotion')"><i class="fas fa-book"></i> Ref</button>
                     </div>
                     <div class="h-[200px] relative">
                         <canvas id="emotionChart"></canvas>
                     </div>
-                    <div class="mt-2 text-xs text-center text-slate-500">分析好奇、困惑與驚訝的分布</div>
+                    <div class="mt-2 text-xs text-center text-slate-500">依關鍵字歸類,不是量測情緒</div>
                 </div>
 
                 <div class="card border-t-4 border-cyan-400">
                     <div class="flex justify-between items-center mb-4">
                         <div>
-                            <h3 class="font-bold text-slate-800 text-sm">2. 專業詞彙成長率</h3>
-                            <p class="text-[10px] text-slate-500">Lexical Growth Index</p>
+                            <h3 class="font-bold text-slate-800 text-sm">2. 邏輯詞 vs 口語詞</h3>
+                            <p class="text-[10px] text-slate-500">Connective vs Colloquial Words</p>
                         </div>
                         <button class="ref-btn px-2 py-1 text-[10px]" onclick="openRef('lexical_growth_index')"><i class="fas fa-book"></i> Ref</button>
                     </div>
                     <div class="h-[200px] relative">
                         <canvas id="lexicalGrowthChart"></canvas>
                     </div>
-                    <div class="mt-2 text-xs text-center text-slate-500">生活語言 vs 學術語言</div>
+                    <div class="mt-2 text-xs text-center text-slate-500">邏輯/推論詞 vs 口語詞(短詞表計次)</div>
                 </div>
 
                 <div class="card border-t-4 border-amber-400">
@@ -777,7 +777,7 @@
                 <div class="card">
                     <div class="flex justify-between items-center mb-4">
                         <div>
-                            <h3 class="font-bold text-slate-800">2. 認知鷹架指紋 (Epistemic Fingerprint)</h3>
+                            <h3 class="font-bold text-slate-800">2. 鷹架使用分布 (Scaffold Profile)</h3>
                             <p class="text-xs text-slate-500">比較：全班平均 vs 高產出學生</p>
                         </div>
                         <button class="ref-btn" onclick="openRef('scaffold_profile')"><i class="fas fa-book"></i> Ref:</button>
@@ -790,7 +790,7 @@
                 <div class="card bg-yellow-50 border-l-4 border-yellow-400">
                     <div class="flex justify-between items-center mb-4">
                         <div>
-                            <h3 class="font-bold text-yellow-800 flex items-center"><i class="fas fa-clipboard-check mr-2"></i> 3. KB 12 原則實證檢核</h3>
+                            <h3 class="font-bold text-yellow-800 flex items-center"><i class="fas fa-clipboard-check mr-2"></i> 3. KB 12 原則對照(參考指標,門檻為平台設定)</h3>
                             <p class="text-xs text-yellow-600">Scardamalia (2002) - Principle-based Analysis</p>
                         </div>
                     </div>
@@ -1250,7 +1250,7 @@ async function geminiFetch(key, init) {
                     labels: labels,
                     datasets: [
                         { label: '提出的問題 (Questions)', data: dataQ, borderColor: '#3b82f6', tension: 0.4, pointRadius: 0 },
-                        { label: '發展的理論 (Theories)', data: dataI, borderColor: '#a855f7', tension: 0.4, pointRadius: 0 }
+                        { label: '改進與整合 (Improve + Rise-above)', data: dataI, borderColor: '#a855f7', tension: 0.4, pointRadius: 0 }
                     ]
                 },
                 options: {
@@ -1264,7 +1264,7 @@ async function geminiFetch(key, init) {
                     elements: { point: { radius: 0 } }
                 }
             });
-            try { kbAttachSeriesPlayer({ id: 'traj', explainTitle: '全班提出的問題與發展的理論(累積)的軌跡', chart: overviewTrajectoryChart }); } catch (e) {}
+            try { kbAttachSeriesPlayer({ id: 'traj', explainTitle: '全班提出的問題與改進、整合的想法(累積)的軌跡', chart: overviewTrajectoryChart }); } catch (e) {}
         }
 
         function renderSequentialMatrix(nodes) {
@@ -1947,13 +1947,13 @@ async function geminiFetch(key, init) {
                 dayMap.forEach(b => { cumulative += b.len; labels.push(b.label); dataPoints.push(cumulative); });
             }
 
-            lexicalChartInstance = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: '知識詞彙累積量', data: dataPoints, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false } });
-            try { kbAttachSeriesPlayer({ id: 'lexical', explainTitle: '全班知識詞彙累積量的成長', chart: lexicalChartInstance }); } catch (e) {}
+            lexicalChartInstance = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: '累積字數', data: dataPoints, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false } });
+            try { kbAttachSeriesPlayer({ id: 'lexical', explainTitle: '全班累積字數的成長', chart: lexicalChartInstance }); } catch (e) {}
         }
 
         function initPromisingnessChart() {
             const container = document.getElementById('promisingness-container');
-            container.innerHTML = `<div class="absolute bottom-2 right-4 text-xs font-bold text-slate-400">關注度 →</div><div class="absolute top-4 left-2 text-xs font-bold text-slate-400 rotate-90 origin-left">← 認知落差</div><div class="absolute top-1/2 left-0 right-0 h-px bg-slate-300 border-t border-dashed"></div><div class="absolute left-1/2 top-0 bottom-0 w-px bg-slate-300 border-l border-dashed"></div>`;
+            container.innerHTML = `<div class="absolute bottom-2 right-4 text-xs font-bold text-slate-400">關注度 →</div><div class="absolute top-4 left-2 text-xs font-bold text-slate-400 rotate-90 origin-left">← 貼文類型(提問最高)</div><div class="absolute top-1/2 left-0 right-0 h-px bg-slate-300 border-t border-dashed"></div><div class="absolute left-1/2 top-0 bottom-0 w-px bg-slate-300 border-l border-dashed"></div>`;
             if (globalAllNotes.length === 0) { container.innerHTML += `<div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-slate-400 text-xs">暫無數據</div>`; return; }
             const replyCounts = {}; globalAllNotes.forEach(n => replyCounts[n.id] = 0); globalAllNotes.forEach(n => { if (n.parentId && replyCounts[n.parentId] !== undefined) replyCounts[n.parentId]++; });
             const maxReplies = Math.max(...Object.values(replyCounts), 1);
@@ -2269,7 +2269,7 @@ async function geminiFetch(key, init) {
                 const checkText = () => Object.values(window.kb12Results || {}).map(r => r.status + '(' + r.val + ')').join(';');
                 kbRep({ id: 'impact', anchor: document.getElementById('impactScatterChart').parentElement, title: '互動影響力矩陣(誰發文多、誰被回應多)的形成過程', render: () => initAcademicAnalysis() });
                 kbRep({ id: 'fingerprint', anchor: document.getElementById('scaffoldProfileChart').parentElement, title: '認知鷹架指紋(每位同學偏好用哪種鷹架)的累積', render: () => initAcademicAnalysis() });
-                kbRep({ id: 'kb12check', anchor: document.getElementById('kb12-check-list'), title: 'KB 12 原則實證檢核(各項是否達標)的變化', render: () => initAcademicAnalysis(), values: () => { initAcademicAnalysis(); return checkText(); } });
+                kbRep({ id: 'kb12check', anchor: document.getElementById('kb12-check-list'), title: 'KB 12 原則對照(各項是否達到參考值)的變化', render: () => initAcademicAnalysis(), values: () => { initAcademicAnalysis(); return checkText(); } });
             } catch (e) {}
         }
 
@@ -2758,13 +2758,13 @@ async function geminiFetch(key, init) {
                     data: {
                         labels: labelsL,
                         datasets: [
-                            { label: '學術語言 (Academic)', data: academicData, borderColor: '#06b6d4', tension: 0.3 },
-                            { label: '生活語言 (Common)', data: commonData, borderColor: '#94a3b8', borderDash: [5, 5], tension: 0.3 }
+                            { label: '邏輯/推論詞', data: academicData, borderColor: '#06b6d4', tension: 0.3 },
+                            { label: '口語詞', data: commonData, borderColor: '#94a3b8', borderDash: [5, 5], tension: 0.3 }
                         ]
                     },
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
                 });
-                try { kbAttachSeriesPlayer({ id: 'lexgrow', explainTitle: '學術語言與生活語言使用量的成長', chart: lexicalGrowthChartInstance }); } catch (e) {}
+                try { kbAttachSeriesPlayer({ id: 'lexgrow', explainTitle: '邏輯詞與口語詞使用量的成長', chart: lexicalGrowthChartInstance }); } catch (e) {}
             }
 
             renderScaffoldTransition();
@@ -2997,217 +2997,289 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
             'total_notes': {
                 title: '總發文數',
                 theory: '社會互動論：量變是質變的基礎。足夠的對話量是社群知識建構的前提。',
-                source: 'Scardamalia, M., & Bereiter, C. (2006). Knowledge building: Theory, pedagogy, and technology. In The Cambridge Handbook of the Learning Sciences (pp. 97-115).',
+                source: "Scardamalia, M., & Bereiter, C. (2006). Knowledge building: Theory, pedagogy, and technology. In R. K. Sawyer (Ed.), <i>The Cambridge Handbook of the Learning Sciences</i> (第 97 頁起). Cambridge University Press. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1017/CBO9780511816833.008\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a> <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/2006_KBTheory.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(ikit.org)</a>",
+                how: "統計目前範圍內的貼文總數。",
+                diff: "發文量只代表活動量,不代表想法有沒有被改進。請搭配「昇華率」「對話深度」等一起看。",
                 ai_prompt: '如何激勵低參與度的學生發言？'
             },
             'density': {
                 title: '社群密度',
-                theory: '社會網絡分析 (SNA)：反映了群體內部的資訊流通效率與凝聚力。',
-                source: 'Zhang, J., Scardamalia, M., Reeve, R., & Messina, R. (2009). Designs for collective cognitive responsibility in knowledge-building communities. Journal of the Learning Sciences, 18(1), 7-46.',
+                theory: "社會網絡分析的「密度」:實際出現的互動關係,占所有可能關係的比例。比例越高,資訊越容易在全班流動。",
+                source: "Wasserman, S., & Faust, K. (1994). <i>Social network analysis: Methods and applications.</i> Cambridge University Press.(書籍)<br>Grunspan, D. Z., Wiggins, B. L., & Goodreau, S. M. (2014). Understanding classrooms through social network analysis: A primer for social network analysis in education research. <i>CBE—Life Sciences Education, 13</i>(2), 167–178. <a class=\"text-indigo-600 underline\" href=\"https://www.ncbi.nlm.nih.gov/pmc/articles/4041496\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(PubMed Central)</a><br>Oshima, J., Oshima, R., & Matsuzawa, Y. (2012). Knowledge Building Discourse Explorer: A social network analysis application for knowledge building discourse. <i>Educational Technology Research and Development, 60</i>(5), 903–921. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-012-9265-2\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "某位同學回覆另一位同學的貼文,就算一條「回覆者→被回覆者」的關係(同方向只算一次,自己回自己不算)。密度 = 關係數 ÷ 〔人數 ×(人數 − 1)〕。",
+                diff: "密度的定義來自網絡分析。畫面上「低於 0.2 偏低、高於 0.5 緊密」的分級是平台自訂的參考線,不是文獻給定的標準。",
                 ai_prompt: '如何提升班級的對話互動密度？'
             },
             'rise_above': {
                 title: '知識昇華率',
                 theory: 'Rise-above 代表觀點的整合與昇華，是知識創造的關鍵指標。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. Liberal Education in a Knowledge Society, 97, 67-98.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a><br>Zhang, J., Scardamalia, M., Reeve, R., & Messina, R. (2009). Designs for collective cognitive responsibility in knowledge-building communities. <i>Journal of the Learning Sciences, 18</i>(1), 7–44. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508400802581676\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "「整合(昇華)」類貼文數 ÷ 全部貼文數。",
+                diff: "貼文類型是學生發文時自己選的鷹架,系統不判斷內容是不是真的整合。5% 這條分界是平台自訂的參考值。",
                 ai_prompt: '如何引導學生進行觀點整合與昇華？'
             },
             'risk': {
                 title: '需引導名單',
-                theory: '學習落後預警機制：及早識別邊緣參與者，避免馬太效應。',
-                source: 'Wenger, E. (1998). Communities of practice: Learning, meaning, and identity. Cambridge University Press.',
+                theory: "提早找出很少發言的同學,讓老師可以先關心。這是教學上的提醒,不是學術上的診斷。",
+                source: "(平台自訂規則,沒有對應的單一文獻。)",
+                how: "全班平均發文 ≥ 1 篇時,發文 0 篇的同學會列入;全班平均 ≥ 3 篇時,發文少於 2 篇的同學也會列入。",
+                diff: "只看發文數,看不出「少發文但常閱讀、常口頭討論」的同學;名單請當作關心的起點。",
                 ai_prompt: '針對低參與度學生的介入策略？'
             },
             'gini': {
                 title: '參與平等性',
-                theory: '洛倫茲曲線：測量發言權分配的不平等程度。',
-                source: 'Gini, C. (1912). Variabilità e mutabilità [Variability and Mutability]. C. Cuppini.',
+                theory: "吉尼係數:衡量一群人之間「分配不均」的程度,0 代表完全平均,1 代表全部集中在一個人。這裡用來看發言量是否集中在少數人。",
+                source: "Gini, C. (1912). <i>Variabilità e mutabilità.</i> C. Cuppini.(吉尼係數的原始出處,書籍)",
+                how: "以每位學生的發文數計算吉尼係數(兩兩差距的平均 ÷ 2 倍平均數)。",
+                diff: "吉尼係數原本用來測所得分配,拿來看班級發言是借用。我們沒有查到專門為「班級發言平等」訂出 0.4、0.6 分界的研究,所以這兩條分界是平台自訂的警示線,請當提醒,不是判決。",
                 ai_prompt: '如何平衡班級內的發言權結構？'
             },
             'thread_depth': {
                 title: '對話深度',
-                theory: '持續性探究 (Sustained Inquiry)：深度代表對話的延續性。',
-                source: 'Hakkarainen, K. (2003). Emergence of progressive inquiry culture in computer-supported collaborative learning. Learning Environments Research, 6(2), 199-220.',
+                theory: "討論串的延續程度:一則想法被一路接著回應了幾層。層數越多,通常代表想法被持續追問或改進。",
+                source: "Hewitt, J. (2005). Toward an understanding of how threads die in asynchronous computer conferences. <i>Journal of the Learning Sciences, 14</i>(4), 567–589. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1207/s15327809jls1404_4\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Hakkarainen, K. (2003). Emergence of progressive-inquiry culture in computer-supported collaborative learning. <i>Learning Environments Research, 6</i>(2), 199–220. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1023/A:1024995120180\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "從每個討論串的起始貼文,沿著回覆一路走到最後一則,算每條路徑的層數,再取平均。",
+                diff: "層數只反映對話被接續了多久,不代表內容的深度。Hewitt(2005)研究討論串為何中斷,Hakkarainen(2003)談漸進探究,兩篇都沒有提出「平均層數」這個指標,是平台借用的簡化做法。",
                 ai_prompt: '如何設計問題以引發更深層的對話？'
             },
             'class_diagnosis': {
                 title: '全班深度診斷',
-                theory: '學習分析自動化：透過數據歸納社群當前狀態與缺口。',
-                source: 'Siemens, G., & Long, P. (2011). Penetrating the fog: Analytics in learning and education. EDUCAUSE Review, 46(5), 30.',
+                theory: "學習分析的想法:用數據幫老師看見班級現況。這裡的診斷文字由 AI 根據統計數字產生。",
+                source: "Siemens, G., & Long, P. (2011). Penetrating the fog: Analytics in learning and education. <i>EDUCAUSE Review, 46</i>(5).(無 DOI 的雜誌文章)",
+                how: "把目前的統計數字交給 AI,由 AI 寫出診斷與建議。",
+                diff: "AI 寫的文字不是研究結論,可能出錯或過度解讀。引用的文章只說明為何要用數據輔助教學,並沒有背書 AI 的診斷內容;請老師自己判斷。",
                 ai_prompt: '根據這些總體數據，我下一堂課最該做什麼？'
             },
             'kb_trajectory': {
                 title: '知識推進軌跡',
-                theory: '觀察問題與理論解釋的交替增長趨勢。',
-                source: 'Scardamalia, M., & Bereiter, C. (2014). Knowledge building and knowledge creation: Theory, pedagogy and technology.',
+                theory: "觀察「提出的問題」與「改進、整合的想法」如何隨時間累積。",
+                source: "Scardamalia, M., & Bereiter, C. (2014). Knowledge building and knowledge creation: Theory, pedagogy, and technology. In R. K. Sawyer (Ed.), <i>The Cambridge Handbook of the Learning Sciences</i> (2nd ed., pp. 397–417). Cambridge University Press. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1017/CBO9781139519526.025\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "「提出的問題」= 提問類貼文的累積數;「改進與整合」= 改進類加整合類貼文的累積數(圖例已由「發展的理論」改標,因為這些貼文不一定是理論)。",
+                diff: "用貼文類型近似「問題」與「想法的進展」。Scardamalia & Bereiter(2014)談的是知識創造的歷程,並沒有規定這種計算方式。",
                 ai_prompt: '如何引導學生把問題轉化為理論？'
             },
             'lag_sequence': {
                 title: '言談序列轉移',
-                theory: '行為模式分析，探討發言之間的因果關聯。',
-                source: 'Jeong, A. (2003). The sequential analysis of group interaction and critical thinking in online threaded discussions. The American Journal of Distance Education, 17(1), 25-43.',
+                theory: "序列分析:看「回應某一類貼文時,同學接著常用哪一類貼文」,找出對話的慣性。",
+                source: "Jeong, A. C. (2003). The sequential analysis of group interaction and critical thinking in online threaded discussions. <i>American Journal of Distance Education, 17</i>(1), 25–43. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1207/s15389286ajde1701_3\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Jeong, A. C. (2005). A guide to analyzing message–response sequences and group interaction patterns in computer-mediated communication. <i>Distance Education, 26</i>(3), 367–383. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/01587910500291470\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Allison, P. D., & Liker, J. K. (1982). Analyzing sequential categorical data on dyadic interaction: A comment on Gottman. <i>Psychological Bulletin, 91</i>(2), 393–403. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1037/0033-2909.91.2.393\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "統計「被回覆的貼文類型 → 回覆用的貼文類型」,以每一列的百分比呈現(反駁併入改進)。",
+                diff: "Jeong 的序列分析會用統計檢定(例如 z 值)判斷哪些接續「比隨機更常出現」;平台只呈現百分比,所以只能說「常見」,不能說「顯著」。若要檢定,可參考 Allison & Liker(1982)。",
                 ai_prompt: '如何打破無效的討論循環？'
             },
             'brokers': {
                 title: '知識經紀人',
-                theory: '社會網絡中的中介中心性 (Betweenness Centrality)。',
-                source: 'Wasserman, S., & Faust, K. (1994). Social network analysis: Methods and applications. Cambridge University Press.',
+                theory: "中介中心性:一位同學位在多少對同學之間的最短連結路徑上。數值高代表他像橋樑,連結了原本不太互動的人(結構洞理論稱這種位置能帶來新點子)。",
+                source: "Freeman, L. C. (1977). A set of measures of centrality based on betweenness. <i>Sociometry, 40</i>(1), 35–41. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.2307/3033543\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Brandes, U. (2001). A faster algorithm for betweenness centrality. <i>Journal of Mathematical Sociology, 25</i>(2), 163–177. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/0022250X.2001.9990249\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a> <a class=\"text-indigo-600 underline\" href=\"https://kops.uni-konstanz.de/server/api/core/bitstreams/420590d1-3010-4eab-a585-6fa3eff46f9e/content\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(康斯坦茨大學)</a><br>Burt, R. S. (2004). Structural holes and good ideas. <i>American Journal of Sociology, 110</i>(2), 349–399. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1086/421787\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Wasserman, S., & Faust, K. (1994). <i>Social network analysis: Methods and applications.</i> Cambridge University Press.(書籍)",
+                how: "把回覆關係當成沒有方向的網絡,用 Brandes 演算法計算每位同學的中介中心性,列出前三名。",
+                diff: "這是「在網絡中的位置」,不等於他真的在傳遞知識;請點回原貼文確認他的回應內容。",
                 ai_prompt: '如何培養更多知識經紀人？'
             },
             'sna': {
                 title: '社群互動結構',
-                theory: '社會網絡結構視覺化，觀察核心與邊緣。',
-                source: 'Grunspan, D. Z., et al. (2014). Understanding classrooms through social network analysis: A primer for social network analysis in education research. CBE—Life Sciences Education, 13(2), 167-178.',
+                theory: "把「誰回應了誰」畫成網絡,觀察核心與邊緣的同學。",
+                source: "Grunspan, D. Z., Wiggins, B. L., & Goodreau, S. M. (2014). Understanding classrooms through social network analysis: A primer for social network analysis in education research. <i>CBE—Life Sciences Education, 13</i>(2), 167–178. <a class=\"text-indigo-600 underline\" href=\"https://www.ncbi.nlm.nih.gov/pmc/articles/4041496\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(PubMed Central)</a><br>Oshima, J., Oshima, R., & Matsuzawa, Y. (2012). Knowledge Building Discourse Explorer: A social network analysis application for knowledge building discourse. <i>Educational Technology Research and Development, 60</i>(5), 903–921. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-012-9265-2\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "以貼文的回覆關係畫出誰回應了誰。",
+                diff: "只呈現平台上留下紀錄的回覆;口頭討論、私下交流不在圖中。",
                 ai_prompt: '如何幫助邊緣成員融入核心？'
             },
             'principles': {
-                title: '鷹架分佈分析',
-                theory: '檢核各類認知活動（如提問、改進、整合）的比例。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. Liberal Education in a Knowledge Society, 67-98.',
+                title: "鷹架分佈分析",
+                theory: "看各類貼文(提問、延伸、改進、整合)各占多少。",
+                source: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
+                how: "統計各類貼文的占比。",
+                diff: "貼文類型是學生自己選的。研究(Chen 等人,2017)分析的是各類貼文如何前後接續,並沒有規定「理想比例」。",
                 ai_prompt: '如何提高「改進」與「整合」的比例？'
             },
             'kb12': {
-                title: 'KB 12原則落實',
+                title: "KB 12 原則對照",
                 theory: '以 12 項原則作為知識建構社群的最高指導方針。其中 Epistemic Agency(認知能動性)指學生自己負責推進知識,本檢核以「主動發起、自我修正、提出解釋」三面向綜合判定(文字面向為關鍵字啟發式,僅供輔助)。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. Liberal Education in a Knowledge Society, 97, 67-98.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
+                how: "依各原則設定的指標與參考值,逐項對照(見下方清單)。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '如何讓班級符合更多 KB 原則？'
             },
             'kb12_real': {
                 title: 'Real Ideas, Authentic Problems',
                 theory: '真實想法與真實問題:知識建構從學生真正想解決的問題出發,而不是練習題或老師預設的答案。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), Liberal education in a knowledge society (pp. 67-98). Open Court.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
+                how: "疑問型貼文占比 ≥ 15%,且人均發文 ≥ 3 篇。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '學生的討論缺少真實疑問時,老師該怎麼引導?'
             },
             'kb12_diversity': {
                 title: 'Idea Diversity',
                 theory: '觀點多樣性:要真正理解一個想法,必須接觸與它不同、甚至對立的想法;多樣性是想法進步的動力。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), Liberal education in a knowledge society (pp. 67-98). Open Court.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
+                how: "參與率 ≥ 80%,且提問/改進/反駁類貼文占比 ≥ 30%。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '如何讓班上出現更多不同的觀點而不只是互相附和?'
             },
             'kb12_agency': {
                 title: 'Epistemic Agency',
                 theory: '認知能動性:學生自己設定目標、規劃、監控並修正自己的學習與想法,負起推進知識的責任。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), Liberal education in a knowledge society (pp. 67-98). Open Court. / Scardamalia, M., & Bereiter, C. (2006). Knowledge building. In The Cambridge Handbook of the Learning Sciences.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a><br>Damşa, C. I., Kirschner, P. A., Andriessen, J. E. B., Erkens, G., & Sins, P. H. M. (2010). Shared epistemic agency: An empirical study of an emergent construct. <i>Journal of the Learning Sciences, 19</i>(2), 143–186. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508401003708381\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "綜合「主動發起、自我修正、提出解釋」三個面向(文字面向用關鍵字判斷)。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。 「共享認知能動性」的研究(Damşa 等人,2010)是用人工編碼分析,平台的關鍵字判斷只是簡化的近似。",
                 ai_prompt: '如何提升學生的認知能動性,讓他們更主動負責自己的知識推進?'
             },
             'kb12_community': {
                 title: 'Community Knowledge, Collective Responsibility',
                 theory: '社群知識與集體責任:知識是社群共同擁有的,每個人都有責任貢獻並推進全班的理解。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), Liberal education in a knowledge society (pp. 67-98). Open Court.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
+                how: "回應「別人」貼文的比例 ≥ 50%,且 ≥ 80% 的學生既回應過別人也被回應過。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '如何讓學生更願意回應同學、為全班知識負責?'
             },
             'kb12_improve': {
                 title: 'Improvable Ideas',
                 theory: '可改進的想法:所有想法都是「還可以更好」的,社群持續檢驗、修正與改良,才會產生進步。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), Liberal education in a knowledge society (pp. 67-98). Open Court.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
+                how: "改進與反駁類貼文占比 > 15%。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '如何引導學生更多地改進與挑戰彼此的想法?'
             },
             'kb12_riseabove': {
                 title: 'Rise Above',
                 theory: '昇華:把分散的想法整合,提出更高層次、涵蓋更廣的解釋,是知識建構的核心動作。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), Liberal education in a knowledge society (pp. 67-98). Open Court.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a><br>Zhang, J., Scardamalia, M., Reeve, R., & Messina, R. (2009). Designs for collective cognitive responsibility in knowledge-building communities. <i>Journal of the Learning Sciences, 18</i>(1), 7–44. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508400802581676\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "昇華率 ≥ 5%,且 ≥ 30% 的學生寫過整合。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '如何讓更多學生(而不只是組長)參與觀點整合與昇華?'
             },
             'kb12_sources': {
                 title: 'Constructive Uses of Authoritative Sources',
                 theory: '權威資料的建設性使用:引用專家與文獻不是為了取代思考,而是用來支撐、挑戰或深化社群的想法。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), Liberal education in a knowledge society (pp. 67-98). Open Court.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
+                how: "以關鍵字(如「文獻、研究顯示、根據、查到、網站、實測、紀錄、網址」)判斷有引用資料的貼文占比 ≥ 5%。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。 關鍵字判斷無法分辨是「建設性使用」還是單純貼上答案。",
                 ai_prompt: '如何引導學生建設性地使用文獻與外部資料?'
             },
             'kb12_democratize': {
                 title: 'Democratizing Knowledge',
                 theory: '知識民主化:所有成員(不分能力或地位)都有權貢獻並被聽見,不是少數人主導。',
-                source: 'Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), Liberal education in a knowledge society (pp. 67-98). Open Court.',
+                source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a><br>Gini, C. (1912). <i>Variabilità e mutabilità.</i> C. Cuppini.(吉尼係數的原始出處,書籍)",
+                how: "發言量吉尼係數 < 0.4。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '如何避免少數人主導討論,讓更多人發言?'
             },
             'impact_scatter': {
                 title: '互動影響力',
-                theory: '產出-影響力矩陣 (Socio-cognitive dynamics)。',
-                source: 'Zhang, J., Scardamalia, M., Lamon, M., Messina, R., & Reeve, R. (2007). Socio-cognitive dynamics of knowledge building in the work of 9-and 10-year-olds. Educational Technology Research and Development, 55(2), 117-145.',
+                theory: "把每位同學的「發文數」與「被別人回覆的次數」放在同一張圖,看誰產出多、誰被回應多。",
+                source: "Zhang, J., Scardamalia, M., Lamon, M., Messina, R., & Reeve, R. (2007). Socio-cognitive dynamics of knowledge building in the work of 9- and 10-year-olds. <i>Educational Technology Research and Development, 55</i>(2), 117–145. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-006-9019-0\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Oshima, J., Oshima, R., & Matsuzawa, Y. (2012). Knowledge Building Discourse Explorer: A social network analysis application for knowledge building discourse. <i>Educational Technology Research and Development, 60</i>(5), 903–921. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-012-9265-2\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "X = 發文數,Y = 被其他同學回覆的次數;以全班平均數把圖分成四個象限。",
+                diff: "四個象限的名稱(核心領袖、高效影響等)是平台自取的標籤;「被回覆多」不一定代表想法好,也可能是被質疑。",
                 ai_prompt: '如何幫助高產出但低影響的學生？'
             },
             'scaffold_profile': {
-                title: '認知鷹架指紋',
-                theory: '個人化的學習策略與認知風格。',
-                source: 'Kolb, D. A. (1984). Experiential learning: Experience as the source of learning and development. Prentice-Hall.',
+                title: "鷹架使用分布",
+                theory: "看每位同學的貼文用了哪些鷹架(提問、延伸、改進、整合)各多少。",
+                source: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "統計每位同學各類貼文的占比,與全班平均並排。",
+                diff: "這只是描述「用了哪些貼文類型」,不是「學習風格」或「認知風格」。先前引用的 Kolb(1984)是學習風格理論,並不支持這張圖,已移除。",
                 ai_prompt: '如何引導單一風格的學生嘗試其他認知活動？'
             },
             'promisingness': {
-                title: '潛力觀點分析',
-                theory: '精華觀點挖掘，尋找有發展價值的想法。',
-                source: 'Chen, B., Scardamalia, M., & Bereiter, C. (2015). Advancing knowledge-building discourse through judgments of promising ideas. International Journal of Computer-Supported Collaborative Learning, 10(4), 345-366.',
+                title: "觀點關注度分布",
+                theory: "把每則想法依「被回覆的多寡」與「貼文類型」放在一張圖上,幫老師找到值得追下去的想法。",
+                source: "靈感來源(非同一做法):<br>Chen, B., Scardamalia, M., & Bereiter, C. (2015). Advancing knowledge-building discourse through judgments of promising ideas. <i>International Journal of Computer-Supported Collaborative Learning, 10</i>(4), 345–366. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11412-015-9225-z\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "X 軸 = 該則貼文被回覆的次數;Y 軸 = 依貼文類型固定給分(提問最高、整合次之、改進、延伸、其他依序降低),再加上微小的隨機偏移避免重疊。",
+                diff: "Chen 等人(2015)的「潛力想法」是由學生自己判斷「哪個想法最有潛力」。平台目前沒有學生評選功能,所以這張圖不是「潛力想法分析」,只是「被關注程度 × 貼文類型」。圖上的「認知落差」軸也是依類型固定給分,並非量測。",
                 ai_prompt: '如何利用潛力觀點設計下一堂課？'
             },
             'concept_network': {
                 title: '概念網絡分析',
-                theory: '語義共現網絡，追蹤思考焦點。',
-                source: 'Landauer, T. K., Foltz, P. W., & Laham, D. (1998). An introduction to latent semantic analysis. Discourse Processes, 25(2-3), 259-284.',
+                theory: "把貼文中常出現的詞,以「同一則貼文裡一起出現」連起來,看全班的思考焦點與概念之間的關聯。",
+                source: "Shaffer, D. W., Collier, W., & Ruis, A. R. (2016). A tutorial on epistemic network analysis: Analyzing the structure of connections in cognitive, social, and interaction data. <i>Journal of Learning Analytics, 3</i>(3), 9–45. <a class=\"text-indigo-600 underline\" href=\"https://learning-analytics.info/journals/index.php/JLA/article/view/4329\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文</a><br>Oshima, J., Oshima, R., & Matsuzawa, Y. (2012). Knowledge Building Discourse Explorer: A social network analysis application for knowledge building discourse. <i>Educational Technology Research and Development, 60</i>(5), 903–921. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-012-9265-2\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Matsuzawa, Y., Oshima, J., Oshima, R., Niihara, Y., & Sakai, S. (2011). KBDeX: A platform for exploring discourse in collaborative learning. <i>Procedia – Social and Behavioral Sciences, 26</i>, 198–207. <a class=\"text-indigo-600 underline\" href=\"https://www.ncbi.nlm.nih.gov/pmc/articles/7129265\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(PubMed Central)</a>",
+                how: "用中文斷詞取出詞語,去除停用詞,取出現在最多篇貼文的前 15 個詞;兩個詞出現在同一則貼文就連線。",
+                diff: "這是「詞共現網絡」,不是潛在語意分析(LSA)。先前引用的 Landauer 等人(1998)是另一種做法,已移除。詞共現只呈現「常一起出現」,不保證詞語的意思有關。",
                 ai_prompt: '如何引導學生連結圖中尚未相連的概念？'
             },
             'lexical_growth': {
-                title: '學術詞彙成長',
-                theory: '知識深度的累積與專業語彙發展。',
-                source: 'Duff, P. A. (2010). Language socialization into academic discourse communities. Annual Review of Applied Linguistics, 30, 169-192.',
+                title: "文字量累積",
+                theory: "看全班累積寫了多少字。字數可以反映參與的投入,但無法代表專業詞彙的成長。",
+                source: "想看真正的詞彙成長,可參考:<br>Sun, Y., Zhang, J., & Scardamalia, M. (2010). Knowledge building and vocabulary growth over two years, Grades 3 and 4. <i>Instructional Science, 38</i>(2), 147–171. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11251-008-9082-5\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Nagy, W., & Townsend, D. (2012). Words as tools: Learning academic vocabulary as language acquisition. <i>Reading Research Quarterly, 47</i>(1), 91–108. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1002/rrq.011\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "把每天貼文的標題與內容的字數加總,逐日累積。",
+                diff: "這張圖算的是「字數」,不是「詞彙」。研究詞彙成長(Sun 等人,2010)是看學生用了哪些專業詞語、用得是否正確。若要改成詞彙指標,需要先建立該單元的專業詞表。",
                 ai_prompt: '如何透過閱讀材料增加學生的詞彙量？'
             },
             'lens': {
                 title: '深度對話透視',
-                theory: '區分事實陳述 (Fact) 與理論建構 (Theory/Explanation)。',
-                source: 'Bloom, B. S. (1956). Taxonomy of educational objectives: The classification of educational goals. Longmans, Green.',
+                theory: "把全班的貼文依類型分成四群:提問/其他、延伸/改進、反駁、整合,看想法如何從簡單走向整合。",
+                source: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
+                how: "依貼文類型歸入「事實(提問與其他)」「理論(延伸與改進)」「挑戰(反駁)」「整合(昇華)」。",
+                diff: "「事實」「理論」是平台對貼文類型的重新命名,並非分析內容真偽。例如提問會被歸在「事實」。先前引用的 Bloom 分類學是教學目標分類,與這個分法不同,已移除。",
                 ai_prompt: '如何引導學生從描述事實轉向解釋理論？'
             },
             'stream': {
                 title: '關鍵對話流',
                 theory: '觀察討論熱度隨時間的變化模式。',
-                source: 'Reimann, P. (2009). Time is precious: Variable-and event-centred approaches to process analysis in CSCL research. International Journal of Computer-Supported Collaborative Learning, 4(3), 239-257.',
+                source: "Reimann, P. (2009). Time is precious: Variable- and event-centred approaches to process analysis in CSCL research. <i>International Journal of Computer-Supported Collaborative Learning, 4</i>(3), 239–257. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11412-009-9070-z\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "依日期統計各類貼文的數量,看討論熱度的變化。",
+                diff: "依貼文日期分組,只反映發文的時間分布。",
                 ai_prompt: '如何維持長期的討論熱度？'
             },
             'emotion': {
-                title: '認知情緒溫譜',
-                theory: '好奇、困惑、驚訝是推動探究的內在動力。',
-                source: 'Pekrun, R., Vogl, E., Muis, K. R., & Sinatra, G. M. (2017). Measuring emotions during epistemic activities: The Epistemologically-Related Emotions Scales. Cognition and Emotion, 31(8), 1268-1276.',
+                title: "語句類型分布(好奇/疑惑/驚訝)",
+                theory: "依貼文裡的用語,把貼文大略分成好奇句、疑惑句、驚訝句和其他。好奇、困惑與驚訝被認為與學習有關。",
+                source: "相關研究(用途不同):<br>D’Mello, S., Lehman, B., Pekrun, R., & Graesser, A. (2014). Confusion can be beneficial for learning. <i>Learning and Instruction, 29</i>, 153–170. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1016/j.learninstruc.2012.05.003\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>D’Mello, S., & Graesser, A. (2012). Dynamics of affective states during complex learning. <i>Learning and Instruction, 22</i>(2), 145–157. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1016/j.learninstruc.2011.10.001\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "用關鍵字分類:含「為什麼、如何、怎麼」算好奇;含「不懂、難、?」算困惑;含「哇、原來、竟然、!」算驚訝;其他算中性。每一則貼文只歸入一類。",
+                diff: "這是用字詞猜測語氣,不是量測學生的情緒。學習情緒的研究(如 Pekrun 等人的量表)是請學生自己填答,和這張圖是不同的做法,所以不再把該量表當作這張圖的依據。",
                 ai_prompt: '如何設計引發認知衝突與驚訝的教學活動？'
             },
             'lexical_growth_index': {
-                title: '生活 vs 學術語言',
-                theory: '從生活語言轉向該領域的專業社群語言。',
-                source: 'Snow, C. E. (2010). Academic language and the challenge of reading for learning about science. Science, 328(5977), 450-452.',
+                title: "邏輯詞 vs 口語詞",
+                theory: "「因為、所以、發現」這類詞常出現在說明與推論;「我覺得、然後、就是」較口語。比較兩者的使用量,可以粗略看到說理用語是否增加。",
+                source: "相關背景:<br>Snow, C. E. (2010). Academic language and the challenge of reading for learning about science. <i>Science, 328</i>(5977), 450–452. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1126/science.1182597\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Nagy, W., & Townsend, D. (2012). Words as tools: Learning academic vocabulary as language acquisition. <i>Reading Research Quarterly, 47</i>(1), 91–108. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1002/rrq.011\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "用一份短詞表計次:邏輯/推論詞 13 個(因為、所以、導致、發現、理論、證據…),口語詞 11 個(我、覺得、不知道、然後、就是…)。每則貼文每個詞最多算一次;若某天沒有命中任何詞,會依字數補上少量基準值。",
+                diff: "詞表很短,不能代表「學術語言」。Snow(2010)談的是學術語言對學習科學的挑戰,沒有提供這份詞表。請把它當作「說理用語」的粗略指標。",
                 ai_prompt: '如何透過鷹架提升學生的學術詞彙使用？'
             },
             'scaffold_transition': {
                 title: '鷹架回應模式',
                 theory: '分析言談行動的序列關係與對話流動。',
-                source: 'Jeong, A. (2005). A guide to analyzing message-response sequences and group interaction patterns in computer-mediated communication. Distance Education, 19(2), 225-240.',
+                source: "Jeong, A. C. (2005). A guide to analyzing message–response sequences and group interaction patterns in computer-mediated communication. <i>Distance Education, 26</i>(3), 367–383. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/01587910500291470\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Jeong, A. C. (2003). The sequential analysis of group interaction and critical thinking in online threaded discussions. <i>American Journal of Distance Education, 17</i>(1), 25–43. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1207/s15389286ajde1701_3\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "與「言談序列轉移」相同:統計回應與被回應貼文類型的接續比例。",
+                diff: "同上:只呈現百分比,沒有統計檢定。",
                 ai_prompt: '如何優化班級的對話回應模式？'
             },
             'radar': {
-                title: 'KB 五力雷達圖',
-                theory: '多維度的學生綜合能力評估。',
-                source: 'Griffin, P., McGaw, B., & Care, E. (Eds.). (2012). Assessment and teaching of 21st century skills. Springer.',
+                title: "KB 五力雷達圖",
+                theory: "把五個面向(主動性、社群互動、觀點改進、昇華整合、持續探究)各換算成 0–100 分,幫助看到一位同學的整體樣貌。",
+                source: "Scardamalia, M., Bransford, J., Kozma, B., & Quellmalz, E. (2012). New assessments and environments for knowledge building. In P. Griffin, B. McGaw, & E. Care (Eds.), <i>Assessment and teaching of 21st century skills</i> (pp. 231–300). Springer. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/978-94-007-2324-5_5\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Damşa, C. I., Kirschner, P. A., Andriessen, J. E. B., Erkens, G., & Sins, P. H. M. (2010). Shared epistemic agency: An empirical study of an emergent construct. <i>Journal of the Learning Sciences, 19</i>(2), 143–186. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508401003708381\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "五項都用「比例」計算並設定目標比例(例如改進/反駁占 45%、整合占 12% 為滿分),再乘上發文累積程度(發文滿 10 篇才算滿分)。",
+                diff: "五個面向的選擇與目標比例是平台自訂的設計,不是文獻給定的量表。引用的文章是「知識建構的評量與環境」,支持的是評量的方向,不是這五項公式。",
                 ai_prompt: '如何幫助學生補足雷達圖上的弱項？'
             },
             'ego': {
                 title: '自我互動圈',
                 theory: '衡量個人社交資本與人際連帶。',
-                source: 'Crossley, N., Bellotti, E., Edwards, G., Everett, M. G., Koskinen, J., & Tranmer, M. (2015). Social network analysis for ego-nets. Sage.',
+                source: "Crossley, N., Bellotti, E., Edwards, G., Everett, M. G., Koskinen, J., & Tranmer, M. (2015). <i>Social network analysis for ego-nets.</i> Sage.(書籍)<br>Grunspan, D. Z., Wiggins, B. L., & Goodreau, S. M. (2014). Understanding classrooms through social network analysis: A primer for social network analysis in education research. <i>CBE—Life Sciences Education, 13</i>(2), 167–178. <a class=\"text-indigo-600 underline\" href=\"https://www.ncbi.nlm.nih.gov/pmc/articles/4041496\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(PubMed Central)</a>",
+                how: "以這位同學為中心,畫出他回應過誰、誰回應過他,以及這些對象彼此的互動。",
+                diff: "只呈現平台上的回覆紀錄。",
                 ai_prompt: '如何鼓勵孤立的學生擴大互動圈？'
             },
             'balance': {
                 title: '自主協作平衡',
-                theory: '發起話題與回應他人的比例平衡。',
-                source: 'Dillenbourg, P. (1999). What do you mean by collaborative learning?. Collaborative-learning: Cognitive and Computational Approaches, 1-19.',
+                theory: "看這位同學的貼文中,「自己發起或提出下一步」與「回應、延伸別人」各占多少。",
+                source: "Damşa, C. I., Kirschner, P. A., Andriessen, J. E. B., Erkens, G., & Sins, P. H. M. (2010). Shared epistemic agency: An empirical study of an emergent construct. <i>Journal of the Learning Sciences, 19</i>(2), 143–186. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508401003708381\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "貼文屬提問、沒有上層貼文,或含有「我們要、下一步、不如、假設、實驗」等計畫用語時,算「發起」;其餘算「協作」。",
+                diff: "用關鍵字判斷是否「發起」,會有誤判。先前引用的 Dillenbourg(1999)是在定義「什麼叫協作學習」,與這個比例無關,已移除。",
                 ai_prompt: '如何引導愛發起話題的學生多去回應別人？'
             },
             'depth_trajectory': {
                 title: '深度演化軌跡',
-                theory: '個人思維層次的歷時性發展曲線。',
-                source: 'Piaget, J. (1972). The psychology of intelligence. Totowa, NJ: Littlefield.',
+                theory: "把這位同學的五力分數換算成一條隨「深度」上升的曲線,看他的參與如何由淺入深。",
+                source: "Reimann, P. (2009). Time is precious: Variable- and event-centred approaches to process analysis in CSCL research. <i>International Journal of Computer-Supported Collaborative Learning, 4</i>(3), 239–257. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11412-009-9070-z\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "由五力分數換算出五個點(約對應提問→主動→改進→整合→持續探究)。",
+                diff: "這是由平台公式換算的示意曲線,不是測量思維層次。先前引用的 Piaget 是兒童認知發展理論,並不支持這個算法,已移除。",
                 ai_prompt: '如何幫助深度停滯的學生突破瓶頸？'
             },
             'lexical_fingerprint': {
                 title: '個人詞彙指紋',
                 theory: '透過高頻詞彙分析個人的關注焦點。',
-                source: 'Feldman, R., & Sanger, J. (2007). The text mining handbook: advanced approaches in analyzing unstructured data. Cambridge University Press.',
+                source: "Feldman, R., & Sanger, J. (2007). <i>The text mining handbook.</i> Cambridge University Press.(書籍)",
+                how: "把這位同學所有貼文斷詞後,去除常見虛詞,列出出現最多次的前 8 個詞。",
+                diff: "只是詞頻,呈現他常談什麼,不評斷用詞好壞。",
                 ai_prompt: '如何引導學生擴展其關注的詞彙領域？'
             }
         };
@@ -3454,10 +3526,11 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                     <div class="ref-section-title ref-theory-title"><i class="fas fa-book-reader mr-2"></i> 學術背景 (為什麼看這個指標)</div>
                     <div class="ref-theory-box text-sm leading-relaxed">${content.theory}</div>
                 </div>
+${(content.how || content.diff) ? `<div class="ref-section"><div class="ref-section-title ref-theory-title"><i class="fas fa-calculator mr-2"></i> 平台怎麼算 / 與文獻的差異</div><div class="ref-theory-box text-sm leading-relaxed">${content.how ? `<p><b>怎麼算:</b>${content.how}</p>` : ''}${content.diff ? `<p class="mt-2"><b>要注意:</b>${content.diff}</p>` : ''}</div></div>` : ''}
 
                 <div class="ref-section">
                     <div class="ref-section-title ref-source-title"><i class="fas fa-graduation-cap mr-2"></i> 參考文獻</div>
-                    <div class="ref-source-box text-xs">${content.source || 'Scardamalia, M., & Bereiter, C. (2006). Knowledge Building.'}</div>
+                    <div class="ref-source-box text-xs leading-relaxed">${content.source || 'Scardamalia, M., & Bereiter, C. (2006). Knowledge Building.'}</div>
                 </div>
 
                 <div class="mt-6 pt-4 border-t border-slate-100">
