@@ -157,6 +157,7 @@
 <script src="kb-asra.js"></script>
 <script src="kb-asra-teacher.js"></script>
 <script src="kb-replay.js"></script>
+<script src="kb-vocab.js"></script>
 <script src="kb-ai-story.js"></script>
 <script src="kb-forest.js"></script>
     <style>@media (min-width: 768px) { #main-scroll-area { padding-top: 3.6rem !important; } }</style>
@@ -551,7 +552,8 @@
                         </div>
                         <div class="card border-t-4 border-amber-400">
                             <div class="flex justify-between items-center mb-4"><h4 class="font-bold text-sm text-slate-700 flex items-center"><i class="fas fa-fingerprint text-amber-500 mr-2"></i> 詞彙貢獻指紋 (Keywords)</h4><button class="ref-btn" onclick="openRef('lexical_fingerprint')"><i class="fas fa-book"></i> Ref:</button></div>
-                            <div class="flex flex-wrap gap-2 h-32 overflow-y-auto content-start" id="student-keywords-container"><span class="text-xs text-slate-400 italic">請選擇學生以查看其常用概念詞彙...</span></div>
+                            <div class="flex flex-wrap gap-2 h-20 overflow-y-auto content-start" id="student-keywords-container"><span class="text-xs text-slate-400 italic">請選擇學生以查看其常用概念詞彙...</span></div>
+                            <div class="mt-2 pt-2 border-t border-amber-100"><div class="text-[10px] font-bold text-teal-700 mb-1">專業詞彙(詞庫比對,不重複)<span id="student-vocab-count" class="ml-1"></span></div><div class="flex flex-wrap gap-1.5 h-14 overflow-y-auto content-start" id="student-vocab-container"><span class="text-xs text-slate-400 italic">請選擇學生...</span></div></div>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 gap-6">
@@ -594,9 +596,9 @@
                     </div>
                     <div id="concept-network-container" class="h-full bg-slate-50 rounded border border-slate-100"></div>
                 </div>
-                <div class="card h-[300px] md:h-[400px]">
-                    <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">3. 文字量累積 (Text Volume)</h3><p class="text-xs text-slate-500">全班累積字數(不是詞彙量)</p></div><button class="ref-btn" onclick="openRef('lexical_growth')"><i class="fas fa-book"></i> Ref:</button></div>
-                    <div class="h-full relative"><canvas id="lexicalChart"></canvas></div>
+                <div class="card h-[300px] md:h-[400px] overflow-y-auto custom-scrollbar">
+                    <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">3. 專業詞彙成長 (Domain Vocabulary)</h3><p class="text-xs text-slate-500">全班用到幾種單元專業詞(不重複,依詞庫比對)</p></div><button class="ref-btn" onclick="openRef('lexical_growth')"><i class="fas fa-book"></i> Ref:</button></div>
+                    <div id="vocab-summary" class="mb-2 text-xs text-slate-600 leading-relaxed"></div><div class="relative" style="height:190px"><canvas id="lexicalChart"></canvas></div>
                 </div>
                 <div class="card h-[350px] md:h-[400px] overflow-y-auto custom-scrollbar">
                     <div class="flex justify-between items-center mb-6"><div><h3 class="font-bold text-slate-800">4. 觀點演化路徑 (Evolution)</h3><p class="text-xs text-slate-500">從發散到整合</p></div><button class="ref-btn" onclick="openRef('rise_above')"><i class="fas fa-book"></i> Ref:</button></div>
@@ -1929,26 +1931,51 @@ async function geminiFetch(key, init) {
             return map;
         }
 
+        // ---- 專業詞彙指標(kb-vocab.js):詞庫 = 內建單元詞 + 設定中心「分析設定」補充的自訂詞 ----
+        let __vocabM = null, __vocabKey = null;
+        function getVocabMatcher() {
+            let extra = ''; try { extra = (KB.settings.get().analysis || {}).extraTerms || ''; } catch (e) {}
+            if (!__vocabM || __vocabKey !== extra) { __vocabM = KBVocab.matcher(extra); __vocabKey = extra; }
+            return __vocabM;
+        }
+        function renderStudentVocab(terms) {
+            const box = document.getElementById('student-vocab-container'), cnt = document.getElementById('student-vocab-count'); if (!box) return;
+            terms = terms || [];
+            if (cnt) cnt.textContent = '(' + terms.length + ' 種)';
+            box.innerHTML = terms.length ? terms.map(k => '<span class="bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded text-xs">' + esc(k) + '</span>').join('') : '<span class="text-xs text-slate-400 italic">還沒用到詞庫裡的專業詞</span>';
+        }
+        function renderVocabSummary(ser, M) {
+            const el = document.getElementById('vocab-summary'); if (!el) return;
+            const lib = '詞庫:內建 ' + M.baseSize + ' 個' + (M.extraSize ? '、自訂 ' + M.extraSize + ' 個' : '') + '(可在設定中心 → 分析設定補充)。';
+            if (!ser.total) { el.innerHTML = '目前貼文還沒有用到詞庫裡的專業詞。' + lib; return; }
+            const lastNew = [...ser.days].reverse().find(d => d.newTerms.length);
+            el.innerHTML = '全班共用過 <b>' + ser.total + '</b> 種專業詞,每人平均 <b>' + ser.avgPerStudent.toFixed(1) + '</b> 種。' +
+                (lastNew ? '最近新增:' + lastNew.newTerms.slice(0, 8).map(esc).join('、') + (lastNew.newTerms.length > 8 ? '…' : '') + '。' : '') +
+                ' <span class="text-slate-400">' + lib + '這是詞庫比對,適合看全班趨勢,不適合替個別同學打分數。</span>';
+        }
+
         let lexicalChartInstance;
         function initLexicalChart() {
-            const ctx = document.getElementById('lexicalChart').getContext('2d');
+            const cv = document.getElementById('lexicalChart'); if (!cv) return;
+            const ctx = cv.getContext('2d');
             if (lexicalChartInstance) lexicalChartInstance.destroy();
-
+            const M = getVocabMatcher();
+            const studs = getScopedStudents(globalRawDB, globalRawDB.nodes || []);
+            const ser = KBVocab.series(globalAllNotes, M, { uids: studs.map(u => String(u.id)), dayKey: dayKeyOf });
             const sortedNotes = [...globalAllNotes].sort((a, b) => a.dateTime - b.dateTime);
-            let labels = [];
-            let dataPoints = [];
-
-            if (sortedNotes.length === 0) {
-                labels = ['無資料']; dataPoints = [0];
-            } else {
-                const dayMap = buildDayBuckets(sortedNotes, () => ({ len: 0 }));
-                sortedNotes.forEach(n => { dayMap.get(dayKeyOf(n.dateTime)).len += ((n.content || "") + (n.title || "")).length; });
-                let cumulative = 0;
-                dayMap.forEach(b => { cumulative += b.len; labels.push(b.label); dataPoints.push(cumulative); });
-            }
-
-            lexicalChartInstance = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: '累積字數', data: dataPoints, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false } });
-            try { kbAttachSeriesPlayer({ id: 'lexical', explainTitle: '全班累積字數的成長', chart: lexicalChartInstance }); } catch (e) {}
+            const bm = buildDayBuckets(sortedNotes, () => ({}));
+            let labels = ser.days.map(d => (bm.get(d.key) || {}).label || d.key);
+            let cls = ser.days.map(d => d.classCum), avg = ser.days.map(d => Math.round(d.avgCum * 10) / 10);
+            let newBy = ser.days.map(d => d.newTerms);
+            if (!labels.length) { labels = ['無資料']; cls = [0]; avg = [0]; newBy = [[]]; }
+            lexicalChartInstance = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [
+                { label: '全班不重複專業詞(累積)', data: cls, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.3 },
+                { label: '每人平均不重複專業詞(累積)', data: avg, borderColor: '#0d9488', borderDash: [5, 4], tension: 0.3 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { afterBody: items => { const i = items && items[0] ? items[0].dataIndex : -1; const w = newBy[i] || []; return w.length ? ['這天新出現:' + w.slice(0, 8).join('、') + (w.length > 8 ? '…' : '')] : []; } } } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
+            renderVocabSummary(ser, M);
+            try { kbAttachSeriesPlayer({ id: 'lexical', explainTitle: '全班專業詞彙(不重複)的成長', chart: lexicalChartInstance }); } catch (e) {}
         }
 
         function initPromisingnessChart() {
@@ -2388,7 +2415,7 @@ async function geminiFetch(key, init) {
             const [agencyScore2, , ideaImpScore2, synthesisScore2, inquiryScore2] = radarData;
             const depthTrend = [Math.min(20, inquiryScore2/4), Math.min(40, agencyScore2/2), Math.min(60, ideaImpScore2/1.2), Math.min(80, synthesisScore2), inquiryScore2];
 
-            return { user, noteCount, maturity: mat, scaffoldCounts, visNodes, visEdges: vEdges.concat(alterEdges), alterLinkCount: alterPairs.size, egoOut: vOut, egoIn: vIn, depthTrend, radarData, role, badgeColor, topKeywords, balanceData, inDegree, outDegree };
+            return { user, noteCount, maturity: mat, scaffoldCounts, visNodes, visEdges: vEdges.concat(alterEdges), alterLinkCount: alterPairs.size, egoOut: vOut, egoIn: vIn, depthTrend, radarData, role, badgeColor, topKeywords, balanceData, inDegree, outDegree, vocabTerms: (function () { try { return KBVocab.forStudent(myNodes, getVocabMatcher()); } catch (e) { return []; } })() };
         }
 
         // ===========================================
@@ -2599,6 +2626,7 @@ async function geminiFetch(key, init) {
             document.getElementById('profile-avatar').innerText = displayName[0];
 
             const badge = document.getElementById('kb-role-badge'); badge.innerText = data.role; badge.className = `text-[10px] px-2 py-0.5 rounded-full border font-bold tracking-wide ${data.badgeColor}`; badge.classList.remove('hidden');
+            try { renderStudentVocab(data.vocabTerms); } catch (e) {}
             document.getElementById('student-keywords-container').innerHTML = data.topKeywords.length > 0 ? data.topKeywords.map(k => `<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded text-xs">${k}</span>`).join('') : '<span class="text-xs text-slate-400">無詞彙</span>';
             const ctxR = document.getElementById('radarChart').getContext('2d'); if(radarChartInstance) radarChartInstance.destroy(); radarChartInstance = new Chart(ctxR, { type: 'radar', data: { labels: ['主體性','社群互動','觀點改進','昇華整合','持續探究'], datasets: [{ label: displayName, data: data.radarData, backgroundColor:'rgba(59,130,246,0.2)', borderColor:'#3B82F6' }] }, options: { responsive:true, maintainAspectRatio:false, scales: { r: { suggestedMin: 0, suggestedMax: 100, ticks:{display:false} } } } });
             const container = document.getElementById('ego-network-container'); if(egoNetworkInstance) { egoNetworkInstance.destroy(); egoNetworkInstance = null; } const egoDays = kbMakeDays((db.nodes || []).map(n => new Date(n.date).getTime()));
@@ -2647,7 +2675,7 @@ async function geminiFetch(key, init) {
                 const dpWrap = document.querySelector('[data-kbnet="stu-depth"]');
                 if (dpWrap) kbAddExplain(dpWrap, { title: who + ' 的完整知識建構歷程(從最初到最後)', label: '📖 AI 歷程故事', table: () => kbStoryText(userId) }, 'stu-story');
                 kbAttachReplay({ id: 'stu-keywords', anchor: document.getElementById('student-keywords-container'), labels: sdT.labels, explainTitle: who + ' 的詞彙貢獻指紋(常用概念詞彙)的累積',
-                    render: step => { const m = metricsAt(step); document.getElementById('student-keywords-container').innerHTML = (m && m.topKeywords.length > 0) ? m.topKeywords.map(k => '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded text-xs">' + k + '</span>').join('') : '<span class="text-xs text-slate-400 italic">尚無內容</span>'; },
+                    render: step => { const m = metricsAt(step); try { renderStudentVocab(m ? m.vocabTerms : []); } catch (e) {} document.getElementById('student-keywords-container').innerHTML = (m && m.topKeywords.length > 0) ? m.topKeywords.map(k => '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded text-xs">' + k + '</span>').join('') : '<span class="text-xs text-slate-400 italic">尚無內容</span>'; },
                     values: step => { const m = metricsAt(step); return m && m.topKeywords.length ? '常用詞:' + ident.scrub(m.topKeywords.slice(0, 6).join('、')) : '尚無內容'; } });
             } catch (e) { console.error(e); }
 
@@ -3195,11 +3223,11 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 ai_prompt: '如何引導學生連結圖中尚未相連的概念？'
             },
             'lexical_growth': {
-                title: "文字量累積",
-                theory: "看全班累積寫了多少字。字數可以反映參與的投入,但無法代表專業詞彙的成長。",
-                source: "想看真正的詞彙成長,可參考:<br>Sun, Y., Zhang, J., & Scardamalia, M. (2010). Knowledge building and vocabulary growth over two years, Grades 3 and 4. <i>Instructional Science, 38</i>(2), 147–171. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11251-008-9082-5\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Nagy, W., & Townsend, D. (2012). Words as tools: Learning academic vocabulary as language acquisition. <i>Reading Research Quarterly, 47</i>(1), 91–108. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1002/rrq.011\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "把每天貼文的標題與內容的字數加總,逐日累積。",
-                diff: "這張圖算的是「字數」,不是「詞彙」。研究詞彙成長(Sun 等人,2010)是看學生用了哪些專業詞語、用得是否正確。若要改成詞彙指標,需要先建立該單元的專業詞表。",
+                title: "專業詞彙成長",
+                theory: "看全班「用到了幾種單元裡的專業詞」,而不是寫了多少字。學生一開始多半用日常用語,隨著探究,會慢慢用到更多精確的專業詞,這被視為概念理解深化的跡象之一。",
+                source: "想了解詞彙成長的研究背景:<br>Sun, Y., Zhang, J., & Scardamalia, M. (2010). Knowledge building and vocabulary growth over two years, Grades 3 and 4. <i>Instructional Science, 38</i>(2), 147–171. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11251-008-9082-5\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Nagy, W., & Townsend, D. (2012). Words as tools: Learning academic vocabulary as language acquisition. <i>Reading Research Quarterly, 47</i>(1), 91–108. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1002/rrq.011\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Snow, C. E. (2010). Academic language and the challenge of reading for learning about science. <i>Science, 328</i>(5977), 450–452. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1126/science.1182597\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "用「單元詞庫」比對每一則貼文:內建 125 個國小自然與社會議題的專業詞(與學生端「我的概念雲」同一份),老師可在設定中心 → 分析設定補充自訂詞。比對時長詞優先(寫「光線」只算「光線」,不會同時算「光」);單字詞(光、電、水…)太容易誤判,不列入。圖上兩條線:全班累積的不重複專業詞數,和每人平均的不重複專業詞數(沒發文的同學算 0)。",
+                diff: "這是「詞庫比對」,不是詞彙測驗:詞庫裡沒有的好詞不會被算到,詞庫裡的詞用得對不對也不判斷,複製同學的句子也會算。所以它適合看「全班的趨勢」,不適合拿來比較或評分個別同學。Sun 等人(2010)研究的是知識建構教室中的詞彙成長,平台並沒有複製他們的測量方式,只是做了簡化的近似。",
                 ai_prompt: '如何透過閱讀材料增加學生的詞彙量？'
             },
             'lens': {

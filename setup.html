@@ -431,6 +431,9 @@
         setRow('Real Ideas:疑問型貼文占比', '貼文含問號或為提問類型的占比 ≥ 此值。', num('q', a.kbQuestion, 0.01, 0.01, 1)) +
         setRow('Idea Diversity:對照性想法占比', '提問、改進、反駁等類型占比 ≥ 此值。', num('div', a.kbDiversityContrast, 0.01, 0.01, 1)) +
         setRow('Authoritative Sources:引用資料占比', '貼文含「文獻、研究、官方、網址、實測…」等線索的占比 ≥ 此值。', num('src', a.kbSources, 0.01, 0.01, 1))) +
+      card('專業詞庫(詞彙指標)', 'fa-spell-check',
+        '<p class="text-xs text-slate-500 mb-2">老師分析的「專業詞彙成長」與學生端的「專業詞」,會用內建的國小自然與社會議題詞庫(約 125 個詞)比對貼文。你的單元如果有別的專業詞,可以在這裡補充:用逗號或換行分開,每個詞 2~12 個字,單字詞不會被算入。</p>' +
+        '<textarea class="inp w-full" rows="3" id="an-terms" placeholder="例如:顯微鏡, 蒸散作用, 光合產物">' + esc(a.extraTerms || '') + '</textarea>') +
       '<div class="flex gap-2"><button class="btn btn-p" data-act="an-save"><i class="fa-solid fa-floppy-disk"></i>儲存設定</button><button class="btn btn-g" data-act="an-reset"><i class="fa-solid fa-rotate-left"></i>還原預設值</button></div>' +
       '<div class="card text-xs text-slate-500">這些門檻會立即套用在「老師分析」的 KB 12 檢核與 Epistemic Agency。文字類指標是關鍵字估計,僅供教學參考。</div>';
   };
@@ -646,7 +649,7 @@
       function v(id) { return parseFloat($('#an-' + id).value); }
       var vals = { init: v('init'), mon: v('mon'), exp: v('exp'), pass: v('pass'), rate: v('rate'), q: v('q'), div: v('div'), src: v('src') };
       for (var k in vals) if (!(vals[k] > 0 && vals[k] <= 1)) { KBUI.toast('每一項都必須介於 0 到 1 之間(不含 0)', 'err'); return; }
-      KB.settings.update({ analysis: { agencyTargets: { init: vals.init, mon: vals.mon, exp: vals.exp }, agencyPass: vals.pass, agencyRate: vals.rate, kbQuestion: vals.q, kbDiversityContrast: vals.div, kbSources: vals.src } }); KBUI.toast('已儲存,老師分析會立即套用', 'ok');
+      KB.settings.update({ analysis: { agencyTargets: { init: vals.init, mon: vals.mon, exp: vals.exp }, agencyPass: vals.pass, agencyRate: vals.rate, kbQuestion: vals.q, kbDiversityContrast: vals.div, kbSources: vals.src, extraTerms: ($('#an-terms') ? $('#an-terms').value : '') } }); KBUI.toast('已儲存,老師分析會立即套用', 'ok');
     },
     'an-reset': function () { KB.settings.update({ analysis: { agencyPass: 0.7, agencyRate: 0.6, agencyTargets: { init: 0.25, mon: 0.5, exp: 0.3 }, kbDiversityContrast: 0.3, kbSources: 0.05, kbQuestion: 0.15 } }); KBUI.toast('已還原預設值', 'ok'); R.analysis(); },
     // ai
