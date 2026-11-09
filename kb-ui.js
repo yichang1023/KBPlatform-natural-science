@@ -251,9 +251,61 @@
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', mountCloudStatus); else mountCloudStatus();
 
+  /* ---------- Ctrl(Mac:⌘)+點選 / 滑鼠中鍵:在新分頁開啟 ----------
+   *  1) 一般連結(<a href>):瀏覽器本來就會開新分頁,這裡只是擋掉頁面自己的點擊處理(它可能會取消預設動作)
+   *  2) 有 data-kbhref 的元素、或 onclick 寫著 location.href='…' 的按鈕:改成開新分頁
+   *  3) 老師分析左邊的分頁按鈕 switchView('x'):開新分頁並直接進到該分頁(#view=x)
+   *  4) 首頁的 navigateTo('x')、學生頁的 goAsra():自己用 KBUI.go() 處理
+   *  按鈕裡面的小按鈕(例如編輯、刪除)不受影響。 */
+  function wantsNewTab(e) { return !!(e && (e.ctrlKey || e.metaKey || e.button === 1)); }
+  function openTab(href) {
+    var w = null;
+    try { w = global.open(href, '_blank', 'noopener'); } catch (err) { w = null; }
+    if (!w) { try { global.open(href, '_blank'); } catch (err2) {} }
+  }
+  function go(href, ev) {
+    ev = ev || global.event;
+    if (wantsNewTab(ev)) { if (ev && ev.preventDefault) ev.preventDefault(); openTab(href); return false; }
+    global.location.href = href; return true;
+  }
+  function pageFile() { var p = String(global.location.pathname || '').split('/').pop(); return p || 'index.html'; }
+  function newTabHref(t) {
+    var el = t.closest('[data-kbhref]');
+    if (el) {
+      var inner = t.closest('button,a,input,select,textarea,label');
+      if (inner && inner !== el && el.contains(inner)) return null;   // 按到裡面的小按鈕,不要開新分頁
+      return el.getAttribute('data-kbhref');
+    }
+    var oc = t.closest('[onclick]'); if (!oc) return null;
+    var src = oc.getAttribute('onclick') || '', m;
+    if ((m = src.match(/location(?:\.href)?\s*=\s*['"]([^'"]+)['"]/))) return m[1];
+    if ((m = src.match(/switchView\('(\w+)'\)/))) return pageFile() + '#view=' + m[1];
+    return null;
+  }
+  function onNewTabClick(e) {
+    if (!wantsNewTab(e) || !e.target || !e.target.closest) return;
+    var t = e.target, a = t.closest('a[href]');
+    if (a) {
+      var h = a.getAttribute('href') || '';
+      if (h && h.charAt(0) !== '#' && !/^javascript:/i.test(h) && !/goAsra/.test(a.getAttribute('onclick') || '')) { if (e.type === 'click') e.stopImmediatePropagation(); return; }
+      if (/goAsra/.test(a.getAttribute('onclick') || '')) return;
+    }
+    var href = newTabHref(t);
+    if (!href) {
+      if (e.type === 'auxclick') {   // 中鍵按首頁的大按鈕:交給 navigateTo 判斷身分後開新分頁
+        var oc = t.closest('[onclick]'), nm = oc && (oc.getAttribute('onclick') || '').match(/navigateTo\('(\w+)'\)/);
+        if (nm && typeof global.navigateTo === 'function') { e.preventDefault(); e.stopImmediatePropagation(); global.navigateTo(nm[1]); }
+      }
+      return;
+    }
+    e.preventDefault(); e.stopImmediatePropagation(); openTab(href);
+  }
+  doc.addEventListener('click', onNewTabClick, true);
+  doc.addEventListener('auxclick', function (e) { if (e.button === 1) onNewTabClick(e); }, true);
+
   global.KBUI = {
     toast: toast, modal: modal, confirm: confirmBox, confirmText: confirmText, changePassword: changePassword,
     mountUserBar: mountUserBar, requireLogin: requireLogin, announce: announce, navItems: navItems,
-    menuHTML: menuHTML, wireMenu: wireMenu, esc: esc, injectCSS: injectCSS, ensureConsent: ensureConsent
+    menuHTML: menuHTML, wireMenu: wireMenu, esc: esc, injectCSS: injectCSS, ensureConsent: ensureConsent, go: go
   };
 })(window);

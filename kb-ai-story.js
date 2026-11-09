@@ -30,8 +30,8 @@
 
   // ===== 給 AI 的共同寫法:把數據「說成故事」,連國小高年級學生也看得懂;說明方式由 AI 自己挑最貼切的 =====
   var NL = String.fromCharCode(10);
-  function styleRules(forStudent) {
-    return [
+  function styleRules(forStudent, snapshot) {
+    var arr = [
       '【怎麼寫】',
       '1. 先自己判斷「這個項目用哪種方式講最容易懂」(可以是說故事、生活比喻、比賽、種樹、蓋積木、搭公車…),挑一種最貼切的就好,不要同時用太多比喻。',
       '2. 開頭先給一行「🔑 一句話重點」(用粗體,一句話直接說結論,讓人不用往下讀也知道大意),再用一句話說清楚:這張圖/這個數字在看什麼。',
@@ -40,11 +40,20 @@
       '5. 最後用一小段「這代表什麼」做總結,並' + (forStudent ? '給你 2~3 個接下來可以做的具體小行動' : '給 2~3 個老師可以馬上用的具體做法(也可以提醒學生能怎麼做)') + ',同時誠實說出還需要加強的地方。',
       '6. 資料看不出來的地方,直接說「資料看不出來」,不要硬猜。',
       '【語言】國小高年級學生也看得懂:用短句、日常用字,少用艱深的詞(一定要用時要馬上解釋);繁體中文;全文約 400~650 字;用小標題與條列,每個章節最多一個 emoji;不要用表格。'
-    ].join(NL);
+    ];
+    if (snapshot) arr[3] = '3. 重要的數字、關鍵詞用粗體標出來,讓人一眼看到重點;每段最多 3~4 句。接著分成 2~3 個小標題(例如「🔍 現在的樣子」「🚧 哪裡卡住了」「🌱 接下來可以怎麼做」),說明現在的狀態、為什麼重要、有什麼值得注意;一定要引用資料裡的數字與代號(如 S03),讓人看得到畫面,但不可誇大、不可編造。';
+    return arr.join(NL);
   }
   function who(forStudent) { return forStudent ? '學生本人(請用「你」稱呼,語氣溫暖、鼓勵、誠實)' : '老師(語氣溫暖、肯定、誠實)'; }
-  function buildHead() {
+  function buildHead(kind) {
     var forStudent = global.kbAiAudience === 'student';
+    if (kind === 'snapshot') {
+      return [
+        '你是一位很會說故事的教育顧問,熟悉知識建構 (Knowledge Building) 理論與 ASRA(用分析資料幫學生看見自己的想法、反思、訂計畫、再檢查)。下面是' + (forStudent ? '你' : '老師') + '正在看的一個項目「目前這一刻」的統計資料。學生姓名與學號一律已換成 S01、S02… 代號,請沿用代號,不要猜測真實姓名。',
+        '你的任務:用自然、生動的話,向' + who(forStudent) + '解說這份資料:現在發生了什麼、哪裡值得肯定、哪裡卡住了、接下來可以怎麼做。像在跟同事聊天,讓外行人也聽得懂,不要像在念報表。',
+        styleRules(forStudent, true)
+      ].join(NL) + NL + NL;
+    }
     return [
       '你是一位很會說故事的教育顧問,熟悉知識建構 (Knowledge Building) 理論。下面是一份「從最初到最後」依時間順序整理的資料。學生姓名與學號一律已換成 S01、S02… 代號,請沿用代號,不要猜測真實姓名。',
       '你的任務:用「說故事」的方式,向' + who(forStudent) + '介紹這段歷程如何從最初一步步發展到最後。讀起來要自然、生動、好懂,像在說一段有起承轉合的故事,而不是在念報表。',
@@ -96,7 +105,7 @@
     paint(); panel.__kbf = F; return F;
   }
 
-  function runExplain(panel, title, tableFn, force) {
+  function runExplain(panel, title, tableFn, force, kind) {
     panel.style.display = 'block';
     var F = frame(panel, title), body = F.body; F.unfold();
     if (!global.kbAiAsk) { body.innerHTML = '<span style="color:#b45309">AI 功能尚未就緒。</span>'; return; }
@@ -109,11 +118,11 @@
       body.innerHTML = '<div class="kb-ai-body">' + md(txt) + '</div>' +
         '<div style="margin-top:6px;color:#94a3b8;font-size:10px">AI 依上方資料推論,僅供教學參考;姓名已用代號取代。' + (fromCache ? '(沿用先前結果)' : '') + ' <a href="#" data-a="again" style="color:#6366f1;text-decoration:underline">重新產生</a></div>';
       var again = body.querySelector('[data-a=again]');
-      if (again) again.onclick = function (e) { e.preventDefault(); runExplain(panel, title, tableFn, true); };
+      if (again) again.onclick = function (e) { e.preventDefault(); runExplain(panel, title, tableFn, true, kind); };
     }
     if (aiCache[key] && !force) { show(aiCache[key], true); return; }
-    body.innerHTML = '<span style="color:#6d28d9">⏳ AI 正在從最初讀到最後,整理這段歷程…</span>';
-    Promise.resolve(global.kbAiAsk(buildHead() + '【分析對象】' + title + '\n【資料(由最初到最後)】\n' + table)).then(function (txt) {
+    body.innerHTML = '<span style="color:#6d28d9">' + (kind === 'snapshot' ? '⏳ AI 正在整理這份資料…' : '⏳ AI 正在從最初讀到最後,整理這段歷程…') + '</span>';
+    Promise.resolve(global.kbAiAsk(buildHead(kind) + '【分析對象】' + title + (kind === 'snapshot' ? '\n【資料(目前這一刻)】\n' : '\n【資料(由最初到最後)】\n') + table)).then(function (txt) {
       txt = String(txt || '');
       if (!txt || txt.indexOf('⚠️') === 0) { body.innerHTML = '<span style="color:#b91c1c">' + esc(txt || 'AI 沒有回應,請稍後再試。') + '</span>'; return; }
       aiCache[key] = txt; show(txt, false);
@@ -134,7 +143,7 @@
     panel.setAttribute('data-kbai', id || '');
     panel.style.cssText = 'display:none;margin-top:6px;padding:10px 12px;border:1px solid #ddd6fe;background:#f5f3ff;border-radius:10px;font-size:12px;line-height:1.7;color:#334155;text-align:left';
     wrap.insertAdjacentElement('afterend', panel);
-    btn.onclick = function () { runExplain(panel, ex.title, ex.table, false); };
+    btn.onclick = function () { runExplain(panel, ex.title, ex.table, false, ex.kind); };
     return { panel: panel, button: btn };
   };
 

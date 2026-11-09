@@ -1748,7 +1748,7 @@
                         const authorName = window.state.userList[t.author] ? window.state.userList[t.author].name : 'Unknown';
 
                         return `
-                        <div onclick="window.app.enterTopic('${t.id}')" class="bg-white rounded-xl border p-5 cursor-pointer hover:shadow-lg relative overflow-hidden group transition">
+                        <div onclick="window.app.enterTopic('${t.id}')" data-kbhref="Knowledge Building Forum.html?topic=${encodeURIComponent(t.id)}" class="bg-white rounded-xl border p-5 cursor-pointer hover:shadow-lg relative overflow-hidden group transition">
                             <div class="flex justify-between mb-3 items-start">
                                 <div class="flex flex-wrap gap-1">${tagsHtml}</div>
                                 ${adminControls}

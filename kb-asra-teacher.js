@@ -102,11 +102,11 @@
       tile(T.plans, '計畫個數', T.usersPlan + ' 位學生訂過', 'bg-emerald-50 border-emerald-200') + tile(pct(T.planActed, T.plans) + '%', '計畫後有行動', T.planActed + ' / ' + T.plans + ' 個', 'bg-emerald-50 border-emerald-200') +
       tile(T.reeval, '再評估次數', '') + tile(pct(T.better, T.reeval) + '%', '回報「變好了」', T.better + ' / ' + T.reeval + ' 次', 'bg-amber-50 border-amber-200') + '</div>' +
       '<div class="grid lg:grid-cols-2 gap-4 mt-4">' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">ASRA 走到哪一步?<span class="ml-2 text-xs font-bold text-slate-400">監控 → 反思 → 調整 → 再評估</span></h4><p class="text-xs text-slate-500 mb-2">長條是人數,滿格代表全班。看哪一步卡住最多人。</p>' + funnel + '</section>' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">大家在做哪些思考?<span class="ml-2 text-xs font-bold text-slate-400">貼文類型(近似「認知動作」)</span></h4><p class="text-xs text-slate-500 mb-2">「改進」+「昇華」占 <b>' + pct(D.improve, T.posts) + '%</b>。這兩種越多,代表越常把想法變得更好、把大家的想法合起來。</p>' + types + '</section>' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">想法走多遠了?<span class="ml-2 text-xs font-bold text-slate-400">知識進展評估</span></h4><p class="text-xs text-slate-500 mb-2">全班共 ' + D.ideas + ' 個想法;其中 ' + D.ideasEvid + ' 個(' + pct(D.ideasEvid, D.ideas) + '%)作者自己寫了證據。</p>' + stat + '</section>' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">教學小建議<span class="ml-2 text-xs font-bold text-slate-400">由上面的數字自動整理</span></h4><div class="mt-2">' + tips + '</div></section></div>' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">這週建議多關心<span class="ml-2 text-xs font-bold text-slate-400">規則見「指標說明」</span></h4>' + att + '</section>';
+      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">ASRA 走到哪一步?<span class="ml-2 text-xs font-bold text-slate-400">監控 → 反思 → 調整 → 再評估</span></h4><p class="text-xs text-slate-500 mb-2">長條是人數,滿格代表全班。看哪一步卡住最多人。</p>' + funnel + '<div data-ai="funnel" class="mt-3"></div></section>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">大家在做哪些思考?<span class="ml-2 text-xs font-bold text-slate-400">貼文類型(近似「認知動作」)</span></h4><p class="text-xs text-slate-500 mb-2">「改進」+「昇華」占 <b>' + pct(D.improve, T.posts) + '%</b>。這兩種越多,代表越常把想法變得更好、把大家的想法合起來。</p>' + types + '<div data-ai="types" class="mt-3"></div></section>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">想法走多遠了?<span class="ml-2 text-xs font-bold text-slate-400">知識進展評估</span></h4><p class="text-xs text-slate-500 mb-2">全班共 ' + D.ideas + ' 個想法;其中 ' + D.ideasEvid + ' 個(' + pct(D.ideasEvid, D.ideas) + '%)作者自己寫了證據。</p>' + stat + '<div data-ai="ideas" class="mt-3"></div></section>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">教學小建議<span class="ml-2 text-xs font-bold text-slate-400">由上面的數字自動整理</span></h4><div class="mt-2">' + tips + '</div><div data-ai="tips" class="mt-3"></div></section></div>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">這週建議多關心<span class="ml-2 text-xs font-bold text-slate-400">規則見「指標說明」</span></h4>' + att + '<div data-ai="attention" class="mt-3"></div></section>';
   }
 
   /* ---------- 分頁 2:學生一覽 ---------- */
@@ -166,9 +166,9 @@
   /* ---------- 分頁 4:指標說明與匯出 ---------- */
   function tabMethod(D) {
     var rows = [
-      ['貼文類型分布(提問/延伸/改進/反例/昇華)', '國際研究常把貼文編碼成「認知動作/討論動作」(例:提問、想法、改進想法、進一步提問、論證、整合),再用 ONA 看動作之間的先後轉換。', '我們只有 5 種貼文類型,是粗略的近似;還沒有做「動作先後順序」的分析。'],
-      ['回應別人 / 被回應 / 夥伴數', '社會網絡分析(SNA)的「誰回應誰」:入度、出度、接近中心性。', '目前只算次數與夥伴人數,沒算中心性;「誰讀了誰」平台沒有記錄,算不出來。'],
-      ['想法狀態(有證據/待查證/在發展/等回應)', '有潛力的想法(promising ideas)、想法改進(idea improvement)。', '用關鍵字比對「實驗、觀察、資料…」判斷證據,是規則式近似,不是人工編碼,可能誤判。'],
+      ['貼文類型分布(提問/延伸/改進/反例/昇華)', '國際研究常把貼文編碼成「認知動作/討論動作」(例:提問、想法、改進想法、進一步提問、論證、整合),再用 ONA 看動作之間的先後轉換。', '我們只有 5 種貼文類型,是粗略的近似。老師分析的「言談序列轉移」「鷹架回應模式」可以看「回應某一類貼文時,接著常用哪一類」(以百分比呈現),但還沒有 ONA 那樣的統計檢定與網絡圖;學生端沒有這項。'],
+      ['回應別人 / 被回應 / 夥伴數', '社會網絡分析(SNA)的「誰回應誰」:入度、出度、接近中心性。', '老師分析已算「中介中心性」(知識經紀人),並畫出互動圈與誰回應誰;接近中心性還沒有。學生端只呈現互動圈與次數。平台有記錄「學生點開看過哪些貼文」(從開始記錄後才有),目前只統計篇數,還沒畫成「誰讀了誰」的閱讀網絡。'],
+      ['想法狀態(有證據/待查證/在發展/等回應)', '有潛力的想法(promising ideas)、想法改進(idea improvement)。', '用關鍵字比對「實驗、觀察、資料…」判斷證據,是規則式近似,不是人工編碼,可能誤判。國際研究的「潛力想法」是由學生自己評選,平台目前沒有學生評選功能,所以這裡只是近似。'],
       ['反思文字(含日期時間)', '反思單與訪談的質性編碼:後設認知、調節、認知主體性。', '這裡提供原文與日期,編碼要由研究者人工做;可匯出 CSV。'],
       ['計畫 → 行動 → 再評估', '自我調整與持續改進:反思之後有沒有真的行動、結果有沒有變好。', '每次再評估會一併記下當時計畫後的新貼文與新回應數,可追蹤個人層級的前後變化。'],
       ['尚未收集', '認知情緒問卷、領域前後測、認知主體性問卷。', '目前平台沒有這些資料;若要做研究,需另外施測再合併。']
@@ -197,6 +197,52 @@
       '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-1">資料怎麼保存?</h4><p class="text-sm text-slate-600">學生每按一次「存下」就新增一筆紀錄,舊的紀錄不會被覆蓋或刪除(資料庫規則也會擋住修改與刪除)。所以同一位學生對同一個想法的反思,可以看到一次比一次的變化。</p></section>';
   }
 
+  /* ---------- 🤖 AI 解說:給 AI 的資料只有數字與代號(S01…),姓名不會傳出去 ---------- */
+  function aiCode(u) {
+    var id = global.__kbIdent; if (!id && typeof global.kbAiIdent === 'function' && UI.D) { var ul = {}; UI.D.rows.forEach(function (r) { ul[r.u.id] = { id: r.u.id, name: r.u.name, role: 'student' }; }); id = global.kbAiIdent(ul); }
+    return (id && id.codeOf && id.codeOf[String(u.id)]) || '某位同學';
+  }
+  function aiTables(D) {
+    var T = D.T, NL = String.fromCharCode(10), p = function (a, b) { return pct(a, b) + '%'; };
+    return {
+      funnel: function () {
+        return ['全班學生 ' + T.students + ' 人(目前範圍)。ASRA 五步驟「監控 → 反思 → 調整 → 再評估」,各步驟做到的人數(越往後越少,代表卡在那一步):',
+          '- 有發過貼文:' + T.usersPost + ' 人', '- 寫過反思:' + T.usersRefl + ' 人(共 ' + T.refl + ' 篇)', '- 訂過計畫:' + T.usersPlan + ' 人(共 ' + T.plans + ' 個計畫)',
+          '- 做過再評估:' + T.usersRe + ' 人(共 ' + T.reeval + ' 次)', '- 回報「變好了」:' + T.usersBetter + ' 人(' + T.better + ' / ' + T.reeval + ' 次再評估,' + p(T.better, T.reeval) + ')',
+          '- 使用過 ASRA(寫過任何一筆紀錄):' + T.users + ' 人,占全班 ' + p(T.users, T.students),
+          '- 計畫之後看得到新貼文或新回應的:' + T.planActed + ' / ' + T.plans + ' 個(' + p(T.planActed, T.plans) + ');另有 ' + T.planOld + ' 個計畫訂了超過 3 天還沒看到新行動'].join(NL);
+      },
+      types: function () {
+        var rows = ASRA.TYPES.map(function (t) { return '- ' + ASRA.TNAME[t] + ':' + D.types[t] + ' 則(' + p(D.types[t], T.posts) + ')'; });
+        return ['全班論壇貼文共 ' + T.posts + ' 則,依學生發文時自己選的類型分布(近似「認知動作」,不是人工編碼):'].concat(rows, ['「改進」+「昇華」合計 ' + D.improve + ' 則,占 ' + p(D.improve, T.posts) + '(越高代表越常把想法變得更好、把大家的想法合起來)。']).join(NL);
+      },
+      ideas: function () {
+        return ['全班共 ' + D.ideas + ' 個想法;其中 ' + D.ideasEvid + ' 個(' + p(D.ideasEvid, D.ideas) + ')作者自己寫了證據(用「實驗、觀察、資料」等關鍵字判斷,可能誤判)。',
+          '想法目前的狀態:', '- 有證據:' + D.status.ok + ' 個(' + p(D.status.ok, D.ideas) + ')', '- 在發展(後來有人改進或整合):' + D.status.grow + ' 個(' + p(D.status.grow, D.ideas) + ')',
+          '- 待查證:' + D.status.check + ' 個(' + p(D.status.check, D.ideas) + ')', '- 等同學回應:' + D.status.wait + ' 個(' + p(D.status.wait, D.ideas) + ')'].join(NL);
+      },
+      tips: function () {
+        return ['系統依上面的數字自動整理出的教學小建議(共 ' + D.tips.length + ' 條):'].concat(D.tips.length ? D.tips.map(function (t, i) { return (i + 1) + '. ' + t; }) : ['目前沒有觸發任何建議(資料還不夠多,或各項指標都在合理範圍)。'],
+          ['背景:全班 ' + T.students + ' 人、論壇貼文 ' + T.posts + ' 則、反思 ' + T.refl + ' 篇、計畫 ' + T.plans + ' 個。']).join(NL);
+      },
+      attention: function () {
+        var list = D.attention.slice(0, 12).map(function (r) { return '- ' + aiCode(r.u) + ':' + r.reasons.join(';'); });
+        return ['系統用規則挑出「這週建議多關心」的學生共 ' + D.attention.length + ' 位(全班 ' + T.students + ' 人),下面列出前 ' + Math.min(12, D.attention.length) + ' 位。',
+          '判斷規則:沒發過貼文或 7 天沒發言;貼文 3 則以上卻沒回應過同學或沒人回應他;想法 3 個以上且 80% 沒寫證據;計畫訂了超過 3 天沒有新行動;最近一次再評估是「還要再努力」。這只是提醒老師多看一眼,不是對學生的評價。']
+          .concat(list.length ? list : ['(目前沒有需要特別關心的學生)']).join(NL);
+      }
+    };
+  }
+  function wireAi(D) {
+    if (UI.tab !== 'class' || typeof global.kbAddExplain !== 'function') return;
+    var tb = aiTables(D), defs = [['funnel', 'ASRA 走到哪一步'], ['types', '大家在做哪些思考'], ['ideas', '想法走多遠了'], ['tips', '教學小建議'], ['attention', '這週建議多關心']];
+    defs.forEach(function (d) {
+      var wrap = UI.root.querySelector('[data-ai="' + d[0] + '"]'); if (!wrap) return;
+      wrap.style.display = 'flex';
+      global.kbAddExplain(wrap, { title: 'ASRA 反思歷程:' + d[1], table: tb[d[0]], label: '🤖 AI 解說', kind: 'snapshot' }, 'asra-' + d[0]);
+    });
+  }
+
   /* ---------- 組合 ---------- */
   var TABS = [['class', '全班總覽', 'fa-chart-pie'], ['students', '學生一覽', 'fa-users'], ['log', '反思與計畫紀錄', 'fa-book-open'], ['method', '指標說明與匯出', 'fa-circle-info']];
   function draw() {
@@ -206,6 +252,7 @@
     var body = UI.tab === 'students' ? tabStudents(D) : UI.tab === 'log' ? tabLog(D) : UI.tab === 'method' ? tabMethod(D) : tabClass(D);
     UI.root.innerHTML = '<header class="mb-3"><h2 class="text-xl md:text-2xl font-bold text-slate-800">ASRA 反思歷程 <span class="text-sm font-bold text-slate-400">Analytics-Supported Reflective Assessment</span></h2><p class="text-sm text-slate-500">看全班與每位學生:走過的路 → 想法走多遠 → 用證據反思 → 決定下一步 → 回頭再檢查</p></header>' +
       '<div class="mb-3">' + cloudBanner() + '</div>' + tabs + '<div id="asra-t-body">' + body + '</div>';
+    try { wireAi(D); } catch (e) { if (global.console) console.error(e); }
   }
   function onClick(ev) {
     var el = ev.target.closest ? ev.target.closest('[data-act]') : null; if (!el || !UI.root.contains(el)) return;

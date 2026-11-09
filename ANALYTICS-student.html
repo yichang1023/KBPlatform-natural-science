@@ -1493,7 +1493,7 @@ async function initApiKey() {
         const model = KBConcept.build({ nodes: globalData.nodes, userId: uid, step: ts => sd.idx(ts), name: nameOf, topics: globalData.topics || [], max: 12 });
         window.__kbCC = KBConcept.create(host, model, {
             labels: sd.labels,
-            onGoPost: (id, topicId) => { location.href = 'Knowledge Building Forum.html?topic=' + encodeURIComponent(topicId) + '&node=' + encodeURIComponent(id); }
+            onGoPost: (id, topicId) => { KBUI.go('Knowledge Building Forum.html?topic=' + encodeURIComponent(topicId) + '&node=' + encodeURIComponent(id)); }
         });
         window.__kbCCUser = uid;
     }
@@ -2053,7 +2053,7 @@ async function initApiKey() {
 
     // 前往 ASRA 反思評量;老師/管理者正在看某位學生時,帶著學號過去
     function goAsra(ev) {
-        try { const u = (typeof currentUserId !== 'undefined' && currentUserId) ? currentUserId : null; if (gateUser && gateUser.role !== 'student' && u) { location.href = 'ASRA.html?student=' + encodeURIComponent(u); if (ev) ev.preventDefault(); return false; } } catch (e) {}
+        try { const u = (typeof currentUserId !== 'undefined' && currentUserId) ? currentUserId : null; if (gateUser && gateUser.role !== 'student' && u) { KBUI.go('ASRA.html?student=' + encodeURIComponent(u), ev); if (ev && ev.preventDefault) ev.preventDefault(); return false; } } catch (e) {}
         return true;
     }
 

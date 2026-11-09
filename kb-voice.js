@@ -118,11 +118,11 @@
   var END_PARTICLE = /(了|的|啊|喔|哦|啦|吧|呀|耶|喔|囉|嘛)$/;
   function isQuestionText(t) {
     t = String(t || '').replace(/[，。、？！：；,.?!:;…\s]+$/, '');
-    return /(嗎|呢)$/.test(t) || /(什麼|為什麼|為何|怎麼|怎樣|如何|是不是|有沒有|會不會|能不能|可不可以|哪裡|哪個|哪一|哪些|誰|多少|幾個|幾次|幾天|幾歲)/.test(t) || /是.{1,8}還是/.test(t);
+    return /(嗎|呢)$/.test(t) || /(什麼|為什麼|為何|怎麼|怎樣|如何|是不是|有沒有|會不會|能不能|可不可以|對不對|好不好|行不行|要不要|想不想|哪裡|哪個|哪一|哪些|誰|多少|幾個|幾次|幾天|幾歲)/.test(t) || /是.{1,8}還是/.test(t);
   }
   function isExclaimText(t) {
     t = String(t || '').replace(/[，。、？！：；,.?!:;…\s]+$/, '');
-    return /^(哇|耶|好棒|好厲害|好酷|好漂亮|好好玩)/.test(t) || /太.{1,6}了$/.test(t) || /(哈哈|好棒啊|真棒)$/.test(t);
+    return /^(哇|耶|好棒|好厲害|好酷|好漂亮|好好玩|好有趣|好神奇|太神奇|真厲害)/.test(t) || /太.{1,6}了$/.test(t) || /(哈哈|好棒啊|真棒)$/.test(t);
   }
   function enderFor(t) { return isQuestionText(t) ? '？' : (isExclaimText(t) ? '！' : '。'); }
   function lexSpans(text, vocab) {
@@ -146,6 +146,19 @@
       var left = text.slice(0, idx).split(/[，。、？！：；,.?!:;…\n]/).pop();
       ins[idx] = (m.ms >= 1600 && left.length >= 6) ? (isQuestionText(left) ? '？' : '。') : '，';
     });
+    // 一口氣說了好幾句(中間沒有停頓):句尾語氣詞後面接著新句子,補句號或問號;「如果…的話」後面補逗號
+    function nearIns(p) { for (var d = -2; d <= 2; d++) if (ins[p + d]) return true; return false; }
+    var SE = /(嗎|呢|啦|吧|喔|哦|耶|啊|呀|囉|嘛)(?=(我們|你們|他們|大家|老師|我|你|他|她|它|牠|那|這|因為|所以|但是|可是|不過|然後|還有|另外|首先|其次|最後|如果|雖然))/g, sm;
+    while ((sm = SE.exec(text)) !== null) {
+      var at = sm.index + sm[1].length, cl = text.slice(0, at).split(/[，。、？！：；,.?!:;…\n]/).pop();
+      var isQ = /^(嗎|呢)$/.test(sm[1]);   // 問句結尾很明確,前半句 3 個字就夠;其他語氣詞要 5 個字以上才當作一句話
+      if (cl.length >= (isQ ? 3 : 5) && !PUNCT_RE.test(text.charAt(at)) && !ins[at] && !nearIns(at) && safeIndex(at, spans) === at) ins[at] = isQ ? '？' : '。';
+    }
+    var IFR = /的話(?=[^，。？！、：；,.?!:;…\s])/g, im;
+    while ((im = IFR.exec(text)) !== null) {
+      var at2 = im.index + 2, cl2 = text.slice(0, im.index).split(/[，。、？！：；,.?!:;…\n]/).pop();
+      if (/(如果|假如|要是|若是|萬一)/.test(cl2) && !ins[at2] && !nearIns(at2) && safeIndex(at2, spans) === at2) ins[at2] = '，';
+    }
     // 連接詞前面補逗號(離上一個標點至少 4 個字,而且附近沒有已經補的標點)
     CONJ.forEach(function (c) {
       var p = text.indexOf(c);
@@ -176,28 +189,65 @@
   // 把幾句話接成最後的文字
   //  內容欄:句中依停頓補逗號;兩句之間停很久補句號(問句補問號),停得短補逗號;最後一句依內容補句號/問號/驚嘆號
   //  標題欄:不加逗號句號,問句才在結尾補問號
-  function composeText(segs, multiline) {
+  /* ---------- 抑揚頓挫:句尾音調上揚 → 可能是問句 ----------
+   *  detectPitch:用自相關法從麥克風的一小段聲音算出基頻(Hz);算不出來(沒有清楚的音高)回傳 0
+   *  pitchRise:最近幾個有聲音的框,最後 3 個框的平均音高比前面 5 個框高出 25% 以上 → 上揚
+   *  很保守:框數不夠、音高跳來跳去(可能抓錯一倍)都不算上揚;只有句子後面有停頓時才會用到 */
+  function detectPitch(buf, fs) {
+    var n = buf ? buf.length : 0; if (n < 256 || !fs) return 0;
+    var x = new Array(n), mean = 0, i, lag;
+    for (i = 0; i < n; i++) { x[i] = (buf[i] - 128) / 128; mean += x[i]; }
+    mean /= n;
+    var sq = new Array(n + 1); sq[0] = 0;
+    for (i = 0; i < n; i++) { x[i] -= mean; sq[i + 1] = sq[i] + x[i] * x[i]; }
+    if (sq[n] < 1e-4) return 0;
+    var minLag = Math.floor(fs / 500), maxLag = Math.min(Math.floor(fs / 90), (n >> 1) - 1), rs = [];
+    for (lag = minLag; lag <= maxLag + 1; lag++) {
+      var sum = 0; for (i = 0; i + lag < n; i++) sum += x[i] * x[i + lag];
+      var e1 = sq[n - lag], e2 = sq[n] - sq[lag], den = Math.sqrt(e1 * e2);
+      rs[lag] = den > 1e-9 ? sum / den : 0;
+    }
+    for (lag = minLag + 1; lag <= maxLag; lag++) {   // 第一個夠高的峰值(才不會抓到兩倍、三倍的週期)
+      if (rs[lag] > 0.6 && rs[lag] >= rs[lag - 1] && rs[lag] >= rs[lag + 1]) return fs / lag;
+    }
+    return 0;
+  }
+  function pitchRise(freqs) {
+    var v = (freqs || []).filter(function (x) { return x > 0; }).slice(-8);
+    if (v.length < 8) return false;
+    for (var i = 1; i < v.length; i++) { if (v[i] / v[i - 1] > 1.6 || v[i - 1] / v[i] > 1.6) return false; }
+    var avg = function (a) { return a.reduce(function (p, q) { return p + q; }, 0) / a.length; };
+    return avg(v.slice(-3)) / avg(v.slice(0, 5)) >= 1.25;
+  }
+  function riseOK(p) { p = String(p || '').replace(/[，。、？！：；,.?!:;…\s]+$/, ''); return p.length >= 3 && !isExclaimText(p); }
+  var SUBJ_START = /^(我們|你們|他們|大家|老師|我|你|他|她|它|牠)/;
+  function joinerFor(p, nxt, gap, rise) {
+    if (isQuestionText(p) && /(嗎|呢)$/.test(p)) return '？';
+    if (rise && riseOK(p)) return '？';   // 句尾音調上揚,後面又停了一下:當作問句
+    var ends = END_PARTICLE.test(p) && p.length >= 6;
+    if (gap >= 1500) return enderFor(p);
+    if (gap >= 1100 && ends) return enderFor(p);
+    if (gap < 0 && ends) return enderFor(p);
+    if (nxt && SUBJ_START.test(nxt) && p.length >= 8 && gap >= 700) return enderFor(p);   // 停了一下,下一句換了主詞:應該是新的一句
+    return '，';
+  }
+  // closing === false:這段話是插在別的文字中間,最後一句不要自己補句號(後面的字還接著)
+  function composeText(segs, multiline, closing) {
     var list = segs.filter(function (x) { return !x.deleted && x.text; });
     if (!list.length) return '';
-    var auto = cfgAuto();
+    var auto = cfgAuto(), wantEnd = closing !== false;
     if (!multiline) {
       var title = list.map(function (x) { return x.text; }).join('').replace(/[。，、.,]+$/, '');
-      var q = isQuestionText(title) && !/[？?！!]$/.test(title);
-      return auto && q ? title + '？' : title;
+      var q = (isQuestionText(title) || (list[list.length - 1].rise && riseOK(title))) && !/[？?！!]$/.test(title);
+      return auto && q && wantEnd ? title + '？' : title;
     }
     var out = '';
     list.forEach(function (s, i) {
       var p = s.text, last = i === list.length - 1;
       if (/[。？?！!…\n，、；：,;:)）」』》]$/.test(p)) { out += p; return; }
       if (!auto) { out += p; return; }
-      if (last) { out += p + enderFor(p); return; }
-      var gap = typeof s.gap === 'number' ? s.gap : -1, end;
-      if (isQuestionText(p) && /(嗎|呢)$/.test(p)) end = '？';
-      else if (gap >= 1500) end = enderFor(p);
-      else if (gap >= 1100 && END_PARTICLE.test(p) && p.length >= 6) end = enderFor(p);
-      else if (gap < 0 && END_PARTICLE.test(p) && p.length >= 6) end = enderFor(p);
-      else end = '，';
-      out += p + end;
+      if (last) { out += wantEnd ? p + ((s.rise && riseOK(p)) ? '？' : enderFor(p)) : p; return; }
+      out += p + joinerFor(p, list[i + 1].text, typeof s.gap === 'number' ? s.gap : -1, s.rise);
     });
     return out;
   }
@@ -312,7 +362,7 @@
     panel = doc.createElement('div'); panel.id = 'kbv-panel'; panel.className = 'kbv-panel hidden'; panel.setAttribute('role', 'status'); panel.setAttribute('aria-live', 'polite');
     panel.innerHTML = '<div class="kbv-top"><div class="kbv-state" data-k="state"></div><div class="kbv-meter" data-k="meter" aria-hidden="true"></div></div>' +
       '<div class="kbv-live" data-k="live"></div><div data-k="hint"></div><div class="kbv-chips" data-k="chips"></div><div data-k="alts"></div>' +
-      '<div class="kbv-acts" data-k="acts"></div><div class="kbv-tags" data-k="tags"></div><label class="kbv-pt"><input type="checkbox" data-k="punct"> 自動加標點(說話停頓補逗號、說完補句號或問號)</label><details class="kbv-cmds"><summary>口說標點(像 iPhone 一樣:說出名字就打出符號)</summary>說「逗號」→ ，　「句號」→ 。　「問號」→ ？　「驚嘆號」→ ！　「冒號」→ ：　「分號」→ ；　「頓號」→ 、　「刪節號」→ ……　「破折號」→ ——　「左引號」「右引號」→ 「 」　「左括號」「右括號」→ （ ）　「換行」→ 換一行　「新段落」→ 空一行</details><div class="kbv-note" data-k="note"></div>' +
+      '<div class="kbv-acts" data-k="acts"></div><div class="kbv-tags" data-k="tags"></div><label class="kbv-pt"><input type="checkbox" data-k="punct"> 自動加標點(說話停頓補逗號、說完補句號,語氣上揚或問句補問號)</label><details class="kbv-cmds"><summary>口說標點(像 iPhone 一樣:說出名字就打出符號)</summary>說「逗號」→ ，　「句號」→ 。　「問號」→ ？　「驚嘆號」→ ！　「冒號」→ ：　「分號」→ ；　「頓號」→ 、　「刪節號」→ ……　「破折號」→ ——　「左引號」「右引號」→ 「 」　「左括號」「右括號」→ （ ）　「換行」→ 換一行　「新段落」→ 空一行</details><div class="kbv-note" data-k="note"></div>' +
       '<details class="kbv-diag"><summary>診斷資訊(出問題時請截圖給老師)</summary><pre data-k="diag"></pre></details>';
     ['state', 'meter', 'live', 'hint', 'chips', 'alts', 'acts', 'tags', 'punct', 'note', 'diag'].forEach(function (k) { P[k] = panel.querySelector('[data-k=' + k + ']'); });
     var m = ''; for (var i = 0; i < 12; i++) m += '<i></i>'; P.meter.innerHTML = m;
@@ -321,7 +371,7 @@
       cfg.autoPunct = P.punct.checked; try { global.localStorage.setItem('kb_voice_punct', P.punct.checked ? '1' : '0'); } catch (e) {}
       var f = curField; if (!f) return;
       f.segs.forEach(function (sg) { sg.text = processSegmentText(sg.alts[sg.chosen].t, f.multiline, sg.marks); });
-      if (!A) writeField(f); else if (A.f === f) showInterim(A);
+      if (!A) { if (f.segs.length) writeField(f); } else if (A.f === f) showInterim(A);
       renderChips(f);
     };
     panel.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -347,12 +397,70 @@
   }
 
   /* ---------- 欄位 ---------- */
-  function fieldValueFor(f) {
-    return (f.base || '') + composeText(f.segs, f.multiline);
+  // 輸入欄的文字 = 游標前面的字(f.base)+ 這次說的句子 + 游標後面的字(f.after)。
+  // 所以在文字中間點一下再說話,新的字和標點就會出現在那個位置,不會跑到最後面;你自己打的標點也不會被蓋掉。
+  var PUCH = '，。、？！：；…,.?!:;';
+  function isPunct(c) { return !!c && PUCH.indexOf(c) >= 0; }
+  function closingOK(f) {   // 這段話的最後要不要自動補句號:後面沒有字、或是插在兩個句子之間才補
+    var b = f.base || '', a = f.after || '';
+    if (!a) return true;
+    if (a.charAt(0) === '\n') return true;
+    if (isPunct(a.charAt(0)) || /^[」』）》]/.test(a)) return false;
+    return !b || /[。？！…\n.?!]$/.test(b);
+  }
+  function seam(f, text) {   // 接縫處不要出現重複的標點
+    var b = f.base || '', a = f.after || '';
+    if (!text) return text;
+    if (b && isPunct(text.charAt(0)) && b.charAt(b.length - 1) === text.charAt(0)) text = text.slice(1);
+    if (a && isPunct(a.charAt(0))) { var k = text.length; while (k > 0 && isPunct(text.charAt(k - 1))) k--; text = text.slice(0, k); }
+    return text;
+  }
+  function composedFor(f) { return seam(f, composeText(f.segs, f.multiline, closingOK(f))); }
+  function fieldValueFor(f) { return (f.base || '') + composedFor(f) + (f.after || ''); }
+  function setCaret(f, pos) { try { if (f.el.setSelectionRange) f.el.setSelectionRange(pos, pos); } catch (e) {} }
+  function setVal(f, v, caret) { f.el.value = v; f.lastShown = v; f.caret = caret; setCaret(f, caret); }
+  function insertionRange(f) {   // 游標在哪裡(有選取一段字就是取代那段字);沒有游標資訊就接在最後
+    var v = String(f.el.value || ''), s = v.length, e = v.length;
+    try { if (typeof f.el.selectionStart === 'number' && typeof f.el.selectionEnd === 'number') { s = Math.min(f.el.selectionStart, v.length); e = Math.min(f.el.selectionEnd, v.length); } } catch (x) {}
+    return [s, Math.max(s, e)];
   }
   function writeField(f) {
-    f.el.value = fieldValueFor(f); f.auto = f.el.value;
+    var comp = composedFor(f), v = (f.base || '') + comp + (f.after || '');
+    setVal(f, v, (f.base || '').length + comp.length); f.auto = v;
+    if (A && A.f === f) A.shownLen = 0;
+    f.writing = true;
     try { f.el.dispatchEvent(new global.Event('input', { bubbles: true })); } catch (e) {}
+    f.writing = false;
+  }
+  // 收音中你自己動了輸入欄(打字、點到別的位置):把目前的字都當成普通文字留下來,之後的話接在新的游標位置
+  function rebase(f) {
+    var el = f.el, a = (A && A.f === f) ? A : null, v = String(el.value || ''), s = v.length, e = v.length;
+    try { if (typeof el.selectionStart === 'number') { s = el.selectionStart; e = el.selectionEnd; } } catch (x) {}
+    var ilen = a ? (a.shownLen || 0) : 0, last = f.lastShown;
+    if (ilen > 0 && typeof last === 'string') {   // 把「還沒確定的暫時文字」從新的文字裡拿掉(它之後會重新顯示在新位置)
+      var p = 0; while (p < last.length && p < v.length && last.charAt(p) === v.charAt(p)) p++;
+      var q = 0; while (q < last.length - p && q < v.length - p && last.charAt(last.length - 1 - q) === v.charAt(v.length - 1 - q)) q++;
+      var i0 = (f.base || '').length + composedFor(f).length, i1 = i0 + ilen, delta = v.length - last.length, ns = -1, ne = -1;
+      if (last.length - q <= i0) { ns = i0 + delta; ne = i1 + delta; } else if (p >= i1) { ns = i0; ne = i1; }
+      if (ns >= 0 && ne <= v.length && ns <= ne) {
+        v = v.slice(0, ns) + v.slice(ne);
+        var cutc = function (c) { return c >= ne ? c - ilen : (c > ns ? ns : c); };
+        s = cutc(s); e = cutc(e);
+      }
+    }
+    f.base = v.slice(0, s); f.after = v.slice(Math.max(s, e)); f.segs = [];
+    f.meta.manual = true;
+    setVal(f, v, s); f.auto = v;
+    if (a) a.shownLen = 0;
+    if (P.chips && panel && !panel.classList.contains('hidden')) { P.chips.innerHTML = ''; P.alts.innerHTML = ''; }
+    if (a && a.active) showInterim(a);
+  }
+  function onCaretMove(f) {
+    var a = A; if (!a || a.f !== f || !a.active || a.replaceIdx !== undefined || f.writing) return;
+    var s, e; try { s = f.el.selectionStart; e = f.el.selectionEnd; } catch (x) { return; }
+    if (typeof s !== 'number') return;
+    if (s === e && s === f.caret) return;   // 還在程式放的位置:沒有動
+    rebase(f);
   }
   function segConf(f) { var arr = f.segs.filter(function (s) { return !s.deleted; }); if (!arr.length) return 0; return arr.reduce(function (a, s) { return a + (s.conf || 0); }, 0) / arr.length; }
   function renderChips(f, selIdx) {
@@ -389,8 +497,8 @@
       setHint(hint, 'bad');
     } else { f.badStreak = 0; setHint(hint, hint ? 'ok' : ''); }
     var acts = [
-      { label: '🎤 繼續說(接在後面)', main: true, fn: function () { start(f, { append: true }); } },
-      { label: '🔁 整段重說', fn: function () { f.base = ''; f.el.value = ''; f.segs = []; start(f, {}); } },
+      { label: '🎤 繼續說(從游標位置接著說)', main: true, fn: function () { start(f, { append: true }); } },
+      { label: '🔁 整段重說', fn: function () { f.base = ''; f.after = ''; f.el.value = ''; f.segs = []; start(f, {}); } },
       { label: '▶ 聽我剛剛說的', disabled: !f.clipUrl, fn: function () { playClip(f); } },
       { label: '⌨️ 我自己改', fn: function () { f.el.focus(); } },
       { label: '✖ 關掉', fn: function () { hidePanel(); } }
@@ -426,7 +534,10 @@
     placePanel(f);
     var ctx = {}; try { ctx = (cfg.getContext && cfg.getContext()) || {}; } catch (e) {}
     var vocab = buildVocab(ctx);
-    if (opts.replaceIdx === undefined) { f.base = f.el.value; f.segs = []; }   // 新的一段:接在欄位目前的文字後面
+    if (opts.replaceIdx === undefined) {   // 新的一段:從游標的位置開始(游標沒動過就是接在最後)
+      var rg = insertionRange(f), cur0 = String(f.el.value || '');
+      f.base = cur0.slice(0, rg[0]); f.after = cur0.slice(rg[1]); f.segs = []; f.lastShown = cur0; f.caret = rg[0];
+    }
     f.meta.used = true;
     A = { f: f, vocab: vocab, active: true, stopping: false, speechFrames: 0, maxRms: 0, clip: 0, silentSince: 0, startedAt: Date.now(), lastVoice: 0, hadSpeech: false, replaceIdx: opts.replaceIdx, restarts: 0, errs: 0, noSpeechErrs: 0, interim: '', interimLen: 0, marks: [], silentSince: 0, curMark: null, lastSeg: null, lastSegPending: false, useTrack: true, gotAudio: false, noise: [], nf: 0.01, frames: 0, chunks: [] };
     var a = A;
@@ -496,14 +607,15 @@
         var gap = now - a.silentSince;
         if (a.curMark) { a.curMark.ms = gap; a.curMark = null; }
         if (a.lastSeg && a.lastSegPending) { a.lastSeg.gap = gap; a.lastSegPending = false; }
-        a.silentSince = 0;
+        a.silentSince = 0; a.pitchBuf = [];
       }
       a.lastVoice = now; a.hadSpeech = true; a.speechFrames++; a.maxRms = Math.max(a.maxRms, rms); if (clipped > buf.length * 0.02) a.clip++;
+      if (a.ctx && a.ctx.sampleRate) { var f0 = detectPitch(buf, a.ctx.sampleRate); (a.pitchBuf = a.pitchBuf || []).push(f0); if (a.pitchBuf.length > 30) a.pitchBuf.shift(); }
     } else if (a.hadSpeech) {
       if (!a.silentSince) a.silentSince = a.lastVoice;
       var sil = now - a.silentSince;
       if (sil > 550 && a.interimLen > 0) {   // 說話中途停了半秒以上:在目前的字後面記一個標記(之後補逗號)
-        if (!a.curMark) { a.curMark = { len: a.interimLen, ms: sil }; a.marks.push(a.curMark); showInterim(a); }
+        if (!a.curMark) { a.curMark = { len: a.interimLen, ms: sil, idx: a.curIdx, rise: pitchRise(a.pitchBuf) }; a.marks.push(a.curMark); showInterim(a); }
         else { var nl = Math.max(a.curMark.len, a.interimLen); if (nl !== a.curMark.len) { a.curMark.len = nl; showInterim(a); } a.curMark.ms = sil; }
       }
     }
@@ -545,10 +657,11 @@
     rec.onspeechstart = function () { dlog('speechstart(聽到說話)'); };
     rec.onspeechend = function () { dlog('speechend'); };
     rec.onresult = function (e) {
-      var interim = '';
+      var interim = '', now = Date.now(); a.rt = a.rt || {};
       for (var i = e.resultIndex; i < e.results.length; i++) {
-        var r = e.results[i];
-        if (r.isFinal) commit(a, r); else interim += r[0] ? r[0].transcript : '';
+        var r = e.results[i], txt = r[0] ? r[0].transcript : '';
+        if (r.isFinal) commit(a, r, i);
+        else { var rt = a.rt[i] || (a.rt[i] = { t0: now, t1: now, txt: '', interim: true }); if (txt !== rt.txt) { rt.txt = txt; rt.t1 = now; } a.curIdx = i; interim += txt; }
       }
       a.interim = interim; a.interimLen = squeezeSpaces(interim).length; showInterim(a);
     };
@@ -577,34 +690,51 @@
     startRec(a);
   }
   // 一邊說一邊讓文字直接出現在輸入欄裡(停頓處會先出現逗號;還沒確定的部分,收尾時整理成正式文字)
+  function marksFor(a) { return a.marks.filter(function (m) { return m.idx === undefined || a.curIdx === undefined || m.idx === a.curIdx; }); }
   function showInterim(a) {
-    var f = a.f, raw = squeezeSpaces(a.interim || ''), shown = spokenPunct(f.multiline ? punctuate(raw, a.marks) : raw, f.multiline);
+    var f = a.f, raw = squeezeSpaces(a.interim || ''), shown = spokenPunct(f.multiline ? punctuate(raw, marksFor(a)) : raw, f.multiline);
     setLive(composeText(f.segs, f.multiline), shown);
-    if (a.replaceIdx === undefined) f.el.value = fieldValueFor(f) + shown;
+    if (a.replaceIdx === undefined) {
+      var comp = composedFor(f);
+      setVal(f, (f.base || '') + comp + shown + (f.after || ''), (f.base || '').length + comp.length + shown.length);
+      a.shownLen = shown.length;
+    }
   }
   function startRec(a) {
     try {
-      a.usedTrack = false; a.recStartedAt = Date.now();
+      a.usedTrack = false; a.recStartedAt = Date.now(); a.rt = {}; a.curIdx = undefined; if (a.restarts > 0) { a.marks = []; a.curMark = null; }
       if (cfg.useTrack && a.track && a.restarts === 0) { try { a.rec.start(a.track); a.usedTrack = true; return; } catch (e) {} }
       a.rec.start();
     } catch (e) { /* 已在收音中 */ }
   }
   // 一句話辨識完成
-  function commit(a, r) {
+  function commit(a, r, idx) {
     dlog('收到一句 信心=' + (r[0] && r[0].confidence) + ' 「' + String(r[0] && r[0].transcript).slice(0, 12) + '」');
     var f = a.f, alts = []; a.lastResultAt = Date.now();
     for (var k = 0; k < r.length; k++) alts.push({ t: String(r[k].transcript || ''), c: typeof r[k].confidence === 'number' ? r[k].confidence : 0 });
     if (!alts.length || !alts[0].t.trim()) return;
     var chosen = pickBest(alts, a.vocab);
-    var marks = a.marks.filter(function (m) { return m.len > 0; }); a.marks = []; a.curMark = null; a.interimLen = 0;
+    var mine = function (m) { return m.idx === undefined || idx === undefined || m.idx === idx; };
+    var marks = a.marks.filter(function (m) { return m.len > 0 && mine(m); });   // 只拿「這一句」的停頓標記
+    a.marks = a.marks.filter(function (m) { return !mine(m); });
+    if (a.curMark && mine(a.curMark)) a.curMark = null;
+    if (idx === undefined || idx === a.curIdx) a.interimLen = 0;
+    var rt = (idx !== undefined && a.rt) ? a.rt[idx] : null; if (idx !== undefined && a.rt) delete a.rt[idx];
     var seg = { alts: alts, chosen: chosen, raw: alts[0].t.trim(), conf: alts[chosen].c, marks: marks, text: processSegmentText(alts[chosen].t, f.multiline, marks), userPicked: false, deleted: false };
+    var endMark = marks.filter(function (m) { return m.len >= squeezeSpaces(alts[chosen].t).length * 0.8; }).pop();   // 這一句結尾的停頓
+    if (endMark && endMark.rise) seg.rise = true;
+    if (rt && rt.interim) { seg.t0 = rt.t0; seg.t1 = rt.t1; }   // 這一句開始說、說完的時間
     if (seg.conf === 0 && alts.length === 1) seg.conf = 0.7;   // 有些瀏覽器不回信心分數
     if (a.replaceIdx !== undefined && f.segs[a.replaceIdx]) { f.segs[a.replaceIdx] = seg; a.replaced = true; }
-    else f.segs.push(seg);
+    else {
+      var prevSeg = f.segs.filter(function (x) { return !x.deleted; }).pop();   // 上一句和這一句之間停了多久(收音時沒量到的才用辨識時間推算)
+      if (prevSeg && prevSeg.gap === undefined && prevSeg.t1 && seg.t0) prevSeg.gap = Math.max(0, seg.t0 - prevSeg.t1);
+      f.segs.push(seg);
+    }
     a.lastSeg = seg; a.lastSegPending = true;   // 下一次開口時,量出兩句之間停了多久
     f.meta.rawParts.push(seg.raw); f.meta.confSum += seg.conf; f.meta.confN++;
     if (a.replaceIdx !== undefined) { try { a.rec.stop(); } catch (e) {} }
-    writeField(f); setLive(f.el.value.slice((f.base || '').length), '');
+    writeField(f); setLive(composedFor(f), '');
   }
 
   function failSession(a, msg) {
@@ -624,7 +754,7 @@
     var a = A; if (!a) return;
     var f = a.f; a.active = false; stopStream(a); A = null;
     f.btn.classList.remove('on'); f.btn.setAttribute('aria-pressed', 'false');
-    if (a.replaceIdx === undefined) { f.segs = []; f.el.value = f.base || ''; f.auto = f.el.value; try { f.el.dispatchEvent(new global.Event('input', { bubbles: true })); } catch (e) {} }
+    if (a.replaceIdx === undefined) { f.segs = []; f.el.value = (f.base || '') + (f.after || ''); f.auto = f.el.value; try { f.el.dispatchEvent(new global.Event('input', { bubbles: true })); } catch (e) {} }
     hidePanel();
   }
   function endSession(reason) {
@@ -664,19 +794,22 @@
     btn.innerHTML = '<span aria-hidden="true">🎤</span><span>用說的</span>'; btn.title = '按一下開始說話,說完再按「說完了」';
     wrap.appendChild(btn);
     if (!multiline) el.style.paddingRight = '112px'; else el.style.paddingBottom = '52px';
-    var f = { id: o.id || el.id, el: el, wrap: wrap, btn: btn, multiline: multiline, label: o.label || '', segs: [], base: '', meta: { used: false, rawParts: [], confSum: 0, confN: 0 } };
+    var f = { id: o.id || el.id, el: el, wrap: wrap, btn: btn, multiline: multiline, label: o.label || '', segs: [], base: '', after: '', meta: { used: false, rawParts: [], confSum: 0, confN: 0 } };
     fields[f.id] = f; el.__kbv = f;
     btn.onclick = function () { if (A && A.f === f && A.active) endSession('manual'); else start(f, {}); };
     el.addEventListener('input', function () {
+      if (f.writing) return;
+      if (A && A.f === f && A.active && A.replaceIdx === undefined) { if (el.value !== f.lastShown) rebase(f); return; }   // 收音中自己打字:字和標點都留著,之後的話接在游標後面
       // 學生手動修改了文字:記下「有修改過」,確認區的句子與文字不一致就不再顯示
       if (!A && f.auto !== undefined && el.value !== f.auto) { f.meta.manual = true; f.segs = []; f.auto = el.value; if (P.chips && panel && !panel.classList.contains('hidden') && f.wrap.nextSibling === panel) { P.chips.innerHTML = ''; P.alts.innerHTML = ''; } }
     });
+    ['click', 'keyup', 'mouseup', 'touchend'].forEach(function (ev) { el.addEventListener(ev, function () { onCaretMove(f); }); });   // 收音中點到別的位置:之後的話接在那裡
     applyEnabled(f);
   }
   function applyEnabled(f) { f.wrap.classList.toggle('kbv-off', !enabled()); f.btn.style.display = enabled() ? '' : 'none'; if (f.multiline) f.el.style.paddingBottom = enabled() ? '52px' : ''; else f.el.style.paddingRight = enabled() ? '112px' : ''; }
   function refresh() { Object.keys(fields).forEach(function (id) { applyEnabled(fields[id]); }); if (!enabled()) { cancelAll(); } }
   function cancelAll() { if (A) cancelSession(); hidePanel(); }
-  function reset() { cancelAll(); Object.keys(fields).forEach(function (id) { var f = fields[id]; f.segs = []; f.base = ''; f.auto = undefined; f.meta = { used: false, rawParts: [], confSum: 0, confN: 0, manual: false }; if (f.clipUrl) { try { global.URL.revokeObjectURL(f.clipUrl); } catch (e) {} f.clipUrl = null; } }); if (P.chips) P.chips.innerHTML = ''; if (P.alts) P.alts.innerHTML = ''; }
+  function reset() { cancelAll(); Object.keys(fields).forEach(function (id) { var f = fields[id]; f.segs = []; f.base = ''; f.after = ''; f.auto = undefined; f.meta = { used: false, rawParts: [], confSum: 0, confN: 0, manual: false }; if (f.clipUrl) { try { global.URL.revokeObjectURL(f.clipUrl); } catch (e) {} f.clipUrl = null; } }); if (P.chips) P.chips.innerHTML = ''; if (P.alts) P.alts.innerHTML = ''; }
   // 發文時帶走的紀錄:語音辨識原始文字 + 學生有沒有再修改
   function collect() {
     var out = null;
@@ -693,6 +826,6 @@
   global.KBVoice = {
     init: function (o) { o = o || {}; cfg.getContext = o.getContext || null; if (o.silenceMs) cfg.silenceMs = o.silenceMs; if (o.noSpeechMs) cfg.noSpeechMs = o.noSpeechMs; (o.fields || []).forEach(function (x) { attach(x.el, x); }); },
     attach: attach, refresh: refresh, stop: cancelAll, reset: reset, collect: collect, enabled: enabled, supported: supported,
-    _t: { tidyPunct: tidyPunct, SPOKEN_WORDS: SPOKEN_WORDS, punctuate: punctuate, enderFor: enderFor, isQuestionText: isQuestionText, setAuto: function (v) { cfg.autoPunct = v; }, setProto: function (p) { cfg.proto = p; }, cfg: cfg, pickBest: pickBest, applyFixes: applyFixes, spokenPunct: spokenPunct, composeText: composeText, squeezeSpaces: squeezeSpaces, processSegmentText: processSegmentText, buildVocab: buildVocab, looksLikeQuestion: looksLikeQuestion, state: function () { return { A: A, fields: fields }; }, LEXICON: LEXICON, FIX: FIX }
+    _t: { tidyPunct: tidyPunct, SPOKEN_WORDS: SPOKEN_WORDS, punctuate: punctuate, enderFor: enderFor, isQuestionText: isQuestionText, setAuto: function (v) { cfg.autoPunct = v; }, setProto: function (p) { cfg.proto = p; }, cfg: cfg, pickBest: pickBest, applyFixes: applyFixes, spokenPunct: spokenPunct, composeText: composeText, joinerFor: joinerFor, detectPitch: detectPitch, pitchRise: pitchRise, composedFor: composedFor, rebase: rebase, squeezeSpaces: squeezeSpaces, processSegmentText: processSegmentText, buildVocab: buildVocab, looksLikeQuestion: looksLikeQuestion, state: function () { return { A: A, fields: fields }; }, LEXICON: LEXICON, FIX: FIX }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

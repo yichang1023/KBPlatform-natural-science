@@ -127,7 +127,7 @@
   ];
   var current = (location.hash || '#overview').slice(1);
   if (!SECTIONS.some(function (s) { return s.id === current; })) current = 'overview';
-  function navHTML(mobile) { return SECTIONS.map(function (s) { return '<button class="nav-btn' + (s.id === current ? ' active' : '') + '" data-go="' + s.id + '"><i class="fa-solid ' + s.icon + '"></i>' + esc(s.title) + '</button>'; }).join(''); }
+  function navHTML(mobile) { return SECTIONS.map(function (s) { return '<button class="nav-btn' + (s.id === current ? ' active' : '') + '" data-go="' + s.id + '" data-kbhref="setup.html#' + s.id + '"><i class="fa-solid ' + s.icon + '"></i>' + esc(s.title) + '</button>'; }).join(''); }
   function renderNav() {
     $('#nav').innerHTML = navHTML();
     $('#mobile-nav').innerHTML = navHTML();

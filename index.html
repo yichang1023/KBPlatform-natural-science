@@ -491,16 +491,16 @@ const response = await geminiFetch(key, {
             var cur = KB.auth.current();
             if (!cur) { KBUI.toast('請先選擇身分並登入', 'err'); var card = document.getElementById('role-grid'); card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); return; }
             var staff = KB.auth._isStaff(cur.role);
-            if (dest === 'forum') { window.location.href = KBFILES.forum; }
+            if (dest === 'forum') { KBUI.go(KBFILES.forum); }
             else if (dest === 'analytics') {
                 if (cur.role === 'guest') { KBUI.toast('訪客只能瀏覽論壇,不開放分析頁', 'err'); return; }
-                window.location.href = staff ? KBFILES.teacher : KBFILES.student;
+                KBUI.go(staff ? KBFILES.teacher : KBFILES.student);
             } else if (dest === 'student') {
                 if (!staff) { KBUI.toast('學生請用「前往知識羅盤」看自己的分析', 'err'); return; }
-                window.location.href = KBFILES.student;
+                KBUI.go(KBFILES.student);
             } else if (dest === 'setup') {
                 if (!staff) { KBUI.toast('設定中心僅限老師與管理者', 'err'); return; }
-                window.location.href = KBFILES.setup;
+                KBUI.go(KBFILES.setup);
             }
         }
 

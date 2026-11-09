@@ -1707,6 +1707,15 @@ async function geminiFetch(key, init) {
             } catch (e) { console.error(e); document.getElementById('asra-root').innerHTML = '<div class="p-4 text-red-600 text-sm">ASRA 反思歷程載入失敗:' + String(e && e.message || e) + '</div>'; }
         }
 
+        // 新分頁用 #view=x 開啟時,資料載入好後直接進到該分頁
+        window.addEventListener('load', function () {
+            var m = /view=(\w+)/.exec(location.hash || ''); if (!m) return; var want = m[1], tries = 0;
+            var timer = setInterval(function () {
+                tries++;
+                try { if (document.getElementById('view-' + want) && typeof globalRawDB !== 'undefined' && globalRawDB) { clearInterval(timer); switchView(want); } } catch (e) {}
+                if (tries > 60) clearInterval(timer);
+            }, 400);
+        });
         function switchView(viewName) {
             document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active'));
             document.getElementById('view-' + viewName).classList.add('active');
