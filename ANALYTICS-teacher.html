@@ -1228,7 +1228,7 @@ async function geminiFetch(key, init) {
         }
 
         // ===== 知識推進軌跡:問題長大階梯 =====
-        // 每個討論串(主貼文 + 底下所有回應)是一個「問題」。看串裡出現過的最高一類貼文,決定它走到第幾層:
+        // 每一則「提問」貼文是一個「問題」(包含它底下接著回應的貼文,遇到下一個提問就停)。看這些回應裡出現過的最高一類貼文,決定它走到第幾層:
         //   🌱 第 1 層 提問(只有主貼文)  🌿 第 2 層 有人接著想(延伸或其他回應)
         //   🔧 第 3 層 改進或不同看法(改進、反駁)  🌸 第 4 層 整理成結論(整合/昇華)
         // 層數是依學生發文時自己選的貼文類型判斷,不判斷內容好壞。
@@ -1244,12 +1244,19 @@ async function geminiFetch(key, init) {
         const trajTs = n => (n.dateTime !== undefined && n.dateTime !== null) ? n.dateTime : (typeof n.date === 'number' ? n.date : new Date(n.date).getTime());
         const trajUI = { filter: 'all', all: false, ctx: null, step: 0 };
         const trajMD = ts => { const d = new Date(ts); return (d.getMonth() + 1) + '/' + d.getDate(); };
+        // 一個「問題」= 一則提問貼文,加上它底下接著回應的貼文(遇到下一個提問就停,那是另一個問題)。
+        // 沒有上層的主貼文(不是提問時)也算一個。這樣一個大討論串裡的每個小問題各有自己的階梯,才看得到誰往前走。
         function trajBuild(nodes) {
-            const byId = {}; nodes.forEach(n => { byId[n.id] = n; });
-            const rootOf = n => { let c = n, g = 0; while (c.parentId && byId[c.parentId] && g++ < 300) c = byId[c.parentId]; return c; };
-            const th = {};
-            nodes.forEach(n => { const r = rootOf(n); (th[r.id] = th[r.id] || { root: r, posts: [] }).posts.push(n); });
-            return Object.keys(th).map(k => th[k]);
+            const kids = {}, byId = {};
+            nodes.forEach(n => { byId[n.id] = n; if (n.parentId) (kids[n.parentId] = kids[n.parentId] || []).push(n); });
+            const isUnit = n => n.type === 'question' || !n.parentId || !byId[n.parentId];
+            const out = [];
+            nodes.filter(isUnit).forEach(u => {
+                const posts = [u], stack = (kids[u.id] || []).slice(); let guard = 0;
+                while (stack.length && guard++ < 5000) { const c = stack.pop(); if (c.type === 'question') continue; posts.push(c); (kids[c.id] || []).forEach(x => stack.push(x)); }
+                out.push({ root: u, posts: posts });
+            });
+            return out;
         }
         function trajAt(t, sd, k) {
             if (sd.idx(trajTs(t.root)) > k) return null;
@@ -3217,8 +3224,8 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: "知識推進軌跡:問題長大階梯",
                 theory: "看每一個問題被大家「想到第幾層」:提問 → 有人接著想 → 改進或不同看法 → 整理成結論。層數越高,代表這個問題被想得越遠,是「知識往前推進」最直接的樣子。",
                 source: "Scardamalia, M., & Bereiter, C. (2014). Knowledge building and knowledge creation: Theory, pedagogy, and technology. In R. K. Sawyer (Ed.), <i>The Cambridge Handbook of the Learning Sciences</i> (2nd ed., pp. 397–417). Cambridge University Press. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1017/CBO9781139519526.025\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Zhang, J., Tao, D., Chen, M.-H., Sun, Y., Judson, D., & Naqvi, S. (2018). Co-organizing the collective journey of inquiry with Idea Thread Mapper. <i>Journal of the Learning Sciences, 27</i>(3), 390–430. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508406.2018.1444992\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "把每個討論串(一則主貼文加上它底下所有回應)當成一個問題。看這個串裡出現過的最高一類貼文:只有提問 = 第 1 層;有延伸或其他回應 = 第 2 層;有改進或反駁 = 第 3 層;有整合(昇華) = 第 4 層。每一格標出「第一次走到那一層」的日期;橘框代表最近 7 天剛走到;▲ 代表這一週往前走了一步。「還沒人回應」是提出超過 3 天都沒有任何回應。播放鈕可以看全班的問題一格一格長高。",
-                diff: "層數是依學生發文時自己選的貼文類型判斷,不判斷內容好壞,也不保證想法正確。同一串裡只要出現過某一類貼文就算走到那一層,不看是不是同一位同學。原本的兩條累積線仍保留在卡片下方「看數字趨勢」裡。",
+                how: "把每一則「提問」貼文當成一個問題(包含它底下接著回應的貼文,遇到下一個提問就停,那是另一個問題)。看這些回應裡出現過的最高一類貼文:只有提問 = 第 1 層;有延伸或其他回應 = 第 2 層;有改進或反駁 = 第 3 層;有整合(昇華) = 第 4 層。每一格標出「第一次走到那一層」的日期;橘框代表最近 7 天剛走到;▲ 代表這一週往前走了一步。「還沒人回應」是提出超過 3 天都沒有任何回應。播放鈕可以看全班的問題一格一格長高。",
+                diff: "層數是依學生發文時自己選的貼文類型判斷,不判斷內容好壞,也不保證想法正確。只要這個問題底下出現過某一類貼文就算走到那一層,不看是不是同一位同學。整個討論串很大時,每個小問題各自計算,不會被整串的結果蓋住。原本的兩條累積線仍保留在卡片下方「看數字趨勢」裡。",
                 ai_prompt: '如何引導學生把問題轉化為理論？'
             },
             'lag_sequence': {
