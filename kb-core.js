@@ -79,7 +79,7 @@
       displayMode: 'name',                  // name(姓名,預設,所有人可見) | id(學號)
       idleMinutes: 60,
       lockout: { maxFails: 5, minutes: 10 },
-      analysis: { agencyPass: 0.7, agencyRate: 0.6, agencyTargets: { init: 0.25, mon: 0.5, exp: 0.3 }, kbDiversityContrast: 0.3, kbSources: 0.05, kbQuestion: 0.15, extraTerms: '' },
+      analysis: { agencyPass: 0.7, agencyRate: 0.6, agencyTargets: { init: 0.25, mon: 0.5, exp: 0.3 }, kbDiversityContrast: 0.3, kbSources: 0.05, kbQuestion: 0.15, extraTerms: '', ignoredTerms: '' },
       ai: { enabled: true, stripNames: true, model: 'auto' },
       voice: { enabled: true },   // 發言視窗的「🎤 用說的」語音輸入(測試中;設定中心可關閉,關閉後回到只有打字)
       requireStudentPwChange: false,   // 目前統一不強制改密碼(此設定已不再生效)

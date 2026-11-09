@@ -72,6 +72,56 @@
       return cache[i];
     };
   };
+  // 圓球移動方式:浮動 = 拖一顆球,其他球會跟著動;固定 = 只有被拖的那顆球動。全部網絡共用,記在瀏覽器。
+  window.kbMove = (function () {
+    var KEY = 'kb_net_move', subs = [], mode = 'float';
+    try { if (window.localStorage.getItem(KEY) === 'fixed') mode = 'fixed'; } catch (e) {}
+    function set(m) {
+      mode = m === 'fixed' ? 'fixed' : 'float'; try { window.localStorage.setItem(KEY, mode); } catch (e) {}
+      subs = subs.filter(function (s) { return !s.el || s.el.isConnected !== false; });
+      subs.forEach(function (s) { try { s.f(mode); } catch (e) {} });
+    }
+    function ctl() {
+      var w = document.createElement('span'); w.className = 'kb-move-ctl'; w.setAttribute('role', 'group'); w.setAttribute('aria-label', '圓球移動方式');
+      w.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#334155;pointer-events:auto';
+      var bs = 'padding:1px 8px;border-radius:999px;border:1px solid #94a3b8;font-weight:700;cursor:pointer;line-height:1.5';
+      w.innerHTML = '<span>移動方式:</span><button type="button" data-mv="float" style="' + bs + '" title="拖一顆球,其他球會跟著一起動">浮動</button><button type="button" data-mv="fixed" style="' + bs + '" title="只有被拖的那顆球會動,其他球不動">固定</button>';
+      function paint(m) { Array.prototype.forEach.call(w.querySelectorAll('[data-mv]'), function (b) { var on = b.getAttribute('data-mv') === m; b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.style.background = on ? '#4f46e5' : '#fff'; b.style.color = on ? '#fff' : '#334155'; b.style.borderColor = on ? '#4f46e5' : '#94a3b8'; }); }
+      w.addEventListener('click', function (e) { var b = e.target && e.target.closest ? e.target.closest('[data-mv]') : null; if (b) { e.stopPropagation(); set(b.getAttribute('data-mv')); } });
+      w.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      subs.push({ f: paint, el: w }); paint(mode); return w;
+    }
+    return { get: function () { return mode; }, set: set, ctl: ctl, on: function (f) { subs.push({ f: f }); } };
+  })();
+  // 讓網絡圖「好玩」:拖一顆球(浮動:其他球跟著跑;固定:只有它動);滾輪放大縮小;拖背景移動畫面
+  window.kbLively = function (net) {
+    if (!net || net.__lively) return net; net.__lively = true;
+    var t = null;
+    try { net.setOptions({ interaction: { dragNodes: true, dragView: true, zoomView: true, hover: true } }); } catch (e) {}
+    net.on('dragStart', function (p) {
+      if (!p || !p.nodes || !p.nodes.length) return; clearTimeout(t);
+      try {
+        if (window.kbMove.get() === 'float') net.setOptions({ physics: { enabled: true, stabilization: false, barnesHut: { damping: 0.35, springConstant: 0.06 } } });
+        else net.setOptions({ physics: false });
+      } catch (e) {}
+    });
+    net.on('dragEnd', function (p) {
+      if (!p || !p.nodes || !p.nodes.length) return; clearTimeout(t);
+      if (window.kbMove.get() === 'fixed') { try { net.setOptions({ physics: false }); } catch (e) {} return; }
+      t = setTimeout(function () { try { net.setOptions({ physics: false }); } catch (e) {} }, 2500);
+    });
+    window.kbMove.on(function (m) { if (m === 'fixed') { clearTimeout(t); try { net.setOptions({ physics: false }); } catch (e) {} } });
+    try {
+      var c = net.body && net.body.container;
+      if (c && c.appendChild && !c.querySelector('.kb-lively-hint')) {
+        var h = document.createElement('div'); h.className = 'kb-lively-hint';
+        h.style.cssText = 'position:absolute;left:6px;bottom:6px;right:6px;font-size:10px;color:#64748b;pointer-events:none;background:rgba(255,255,255,.88);padding:2px 8px;border-radius:10px;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px';
+        var tx = document.createElement('span'); tx.textContent = '👆 拖拖看圓球・滾輪放大縮小'; h.appendChild(tx); h.appendChild(window.kbMove.ctl());
+        if (c.style && !c.style.position) c.style.position = 'relative'; c.appendChild(h);
+      }
+    } catch (e) {}
+    return net;
+  };
   window.kbAttachPlayer = function (o) {
     if (window.__kbReplaying) return null;
     if (players[o.id]) players[o.id].destroy();
@@ -461,10 +511,13 @@
                     <button onclick="openRefModal('interaction_circle')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
                 </div>
 
-                <div class="flex justify-center gap-3 text-[10px] mb-2 px-1 flex-shrink-0 text-slate-500 font-medium relative z-10 bg-white/80 rounded-full py-1">
+                <div id="ego-legend" class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] mb-2 px-2 flex-shrink-0 text-slate-600 font-medium relative z-10 bg-white/80 rounded-2xl py-1">
                     <span class="flex items-center"><span class="legend-dot" style="background:#3b82f6"></span>提問</span>
+                    <span class="flex items-center"><span class="legend-dot" style="background:#eab308"></span>延伸</span>
                     <span class="flex items-center"><span class="legend-dot" style="background:#22c55e"></span>改進</span>
+                    <span class="flex items-center"><span class="legend-dot" style="background:#ef4444"></span>反例</span>
                     <span class="flex items-center"><span class="legend-dot" style="background:#a855f7"></span>整合</span>
+                    <span class="flex items-center"><span class="legend-dot" style="background:#d5dbe5"></span>同學彼此之間的互動(灰線)</span>
                 </div>
 
                 <div id="ego-network-container" class="w-full flex-1 min-h-[300px] bg-slate-50/50 rounded-xl border border-slate-100 relative z-0"></div>
@@ -1493,7 +1546,7 @@ async function initApiKey() {
         const sd = kbStepDays(globalData.nodes.map(n => n.date));
         const nameOf = id => { const u = (globalData.userList || {})[id]; return u ? u.name : '同學'; };
         const model = KBConcept.build({ nodes: globalData.nodes, userId: uid, step: ts => sd.idx(ts), name: nameOf, topics: globalData.topics || [], max: 12 });
-        window.__kbCC = KBConcept.create(host, model, {
+        window.__kbCC = KBConcept.createDual(host, model, {
             labels: sd.labels,
             onGoPost: (id, topicId) => {
                 const ev = window.event, url = 'Knowledge Building Forum.html?topic=' + encodeURIComponent(topicId) + '&node=' + encodeURIComponent(id);
@@ -1897,7 +1950,7 @@ async function initApiKey() {
             egoNetworkInstance = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, { nodes: { borderWidth: 2 }, edges: { smooth: false }, physics: { stabilization: { enabled: true, iterations: 160, updateInterval: 50, fit: true }, barnesHut: { gravitationalConstant: -3000, springLength: 120, damping: 0.6 } } });
             // 排列穩定後就關閉物理運算,圖不會再一直晃動(仍可手動拖曳節點)
             const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
-            egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics);
+            egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics); kbLively(egoNetworkInstance);
             setTimeout(stopEgoPhysics, 2500);
             kbAttachPlayer({ explainTitle: '我的互動圈(我和誰互動)的形成過程', id: 'ego-s', container: container, network: egoNetworkInstance, nodesDS: nodesDS, edgesDS: edgesDS, labels: days.stepLabels, steps: days.steps, build: build });
         }

@@ -44,7 +44,63 @@
       }
       return found.sort(function (a, b) { return a.at - b.at; }).map(function (x) { return x.w; });   // 依在文字中出現的先後
     }
-    return { find: find, size: list.length, baseSize: BASE.length, extraSize: Object.keys(extraSet).length };
+    // covers(w):詞庫裡是否已有這個詞,或這個詞只是某個已有詞的一部分(例如「光合作」已被「光合作用」涵蓋)
+    function covers(w) { for (var i = 0; i < list.length; i++) { if (list[i].toLowerCase().indexOf(String(w).toLowerCase()) !== -1) return true; } return false; }
+    return { find: find, covers: covers, size: list.length, baseSize: BASE.length, extraSize: Object.keys(extraSet).length };
+  }
+  /* ---- 詞庫建議器:從班上自己的貼文找「大家常用、但詞庫還沒有」的詞 ----
+   * 不用 AI、不用斷詞套件:把連續中文切成 2~5 字片段,數「出現在幾篇貼文、幾位同學」。
+   * 要同時滿足「至少 minPosts 篇、至少 minAuthors 位不同同學」才建議(只有一個人反覆講的口頭禪不算)。
+   * 去掉:含「我覺得、因為、所以…」等虛詞的片段、頭尾是虛字的片段、詞庫已有的詞、
+   *       以及「只是某個更長詞的一部分」的片段(例如「光合作」會被「光合作用」取代)。
+   * notes: [{author, title, content}];opts: { minPosts, minAuthors, limit, ignore:[詞…] }
+   * 回傳 [{w, posts, authors, sample}] 依「同學數、貼文數」由多到少;sample 是其中一句,方便老師判斷。 */
+  var STOP_SUB = ['我覺得', '我認為', '我們', '你們', '他們', '什麼', '為什麼', '怎麼', '如何', '因為', '所以', '可以', '可能', '應該', '還是', '或是', '如果', '但是', '可是', '而且', '然後', '就是', '不是', '是不是', '有沒有', '沒有', '已經', '一個', '這個', '那個', '這樣', '那樣', '自己', '大家', '同學', '老師', '還有', '以及', '對於', '關於', '其實', '比較', '非常', '真的', '一些', '一樣', '不會', '不能', '需要', '知道', '覺得', '認為', '而是', '或者', '並且', '雖然', '因此', '另外', '最後', '首先', '例如', '的話', '時候', '清楚', '容易', '開始', '直接', '發現', '後面', '前面', '變成', '決定', '出來', '起來', '下來', '看起', '同一', '不同', '更多', '重要', '其他', '這些', '那些', '目前', '之後', '之前', '現在', '以後', '部分', '一直', '一定', '一起', '一點', '一開', '一下', '可是', '好像', '似乎', '通常', '常常', '有些', '有時', '大概', '各自', '每個', '每一', '某些', '某個', '東西', '事情', '地方', '方式', '方法', '情況', '結果是', '能只', '以先', '只看', '只用', '只要', '每次', '真正', '感覺', '同意', '討論', '建立', '確認', '整理', '提醒'];
+  var STOP_END = '的了是我你他她它也都就在有和與跟但因所這那不會可要很嗎呢吧啊著過把被讓給對從到個些等又再還將其之為來去';
+  function suggest(notes, M, opts) {
+    opts = opts || {};
+    var list = (notes || []).filter(function (n) { return n && (n.title || n.content); });
+    var N = list.length; if (!N) return [];
+    var minPosts = opts.minPosts || Math.max(3, Math.ceil(N * 0.01));
+    var minAuthors = opts.minAuthors || (N >= 100 ? 3 : 2);
+    var ignore = {}; (opts.ignore || []).forEach(function (w) { ignore[w] = 1; });
+    var df = {}, who = {}, sample = {};
+    list.forEach(function (n, idx) {
+      var text = String(n.title || '') + '\n' + String(n.content || ''), au = String(n.author == null ? idx : n.author), seen = {};
+      var runs = text.match(/[一-鿿]+/g) || [];
+      runs.forEach(function (run) {
+        for (var len = 2; len <= 5; len++) for (var i = 0; i + len <= run.length; i++) {
+          var g = run.substr(i, len);
+          if (seen[g]) continue; seen[g] = 1;
+          df[g] = (df[g] || 0) + 1; (who[g] = who[g] || {})[au] = 1;
+          if (!sample[g]) { var at = text.indexOf(g); sample[g] = text.slice(Math.max(0, at - 8), at + g.length + 10).replace(/\s+/g, ' '); }
+        }
+      });
+    });
+    var cand = [];
+    Object.keys(df).forEach(function (g) {
+      if (df[g] < minPosts || ignore[g]) return;
+      var au = Object.keys(who[g]).length; if (au < minAuthors) return;
+      if (g.charAt(0) === '一' || STOP_END.indexOf(g.charAt(0)) !== -1 || STOP_END.indexOf(g.charAt(g.length - 1)) !== -1) return;
+      for (var s = 0; s < STOP_SUB.length; s++) if (g.indexOf(STOP_SUB[s]) !== -1) return;
+      if (M && M.covers && M.covers(g)) return;
+      cand.push({ w: g, posts: df[g], authors: au, sample: sample[g] });
+    });
+    // 只留「最完整」的詞:更長的片段出現次數差不多(≥ 70%)時,短的就是它的一部分
+    cand.sort(function (a, b) { return b.w.length - a.w.length || b.posts - a.posts; });
+    var kept = [];
+    cand.forEach(function (c) {
+      for (var k = 0; k < kept.length; k++) { if (kept[k].w.indexOf(c.w) !== -1 && kept[k].posts >= c.posts * 0.7) return; }
+      kept.push(c);
+    });
+    // 反過來:長片段若只比短詞少很多(<50%),且短詞本身已在建議裡,長的多半是「短詞+贅字」,也丟掉
+    var byW = {}; kept.forEach(function (c) { byW[c.w] = c; });
+    kept = kept.filter(function (c) {
+      for (var len = 2; len < c.w.length; len++) for (var i = 0; i + len <= c.w.length; i++) { var sub = byW[c.w.substr(i, len)]; if (sub && c.posts < sub.posts * 0.5) return false; }
+      return true;
+    });
+    kept.sort(function (a, b) { return b.authors - a.authors || b.posts - a.posts || a.w.length - b.w.length; });
+    return kept.slice(0, opts.limit || 30);
   }
   function textOf(n) { return String(n.title || '') + ' ' + String(n.content || ''); }
   /* 全班逐日:newTerms=當天第一次出現的詞;classCum=累積不重複詞數;avgCum=每人平均累積不重複詞數
@@ -77,5 +133,5 @@
     (notes || []).slice().sort(function (a, b) { return a.dateTime - b.dateTime; }).forEach(function (n) { M.find(textOf(n)).forEach(function (w) { if (!seen[w]) { seen[w] = 1; out.push(w); } }); });
     return out;
   }
-  global.KBVocab = { BASE: BASE, matcher: matcher, series: series, forStudent: forStudent, splitExtra: splitExtra };
+  global.KBVocab = { BASE: BASE, matcher: matcher, series: series, forStudent: forStudent, splitExtra: splitExtra, suggest: suggest };
 })(typeof window !== 'undefined' ? window : this);

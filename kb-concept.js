@@ -332,6 +332,19 @@
       '.kbc-toast{position:absolute;left:50%;top:50px;transform:translate(-50%,-12px);z-index:45;padding:7px 16px;border-radius:999px;background:linear-gradient(135deg,#2b7fff,#35c6ff);color:#fff;font-weight:700;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap}',
       '.kbc-toast.show{opacity:1;transform:translate(-50%,0)}',
       '.kbc-legend{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0;font-size:12.5px;color:var(--sub)}',
+      '.kbc-main{display:flex;flex-direction:column}.kbc-mode{order:-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 8px;font-size:13px;color:var(--sub);min-height:32px}',
+      '.kbc-mt{font-size:15px;color:var(--ink);padding:3px 12px;border-radius:999px;background:#eaf2ff;border:1px solid rgba(80,130,210,.35)}.kbc.tm .kbc-mt{background:#fff1e0;border-color:rgba(196,100,40,.45)}',
+      '.kbc-dual{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}.kbc-dual .kbc-stage{height:400px}',
+      '@media (max-width:860px){.kbc-dual{grid-template-columns:minmax(0,1fr)}}',
+      '.kbc-seg{display:inline-flex;border:1px solid rgba(80,130,210,.4);border-radius:999px;overflow:hidden;background:#fff}',
+      '.kbc-seg button{border:0;background:transparent;padding:5px 14px;font:inherit;font-weight:700;color:var(--sub);cursor:pointer;min-height:32px}',
+      '.kbc-seg button+button{border-left:1px solid rgba(80,130,210,.3)}',
+      '.kbc-seg button[aria-pressed=true]{background:#2b6fe0;color:#fff}',
+      '.kbc-seg button:focus-visible{outline:3px solid rgba(59,141,240,.5);outline-offset:-3px}',
+      '.kbc-ramp{display:inline-flex;align-items:center;gap:8px;font-weight:700;color:var(--ink)}',
+      '.kbc-ramp i{display:inline-block;width:150px;height:14px;border-radius:999px;border:1px solid rgba(120,60,20,.35);background:linear-gradient(90deg,#ffe8b8,#f5a25a 55%,#c4471c)}',
+      '.kbc.tm .kbc-dot{box-shadow:0 0 0 1.6px rgba(110,50,15,.65)}',
+      '.kbc-seg[hidden]{display:none}.kbc-sub{margin-left:4px}.kbc-sub button{padding:3px 11px;min-height:28px;font-size:12px}',
       '.kbc-tg{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--cc);color:var(--ink);background:color-mix(in srgb,var(--cc) 14%,#fff)}',
       '.kbc-tg:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cc)}',
       '.kbc-card{margin-top:12px;background:#fff;border:1px solid rgba(80,130,210,.3);border-radius:18px;padding:16px 18px;box-shadow:0 12px 34px -20px rgba(30,70,150,.45);font-size:var(--kbc-fs,15px)}',
@@ -354,6 +367,14 @@
     (doc.head || doc.documentElement).appendChild(s); cssDone = true;
   }
 
+  /* ---------- 顏色模式 ---------- */
+  // 模式 A:顏色 = 想法現在的狀態(提問/延伸/改進/質疑/整合)。模式 B:顏色 = 時間,較早的淡米色 → 較晚的深橘紅(本平台自己的色階)
+  var RAMP = [[255, 232, 184], [245, 162, 90], [196, 71, 28]];
+  function rampColor(t) {
+    t = Math.max(0, Math.min(1, t)); var seg = t < .55 ? 0 : 1, a = RAMP[seg], b = RAMP[seg + 1], u = seg ? (t - .55) / .45 : t / .55;
+    return 'rgb(' + [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * u); }).join(',') + ')';
+  }
+
   /* ---------- 畫出來 ---------- */
   function create(host, model, opts) {
     opts = opts || {}; injectCSS();
@@ -364,16 +385,18 @@
       inst.render = function () {}; inst.select = function () {}; inst.empty = true; return inst;
     }
     var L = layout(model), r = rng(hash(model.userId)), K = model.K;
+    var cmKey = 'kb_cc_cmode'; inst.cmode = opts.colorMode === 'b' ? 'b' : 'a'; inst.csub = 'f'; try { var sv0 = global.localStorage.getItem(cmKey) || ''; if (sv0 === 'bl') inst.csub = 'l'; } catch (e) {}
     var root = doc.createElement('div'); root.className = 'kbc';
     root.innerHTML = '<div class="kbc-main"><div class="kbc-stage" tabindex="0" role="application" aria-label="我的概念雲:滾輪或按鈕放大縮小,拖曳移動,點詞看故事">' +
       '<div class="kbc-grid"></div><div class="kbc-hud tl">第<br><b data-k="day">0</b> 天</div><div class="kbc-hud tr">概念<br><b data-k="n">0</b> 個</div><div class="kbc-cap" data-k="cap" aria-live="polite"></div>' +
       '<div class="kbc-view" data-k="view"><div class="kbc-cloud" data-k="cloud"></div><svg class="kbc-lines" data-k="lines" width="1" height="1"></svg><div class="kbc-words" data-k="words"></div><div class="kbc-tip" data-k="tip"></div></div>' +
       '<div class="kbc-hint" data-k="hint">點一個詞看它的故事 · 滾輪縮放 · 拖曳移動</div><div class="kbc-toast" data-k="toast"></div>' +
       '<div class="kbc-tools"><button type="button" data-z="in" title="放大" aria-label="放大">＋</button><div class="z" data-k="zl">100%</div><button type="button" data-z="out" title="縮小" aria-label="縮小">－</button><button type="button" data-z="reset" title="還原" aria-label="還原" style="font-size:15px">⟲</button></div></div>' +
-      '<div class="kbc-legend"><span>顏色 = 這個想法現在的狀態:</span><span class="kbc-tg" style="--cc:var(--q)">提問中</span><span class="kbc-tg" style="--cc:var(--e)">被延伸</span><span class="kbc-tg" style="--cc:var(--i)">改進中</span><span class="kbc-tg" style="--cc:var(--c)">被質疑</span><span class="kbc-tg" style="--cc:var(--r)">已整合</span><span><span class="kbc-star">★</span> 轉折點</span><span>字越大 = 用越多次</span><span>虛線 = 常一起出現的詞</span></div></div>' +
+      '<div class="kbc-mode" data-k="mode"><b class="kbc-mt" data-k="mtitle"></b><span class="kbc-seg kbc-sub" role="group" aria-label="時間要看哪一天" data-k="sub" hidden><button type="button" data-cs="f" aria-pressed="true">第一次出現</button><button type="button" data-cs="l" aria-pressed="false">最近一次用到</button></span></div>' +
+      '<div class="kbc-legend" data-k="legend"></div></div>' +
       '';
     host.appendChild(root);
-    var cardWrap = doc.createElement('div'); cardWrap.className = 'kbc'; cardWrap.innerHTML = '<div class="kbc-card" data-k="card"></div>'; host.appendChild(cardWrap);
+    var cardWrap = doc.createElement('div'); cardWrap.className = 'kbc'; cardWrap.innerHTML = '<div class="kbc-card" data-k="card"></div>'; if (!opts.noCard) host.appendChild(cardWrap);
     inst.cardWrap = cardWrap;
     var q = function (k) { return root.querySelector('[data-k=' + k + ']') || cardWrap.querySelector('[data-k=' + k + ']'); };
     var stage = root.querySelector('.kbc-stage'), view = q('view'), cloud = q('cloud'), words = q('words'), lines = q('lines'), tip = q('tip'), card = q('card');
@@ -390,6 +413,28 @@
     mass.style.cssText = 'left:' + (-mk.w / 2) + 'px;top:' + (-mk.h / 2 + 12) + 'px;width:' + mk.w + 'px;height:' + mk.h + 'px'; mass.innerHTML = mk.svg; cloud.appendChild(mass); }
     // 詞
     var wEl = {}, lEl = {};
+    function dayName(s) { return opts.labels && opts.labels[s] ? opts.labels[s] : '第 ' + s + ' 天'; }
+    // 這個詞在第 k 天的「時間」位置:0 = 最早、1 = 最晚(用整段時間的長度算,播放時顏色不會跳)
+    function timeT(c, k) {
+      var ps = model.postsAt(c, k); if (!ps.length) return 0; var s = inst.csub === 'l' ? ps[ps.length - 1].step : ps[0].step;
+      return K <= 1 ? .5 : (s - 1) / (K - 1);
+    }
+    function colorOf(c, k, st) { return inst.cmode === 'b' ? rampColor(timeT(c, k)) : 'var(--' + st + ')'; }
+    function drawLegend() {
+      var lg = q('legend'); if (!lg) return;
+      lg.innerHTML = inst.cmode === 'b'
+        ? '<span class="kbc-ramp">較早 <i role="img" aria-label="顏色從淡米色到深橘紅,代表從較早到較晚"></i> 較晚</span><span>' + (inst.csub === 'l' ? '這個詞最近一次出現的時間' : '這個詞第一次出現的時間') + '(' + esc(dayName(1)) + ' → ' + esc(dayName(K)) + ')</span>'
+        : '<span>顏色 = 這個想法現在的狀態:</span><span class="kbc-tg" style="--cc:var(--q)">提問中</span><span class="kbc-tg" style="--cc:var(--e)">被延伸</span><span class="kbc-tg" style="--cc:var(--i)">改進中</span><span class="kbc-tg" style="--cc:var(--c)">被質疑</span><span class="kbc-tg" style="--cc:var(--r)">已整合</span>';
+      var mt = q('mtitle'); if (mt) mt.textContent = inst.cmode === 'b' ? '模式 B:顏色看「什麼時候出現」' : '模式 A:顏色看「想法的狀態」';
+      var sb = root.querySelectorAll('[data-cs]'); for (var j = 0; j < sb.length; j++) sb[j].setAttribute('aria-pressed', sb[j].getAttribute('data-cs') === inst.csub ? 'true' : 'false');
+      root.classList.toggle('tm', inst.cmode === 'b');
+      var sub = q('sub'); if (sub) { if (inst.cmode === 'b') sub.removeAttribute('hidden'); else sub.setAttribute('hidden', ''); }
+    }
+    inst.setColorMode = function (m, sub) {
+      inst.cmode = m === 'b' ? 'b' : 'a'; if (sub) inst.csub = sub === 'l' ? 'l' : 'f';
+      if (inst.cmode === 'b') { try { global.localStorage.setItem(cmKey, inst.csub === 'l' ? 'bl' : 'bf'); } catch (e) {} }
+      drawLegend(); inst.render(inst.k);
+    };
     model.concepts.forEach(function (c) {
       var w = doc.createElement('div'); w.className = 'kbc-w'; w.setAttribute('data-t', c.t);
       var dm = cloudDim(c.t), shp = CLOUDS ? cloudShapes(c.t, dm.w, dm.h, false) : null;
@@ -451,7 +496,7 @@
       var c = conceptOf(t); if (!c) return; var ps = model.postsAt(c, inst.k); if (!ps.length) return;
       var st = model.stateAt(c, inst.k), rc = 0; ps.forEach(function (p) { p.rep.forEach(function (rp) { if (rp.step <= inst.k) rc++; }); });
       var rel = model.related(c, inst.k).slice(0, 3).map(function (x) { return x.t; });
-      tip.innerHTML = '<h4>' + esc(t) + stTag(st) + (model.turningAt(c, inst.k) ? '<span class="kbc-star">★</span>' : '') + '</h4><div>第 ' + ps[0].step + ' 天出現 · 你的貼文 ' + ps.length + ' 則 · 同學回應 ' + rc + ' 則</div><div class="msg">' + STATE_MSG[st] + '</div>' + (rel.length ? '<div>常一起出現:' + rel.map(esc).join('、') + '</div>' : '') + (pin ? '<button type="button" data-k="see">看完整故事 ↓</button>' : '<div>點一下看完整故事</div>');
+      tip.innerHTML = '<h4>' + esc(t) + (inst.cmode === 'b' ? '<span class="kbc-tg" style="--cc:' + colorOf(c, inst.k, st) + '">' + (inst.csub === 'l' ? '最近用在 ' + esc(dayName(ps[ps.length - 1].step)) : '最早出現在 ' + esc(dayName(ps[0].step))) + '</span>' : stTag(st)) + (model.turningAt(c, inst.k) ? '<span class="kbc-star">★</span>' : '') + '</h4><div>第 ' + ps[0].step + ' 天出現 · 你的貼文 ' + ps.length + ' 則 · 同學回應 ' + rc + ' 則</div><div class="msg">' + STATE_MSG[st] + '</div>' + (rel.length ? '<div>常一起出現:' + rel.map(esc).join('、') + '</div>' : '') + (pin ? '<button type="button" data-k="see">看完整故事 ↓</button>' : '<div>點一下看完整故事</div>');
       tip.className = 'kbc-tip show' + (pin ? ' pin' : '');
       var p = posOf(c, inst.k), f = chipFont(ps.length), ch = f * cloudDim(c.t).h, th = tip.offsetHeight || 150, tw = 250;
       var sc = inst.z * base, vTop = (-stage.clientHeight / 2 - inst.y) / sc, vL = (-stage.clientWidth / 2 - inst.x) / sc, vR = (stage.clientWidth / 2 - inst.x) / sc;
@@ -548,7 +593,7 @@
         var p = posOf(c, k); pos[c.t] = p; el.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
         if (!vis) return; n++;
         var st = model.stateAt(c, k), f = chipFont(ps.length), chip = el.firstChild, ct = chip.querySelector('.kbc-ct');
-        el.style.setProperty('--cc', 'var(--' + st + ')'); chip.style.fontSize = f + 'px'; el.style.zIndex = String(ps.length); el.setAttribute('data-d', ps.length >= 3 ? '3' : String(ps.length));
+        el.style.setProperty('--cc', colorOf(c, k, st)); chip.style.fontSize = f + 'px'; el.style.zIndex = String(ps.length); el.setAttribute('data-d', ps.length >= 3 ? '3' : String(ps.length));
         var old = chip.querySelector('.kbc-star'); if (old) old.remove(); var op = chip.querySelector('.kbc-pulse'); if (op) op.remove();
         if (model.turningAt(c, k)) { var sp = doc.createElement('span'); sp.className = 'kbc-star'; sp.textContent = '★'; ct.appendChild(sp); }
         if (k > 0 && ps[0].step === k) { var pu = doc.createElement('span'); pu.className = 'kbc-pulse'; chip.insertBefore(pu, chip.firstChild); }
@@ -572,7 +617,7 @@
       if (inst.pinned) { if (inst.sel && model.postsAt(conceptOf(inst.sel), k).length) showTip(inst.sel, true); else hideTip(true); }
       applyDim(inst.pinned ? inst.sel : null);
     };
-    inst.select = function (t, pin) { inst.sel = t; if (pin) inst.pinned = true; inst.render(inst.k); if (pin) { showTip(t, true); } };
+    inst.select = function (t, pin) { inst.sel = t; if (pin) inst.pinned = true; inst.render(inst.k); if (pin) { showTip(t, true); } if (opts.onPick) opts.onPick(t); };
     // 詞的互動:移上去有提示,點一下釘住並說明
     Object.keys(wEl).forEach(function (t) {
       var w = wEl[t];
@@ -580,16 +625,39 @@
       w.addEventListener('mouseleave', function () { if (!inst.pinned) hideTip(false); });
       w.addEventListener('click', function (e) {
         e.stopPropagation(); if (moved) return;
-        inst.sel = t; inst.pinned = true; inst.render(inst.k); showTip(t, true); toast('已選擇「' + t + '」,它的故事在下面 ↓'); var h = q('hint'); if (h) h.style.display = 'none';
+        inst.sel = t; inst.pinned = true; inst.render(inst.k); showTip(t, true); toast('已選擇「' + t + '」,它的故事在下面 ↓'); if (opts.onPick) opts.onPick(t); var h = q('hint'); if (h) h.style.display = 'none';
       });
     });
     // 預設選一個:用最多次的詞
     var top = model.concepts.slice().sort(function (a, b) { return b.count - a.count; })[0]; inst.sel = top ? top.t : null;
     inst.fit = function () { base = fit(); applyView(false); inst.render(inst.k); };
     if (global.ResizeObserver) { try { new global.ResizeObserver(function () { var nb = fit(); if (Math.abs(nb - base) > 0.02) { base = nb; applyView(false); inst.render(inst.k); } }).observe(stage); } catch (e) {} }
+    root.querySelectorAll('[data-cs]').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); inst.setColorMode('b', b.getAttribute('data-cs')); }); });
+    drawLegend();
     applyView(false); inst.render(K);
     return inst;
   }
 
-  global.KBConcept = { build: build, create: create, layout: layout, tokens: tokens, LEX: LEX, _STATE_NAME: STATE_NAME };
+  /* ---------- 左右並排:模式 A(狀態色)在左、模式 B(時間色)在右,同一個進度、同一個選取 ---------- */
+  function createDual(host, model, opts) {
+    opts = opts || {}; injectCSS();
+    if (!model.concepts.length) return create(host, model, opts);
+    host.innerHTML = '';
+    var grid = doc.createElement('div'); grid.className = 'kbc-dual';
+    var ha = doc.createElement('div'), hb = doc.createElement('div'); ha.className = 'kbc-col'; hb.className = 'kbc-col';
+    grid.appendChild(ha); grid.appendChild(hb); host.appendChild(grid);
+    var a, b;
+    function sub(extra) { var x = {}; for (var k in opts) x[k] = opts[k]; for (var e in extra) x[e] = extra[e]; return x; }
+    a = create(ha, model, sub({ colorMode: 'a', noCard: true, onPick: function (t) { if (b) { b.sel = t; b.pinned = false; b.render(b.k); } } }));
+    b = create(hb, model, sub({ colorMode: 'b', noCard: true, probe: null, onPick: function (t) { a.sel = t; a.pinned = false; a.render(a.k); } }));
+    host.appendChild(a.cardWrap);            // 故事卡放在兩張圖下面(整排寬)
+    var ra = a.render, rf = a.fit;
+    a.render = function (k) { ra(k); b.render(k); };
+    a.fit = function () { rf(); b.fit(); };
+    b.goCard = function () { a.goCard(); };
+    a.b = b; a.dual = true; a.main = grid;
+    return a;
+  }
+
+  global.KBConcept = { build: build, create: create, createDual: createDual, layout: layout, tokens: tokens, LEX: LEX, _STATE_NAME: STATE_NAME };
 })(typeof window !== 'undefined' ? window : globalThis);

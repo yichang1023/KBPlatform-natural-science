@@ -74,6 +74,56 @@
       return cache[i];
     };
   };
+  // 圓球移動方式:浮動 = 拖一顆球,其他球會跟著動;固定 = 只有被拖的那顆球動。全部網絡共用,記在瀏覽器。
+  window.kbMove = (function () {
+    var KEY = 'kb_net_move', subs = [], mode = 'float';
+    try { if (window.localStorage.getItem(KEY) === 'fixed') mode = 'fixed'; } catch (e) {}
+    function set(m) {
+      mode = m === 'fixed' ? 'fixed' : 'float'; try { window.localStorage.setItem(KEY, mode); } catch (e) {}
+      subs = subs.filter(function (s) { return !s.el || s.el.isConnected !== false; });
+      subs.forEach(function (s) { try { s.f(mode); } catch (e) {} });
+    }
+    function ctl() {
+      var w = document.createElement('span'); w.className = 'kb-move-ctl'; w.setAttribute('role', 'group'); w.setAttribute('aria-label', '圓球移動方式');
+      w.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#334155;pointer-events:auto';
+      var bs = 'padding:1px 8px;border-radius:999px;border:1px solid #94a3b8;font-weight:700;cursor:pointer;line-height:1.5';
+      w.innerHTML = '<span>移動方式:</span><button type="button" data-mv="float" style="' + bs + '" title="拖一顆球,其他球會跟著一起動">浮動</button><button type="button" data-mv="fixed" style="' + bs + '" title="只有被拖的那顆球會動,其他球不動">固定</button>';
+      function paint(m) { Array.prototype.forEach.call(w.querySelectorAll('[data-mv]'), function (b) { var on = b.getAttribute('data-mv') === m; b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.style.background = on ? '#4f46e5' : '#fff'; b.style.color = on ? '#fff' : '#334155'; b.style.borderColor = on ? '#4f46e5' : '#94a3b8'; }); }
+      w.addEventListener('click', function (e) { var b = e.target && e.target.closest ? e.target.closest('[data-mv]') : null; if (b) { e.stopPropagation(); set(b.getAttribute('data-mv')); } });
+      w.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      subs.push({ f: paint, el: w }); paint(mode); return w;
+    }
+    return { get: function () { return mode; }, set: set, ctl: ctl, on: function (f) { subs.push({ f: f }); } };
+  })();
+  // 讓網絡圖「好玩」:拖一顆球(浮動:其他球跟著跑;固定:只有它動);滾輪放大縮小;拖背景移動畫面
+  window.kbLively = function (net) {
+    if (!net || net.__lively) return net; net.__lively = true;
+    var t = null;
+    try { net.setOptions({ interaction: { dragNodes: true, dragView: true, zoomView: true, hover: true } }); } catch (e) {}
+    net.on('dragStart', function (p) {
+      if (!p || !p.nodes || !p.nodes.length) return; clearTimeout(t);
+      try {
+        if (window.kbMove.get() === 'float') net.setOptions({ physics: { enabled: true, stabilization: false, barnesHut: { damping: 0.35, springConstant: 0.06 } } });
+        else net.setOptions({ physics: false });
+      } catch (e) {}
+    });
+    net.on('dragEnd', function (p) {
+      if (!p || !p.nodes || !p.nodes.length) return; clearTimeout(t);
+      if (window.kbMove.get() === 'fixed') { try { net.setOptions({ physics: false }); } catch (e) {} return; }
+      t = setTimeout(function () { try { net.setOptions({ physics: false }); } catch (e) {} }, 2500);
+    });
+    window.kbMove.on(function (m) { if (m === 'fixed') { clearTimeout(t); try { net.setOptions({ physics: false }); } catch (e) {} } });
+    try {
+      var c = net.body && net.body.container;
+      if (c && c.appendChild && !c.querySelector('.kb-lively-hint')) {
+        var h = document.createElement('div'); h.className = 'kb-lively-hint';
+        h.style.cssText = 'position:absolute;left:6px;bottom:6px;right:6px;font-size:10px;color:#64748b;pointer-events:none;background:rgba(255,255,255,.88);padding:2px 8px;border-radius:10px;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px';
+        var tx = document.createElement('span'); tx.textContent = '👆 拖拖看圓球・滾輪放大縮小'; h.appendChild(tx); h.appendChild(window.kbMove.ctl());
+        if (c.style && !c.style.position) c.style.position = 'relative'; c.appendChild(h);
+      }
+    } catch (e) {}
+    return net;
+  };
   window.kbAttachPlayer = function (o) {
     if (window.__kbReplaying) return null;
     if (players[o.id]) players[o.id].destroy();
@@ -115,6 +165,7 @@
       o.edgesDS.update(f.edges);
       seek.value = i; label.textContent = o.labels[i];
       if (guide) guide.update(i);
+      if (o.onStep) { try { o.onStep(i); } catch (e) { console.error(e); } }
       if (animate) { physOn(); physOffLater(1500); }
     }
     function stopTimer() { clearTimeout(st.timer); st.timer = null; }
@@ -382,12 +433,21 @@
     <!-- Main Content -->
     <main class="flex-1 bg-slate-50 p-4 md:p-8 overflow-y-auto relative w-full" id="main-scroll-area">
 
+        <!-- 最上面:選要看哪一個討論區(組);總體概況、主題與觀點、言談品質、學術指標共用,捲動時釘在最上方 -->
+        <div id="topic-bar" class="sticky top-0 z-20 mb-4 md:mb-5 bg-white/95 border border-slate-200 rounded-xl shadow-sm px-3 py-2 flex flex-wrap items-center gap-2 md:max-w-[calc(100%-14rem)]">
+            <label for="topic-selector-top" class="text-sm font-bold text-slate-700 whitespace-nowrap"><i class="fas fa-layer-group text-blue-500 mr-1"></i> 看哪一個討論區(組)?</label>
+            <select id="topic-selector-top" onchange="filterDataByTopic(this.value)" class="flex-1 min-w-[12rem] bg-white border-2 border-blue-300 text-slate-800 text-sm font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 shadow-sm">
+                <option value="all" selected>所有主題 (All Topics)</option>
+            </select>
+            <span class="text-[11px] text-slate-400 hidden lg:inline">換了之後,下面所有圖表都會跟著換</span>
+        </div>
+
         <!-- VIEW 1: 總體概況 -->
         <div id="view-overview" class="section-view active space-y-4 md:space-y-6">
             <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
                 <div><h2 class="text-xl md:text-2xl font-bold text-slate-800">班級社群脈動</h2><p class="text-sm text-slate-500">全班知識建構狀態與集體責任指標</p></div>
                 <div class="flex gap-2 items-center w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-                    <select id="topic-selector-overview" onchange="filterDataByTopic(this.value)" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm">
+                    <select id="topic-selector-overview" onchange="filterDataByTopic(this.value)" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm">
                         <option value="all" selected>所有主題 (All Topics)</option>
                     </select>
                     <button onclick="triggerClassDiagnosisAI(false, true)" class="ai-btn bg-purple-600 hover:bg-purple-700 shadow-md whitespace-nowrap"><i class="fas fa-brain mr-2"></i> AI 診斷</button>
@@ -465,8 +525,14 @@
                         <div><h3 class="font-bold text-slate-800"><i class="fas fa-random text-indigo-500 mr-2"></i>言談序列轉移分析 (Sequential Analysis)</h3><p class="text-xs text-slate-500">對話基因圖譜：分析「某類型發言」後通常接續「哪種回應」？</p></div>
                         <button class="ref-btn" onclick="openRef('lag_sequence')"><i class="fas fa-book"></i> Ref:</button>
                     </div>
-                    <div class="overflow-x-auto"><div id="sequential-matrix-container" class="min-w-[300px]"></div></div>
-                    <div class="mt-2 text-xs text-slate-400 italic text-right">* 數值代表轉移機率 (%)，顏色越深機率越高。參考 Jeong (2003)。</div>
+                    <div id="seq-controls" class="flex flex-wrap gap-2 mb-2" role="group" aria-label="選擇要看的階段"></div>
+                    <div id="seq-insight" class="text-xs text-slate-700 leading-relaxed mb-2"></div>
+                    <div id="seq-network" class="w-full"></div>
+                    <p class="text-[11px] text-slate-500 leading-relaxed mt-1"><b>怎麼看:</b>圓越大,表示這一類貼文越多。<b>箭頭 A → B</b> = 有人回應了一則 A 之後,常常接著寫 B;箭頭越粗,機率越高;繞著自己的圈圈 = 接著又寫同一類。只畫出機率 15% 以上的接續。(反駁併入「改進」)</p>
+                    <details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">看數字表格(每一列加起來是 100%)</summary>
+                        <div class="overflow-x-auto mt-2"><div id="sequential-matrix-container" class="min-w-[300px]"></div></div>
+                        <div class="mt-2 text-xs text-slate-400 italic text-right">* 數值代表轉移機率 (%)，顏色越深機率越高。參考 Jeong (2003)。</div>
+                    </details>
                 </div>
                 <div class="card">
                     <div class="flex justify-between items-center mb-4">
@@ -484,8 +550,11 @@
                 </div>
                 <div class="card flex flex-col gap-6">
                     <div>
-                        <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-compass text-indigo-500 mr-2"></i>鷹架分佈</h3><button class="ref-btn" onclick="openRef('principles')"><i class="fas fa-book"></i> Ref:</button></div>
-                        <div class="h-[150px]"><canvas id="principlesChart"></canvas></div>
+                        <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-compass text-indigo-500 mr-2"></i>鷹架分佈:前期 → 後期</h3><button class="ref-btn" onclick="openRef('principles')"><i class="fas fa-book"></i> Ref:</button></div>
+                        <p class="text-[11px] text-slate-500 mb-1 leading-relaxed">把全部貼文依時間分成前、中、後三段,看<b>各類型占的比例</b>怎麼變。</p>
+                        <div id="phase-insight" class="text-xs text-slate-700 leading-relaxed mb-2"></div>
+                        <div class="h-[230px]"><canvas id="principlesChart" role="img" aria-label="前期、中期、後期的貼文類型比例堆疊柱狀圖">貼文類型比例</canvas></div>
+                        <div id="phase-legend" class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-600"></div>
                     </div>
                     <div class="border-t pt-4">
                         <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-star text-yellow-500 mr-2"></i>KB 12原則</h3><button class="ref-btn" onclick="openRef('kb12')"><i class="fas fa-book"></i> Ref:</button></div>
@@ -538,6 +607,14 @@
                         <div class="card">
                             <div class="flex justify-between items-center mb-2"><h4 class="font-bold text-sm text-slate-700 uppercase mr-2">自我互動圈 (Ego Network)</h4><button class="ref-btn" onclick="openRef('ego')"><i class="fas fa-book"></i> Ref:</button></div>
                             <div class="h-72 bg-slate-50 rounded border border-slate-100 relative"><div id="ego-network-container" class="absolute inset-0"></div></div>
+                            <div id="ego-legend" class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] mt-2 text-slate-600 font-medium">
+                                <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6"></i>提問</span>
+                                <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#eab308"></i>延伸</span>
+                                <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#22c55e"></i>改進</span>
+                                <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#ef4444"></i>反駁</span>
+                                <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#a855f7"></i>整合</span>
+                                <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#d5dbe5"></i>他們彼此之間(灰線)</span>
+                            </div>
                             <div class="text-xs text-right mt-2 text-slate-500" id="ego-metric">顯示該學生與他人的直接互動</div>
                         </div>
                     </div>
@@ -584,7 +661,7 @@
             <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div><h2 class="text-xl md:text-2xl font-bold text-slate-800">觀點潛力與演化 (Ideas)</h2><p class="text-sm text-slate-500">概念網絡與詞彙成長分析 (Epistemic Network)</p></div>
                 <div class="w-full md:w-auto">
-                    <select id="topic-selector-ideas" onchange="filterDataByTopic(this.value)" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <select id="topic-selector-ideas" onchange="filterDataByTopic(this.value)" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         <option value="all" selected>所有主題 (All Topics)</option>
                     </select>
                 </div>
@@ -594,12 +671,12 @@
                     <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">1. 觀點關注度分布圖</h3><p class="text-xs text-slate-500">回覆數 × 貼文類型(並非學生評選)</p></div><button class="ref-btn" onclick="openRef('promisingness')"><i class="fas fa-book"></i> Ref:</button></div>
                     <div class="relative flex-1 bg-slate-50 border border-slate-200 rounded-lg p-4" id="promisingness-container"></div>
                 </div>
-                <div class="card h-[350px] md:h-[400px]">
+                <div class="card" id="concept-card">
                     <div class="flex justify-between items-center mb-4">
                         <div><h3 class="font-bold text-slate-800">2. 概念語義網絡 (Concept Space)</h3><p class="text-xs text-slate-500">互動式共現網絡：<span class='text-red-500 font-bold'>●</span> 熱點觀點 | 點擊查看</p></div>
                         <button class="ref-btn" onclick="openRef('concept_network')"><i class="fas fa-book"></i> Ref:</button>
                     </div>
-                    <div id="concept-network-container" class="h-full bg-slate-50 rounded border border-slate-100"></div>
+                    <div id="concept-network-container" class="bg-slate-50 rounded border border-slate-100" style="height:280px"></div>
                 </div>
                 <div class="card h-[300px] md:h-[400px] overflow-y-auto custom-scrollbar">
                     <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">3. 專業詞彙成長 (Domain Vocabulary)</h3><p class="text-xs text-slate-500">全班用到幾種單元專業詞(不重複,依詞庫比對)</p></div><button class="ref-btn" onclick="openRef('lexical_growth')"><i class="fas fa-book"></i> Ref:</button></div>
@@ -676,7 +753,7 @@
             <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div><h2 class="text-xl md:text-2xl font-bold text-slate-800">認知言談品質分析 (Quality)</h2><p class="text-sm text-slate-500">視覺化班級對話的「深度結構」與「動態流向」</p></div>
                 <div class="w-full md:w-auto">
-                    <select id="topic-selector-quality" onchange="filterDataByTopic(this.value)" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <select id="topic-selector-quality" onchange="filterDataByTopic(this.value)" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         <option value="all" selected>所有主題 (All Topics)</option>
                     </select>
                 </div>
@@ -758,7 +835,7 @@
                     <p class="text-sm text-slate-500">基於國際學習科學期刊 (JLS/ijCSCL) 標準的進階分析指標</p>
                 </div>
                 <div class="w-full md:w-auto">
-                    <select id="topic-selector-academic" onchange="filterDataByTopic(this.value)" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <select id="topic-selector-academic" onchange="filterDataByTopic(this.value)" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         <option value="all" selected>所有主題 (All Topics)</option>
                     </select>
                 </div>
@@ -1159,9 +1236,10 @@ async function geminiFetch(key, init) {
             renderOverviewTrajectory(filteredNodes);
             try { renderTrajectoryLadder(filteredNodes); } catch (e) { console.error(e); }
             renderSequentialMatrix(filteredNodes);
+            try { renderSequentialNetwork(filteredNodes); } catch (e) { console.error(e); }
             renderKnowledgeBrokers(filteredNodes, students);
             try {
-                kbRep({ id: 'seq', anchor: document.getElementById('sequential-matrix-container'), title: '言談序列轉移(哪種貼文常接在哪種貼文後面)的累積', render: () => renderSequentialMatrix(globalAllNotes) });
+                kbRep({ id: 'seq', anchor: document.getElementById('seq-network'), title: '言談序列轉移(哪種貼文常接在哪種貼文後面)的累積', render: () => { renderSequentialMatrix(globalAllNotes); renderSequentialNetwork(globalAllNotes); } });
                 kbRep({ id: 'brokers', anchor: document.getElementById('brokers-list-container'), title: '關鍵知識經紀人(居中串連大家的人)的出現過程', render: () => renderKnowledgeBrokers(globalAllNotes, students) });
                 const kpiCard = document.getElementById('network-density') && document.getElementById('network-density').closest('.card');
                 if (kpiCard) kbRep({ id: 'kpi', anchor: kpiCard, inside: true, title: '班級社群脈動(總貼文、網路密度、昇華率、發言平均度、討論串深度)的累積', render: () => kbKpiSet(kbKpiCalc(globalAllNotes)), values: () => { const k = kbKpiCalc(globalAllNotes); return '總貼文 ' + k.total + '、網路密度 ' + k.dens + '、昇華率 ' + k.ra + '%、發言吉尼係數 ' + k.gini + '、平均討論串深度 ' + k.depth; } });
@@ -1345,6 +1423,51 @@ async function geminiFetch(key, init) {
                     scales: { y: { beginAtZero: true, max: 100, ticks: { font: { size: 10 } }, title: { display: true, text: '換算高度', font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } } } };
         }
 
+        // ===== 鷹架分佈:前期 / 中期 / 後期 =====
+        // 依貼文時間把「目前看得到的貼文」平分成三段(每段貼文數一樣多),看各類型的占比怎麼變。
+        // 類型是學生發文時自己選的,所以這是「大致的」討論動作,不是人工編碼。
+        const PH_TYPES = [
+            { k: 'question', name: '提問', color: '#3b82f6', sym: '？' },
+            { k: 'extend', name: '延伸', color: '#eab308', sym: '＋' },
+            { k: 'improve', name: '改進', color: '#22c55e', sym: '↑' },
+            { k: 'counter', name: '反駁', color: '#ef4444', sym: '≠' },
+            { k: 'riseabove', name: '整合', color: '#a855f7', sym: '★' }
+        ];
+        const PH_NAMES = ['前期', '中期', '後期'];
+        function scaffoldPhaseData(nodes) {
+            const list = (nodes || []).filter(n => PH_TYPES.some(t => t.k === n.type)).sort((x, y) => trajTs(x) - trajTs(y));
+            if (list.length < 9) return null;
+            const third = Math.ceil(list.length / 3), parts = [list.slice(0, third), list.slice(third, 2 * third), list.slice(2 * third)];
+            const pct = parts.map(p => PH_TYPES.map(t => p.length ? p.filter(n => n.type === t.k).length / p.length * 100 : 0));
+            const range = parts.map(p => p.length ? trajMD(trajTs(p[0])) + '~' + trajMD(trajTs(p[p.length - 1])) : '');
+            const txt = pct.map(r => PH_TYPES.map((t, i) => t.name + ' ' + r[i].toFixed(1) + '%').join('、'));
+            const diffs = PH_TYPES.map((t, i) => ({ t: t, from: pct[0][i], to: pct[2][i], d: pct[2][i] - pct[0][i] })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+            return { pct: pct, range: range, txt: txt, diffs: diffs, n: list.length, sizes: parts.map(p => p.length) };
+        }
+        function renderScaffoldPhases(nodes, step) {
+            const cv = document.getElementById('principlesChart'); if (!cv) return;
+            const P = scaffoldPhaseData(nodes), ins = document.getElementById('phase-insight'), lg = document.getElementById('phase-legend');
+            if (lg) lg.innerHTML = PH_TYPES.map(t => '<span class="inline-flex items-center gap-1"><span style="width:10px;height:10px;border-radius:3px;background:' + t.color + ';display:inline-block"></span>' + t.sym + ' ' + t.name + '</span>').join('');
+            if (!P) {
+                if (principlesChartInstance) { principlesChartInstance.destroy(); principlesChartInstance = null; }
+                if (ins) ins.innerHTML = '<span class="text-slate-400">貼文還不到 9 則,分成三段會太少,等同學多發表後再看。</span>';
+                return;
+            }
+            if (ins) {
+                const top = P.diffs.slice(0, 2).filter(x => Math.abs(x.d) >= 1);
+                ins.innerHTML = top.length ? '<b>最明顯的變化:</b>' + top.map(x => '<span style="color:' + x.t.color + ';font-weight:700">' + x.t.name + '</span> ' + x.from.toFixed(1) + '% → ' + x.to.toFixed(1) + '%(' + (x.d > 0 ? '增加' : '減少') + ' ' + Math.abs(x.d).toFixed(1) + ' 個百分點)').join(';') + '。' : '前、中、後期的比例差不多,沒有明顯變化。';
+            }
+            const labels = PH_NAMES.map((n, i) => n + '(' + P.range[i] + ')');
+            const datasets = PH_TYPES.map((t, i) => ({ label: t.name, data: P.pct.map(r => r[i]), backgroundColor: t.color, borderWidth: 0, borderSkipped: false, maxBarThickness: 70 }));
+            const valuePlugin = { id: 'phaseVals', afterDatasetsDraw(ch) { const c = ch.ctx; c.save(); c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; ch.data.datasets.forEach((d, i) => { ch.getDatasetMeta(i).data.forEach((bar, j) => { const v = d.data[j]; if (v >= 7) c.fillText(PH_TYPES[i].sym + ' ' + Math.round(v) + '%', bar.x, (bar.y + bar.base) / 2); }); }); c.restore(); } };
+            const cfg = { type: 'bar', plugins: [valuePlugin], data: { labels: labels, datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, animation: step === null ? undefined : false, plugins: { legend: { display: false },
+                tooltip: { callbacks: { title: items => items.length ? PH_NAMES[items[0].dataIndex] + '(' + P.range[items[0].dataIndex] + ',共 ' + P.sizes[items[0].dataIndex] + ' 則)' : '', label: c => c.dataset.label + ':' + c.parsed.y.toFixed(1) + '%' } } },
+                scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 } } }, y: { stacked: true, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } } } } } };
+            if (principlesChartInstance) { principlesChartInstance.destroy(); principlesChartInstance = null; }
+            principlesChartInstance = new Chart(cv.getContext('2d'), cfg);
+            cv.setAttribute('aria-label', '前期、中期、後期的貼文類型比例:' + P.txt.map((t, i) => PH_NAMES[i] + ' ' + t).join(';'));
+        }
+
         function renderOverviewTrajectory(nodes) {
             const ctx = document.getElementById('overviewTrajectoryChart').getContext('2d');
             if(overviewTrajectoryChart) overviewTrajectoryChart.destroy();
@@ -1399,6 +1522,141 @@ async function geminiFetch(key, init) {
                 }
             });
             try { kbAttachSeriesPlayer({ id: 'traj', explainTitle: '全班提出的問題與改進、整合的想法(累積)的軌跡', chart: overviewTrajectoryChart }); } catch (e) {}
+        }
+
+        // ===== 言談序列轉移:轉移網絡圖 =====
+        // 節點 = 貼文類型(反駁併入改進);箭頭 A→B = 回應一則 A 之後接著寫 B 的機率(每一列加起來 100%)。
+        // 前/中/後期:把目前看得到的貼文依時間平分成三段,「回應」算在它自己所在的那一段。
+        const SEQ_TYPES = [
+            { k: 'question', name: '提問', color: '#3b82f6', x: 70, y: 150 },
+            { k: 'extend', name: '延伸', color: '#eab308', x: 230, y: 62 },
+            { k: 'improve', name: '改進', color: '#22c55e', x: 390, y: 150 },
+            { k: 'riseabove', name: '整合', color: '#a855f7', x: 230, y: 238 }
+        ];
+        const seqUI = { view: 'all', m: null, z: 1, px: 0, py: 0 };
+        const SEQ_HOME = {}; SEQ_TYPES.forEach(t => { SEQ_HOME[t.k] = { x: t.x, y: t.y }; });
+        const SEQ_W = 460, SEQ_H = 300;
+        const SEQ_TOOLS = '<div class="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500"><span>👆 拖拖看圓球!選「浮動」別的球會跟著跑,選「固定」只有你拖的那顆會動。滾輪(或兩個按鈕)放大縮小,拖背景可以移動畫面。</span><button type="button" data-seq-z="in" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" aria-label="放大">＋</button><button type="button" data-seq-z="out" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" aria-label="縮小">－</button><button type="button" data-seq-z="reset" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold">還原位置</button><span data-seq-mv></span></div>';
+        const seqKey = t => t === 'counter' ? 'improve' : t;
+        function seqCompute(nodes) {
+            const list = (nodes || []).slice().sort((a, b) => trajTs(a) - trajTs(b)), byId = {};
+            list.forEach(n => { byId[n.id] = n; });
+            const mk = () => { const m = {}; SEQ_TYPES.forEach(a => { m[a.k] = {}; SEQ_TYPES.forEach(b => { m[a.k][b.k] = 0; }); }); return m; };
+            const all = mk(), ph = [mk(), mk(), mk()], third = Math.max(1, Math.ceil(list.length / 3)), usePh = list.length >= 9;
+            list.forEach((n, i) => {
+                const p = n.parentId ? byId[n.parentId] : null; if (!p) return;
+                const a = seqKey(p.type), b = seqKey(n.type); if (!all[a] || all[a][b] === undefined) return;
+                all[a][b]++; if (usePh) ph[Math.min(2, Math.floor(i / third))][a][b]++;
+            });
+            return { all: all, ph: usePh ? ph : null, n: list.length };
+        }
+        function seqRowTotal(m, a) { return SEQ_TYPES.reduce((s, b) => s + m[a][b.k], 0); }
+        function seqTop(m) {
+            const out = []; SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => { const tot = seqRowTotal(m, a.k); if (tot && m[a.k][b.k]) out.push({ a: a, b: b, c: m[a.k][b.k], p: m[a.k][b.k] / tot * 100, tot: tot }); }));
+            return out.sort((x, y) => y.c - x.c);
+        }
+        function seqInner(m) {
+            const node = {}; SEQ_TYPES.forEach(t => { node[t.k] = t; });
+            const mxs = SEQ_TYPES.reduce((s0, t) => s0 + t.x, 0) / SEQ_TYPES.length, mys = SEQ_TYPES.reduce((s0, t) => s0 + t.y, 0) / SEQ_TYPES.length;
+            const colTot = {}; let grand = 0; SEQ_TYPES.forEach(b => { colTot[b.k] = SEQ_TYPES.reduce((s, a) => s + m[a.k][b.k], 0); grand += colTot[b.k]; });
+            SEQ_TYPES.forEach(t => { t.r = 26 + 22 * Math.sqrt(grand ? colTot[t.k] / grand : 0); });
+            let defs = '<defs>' + SEQ_TYPES.map(t => '<marker id="seq-arr-' + t.k + '" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L9 5L1 9z" fill="' + t.color + '"/></marker>').join('') + '</defs>';
+            let edges = '', labels = '';
+            SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => {
+                const tot = seqRowTotal(m, a.k), c = m[a.k][b.k]; if (!tot || !c) return;
+                const p = c / tot; if (p < 0.15) return;
+                const sw = (1.5 + 9 * p).toFixed(1), dash = tot < 10 ? ' stroke-dasharray="5 4"' : '', tip = '<title>' + a.name + ' → ' + b.name + ':' + Math.round(p * 100) + '%(回應「' + a.name + '」共 ' + tot + ' 次,其中 ' + c + ' 次接著是「' + b.name + '」)' + (tot < 10 ? ' 樣本很少,僅供參考' : '') + '</title>';
+                if (a.k === b.k) {
+                    // 自己接自己的圈:朝「離大家中心最遠」的方向畫(球被拖到哪裡,圈就跟著轉)
+                    let ux = a.x - mxs, uy = a.y - mys; const ul = Math.sqrt(ux * ux + uy * uy); if (ul < 1) { ux = 0; uy = -1; } else { ux /= ul; uy /= ul; }
+                    const cx = a.x + ux * (a.r + 14), cy = a.y + uy * (a.r + 14), rr = 17;
+                    edges += '<g>' + tip + '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + rr + '" fill="none" stroke="' + a.color + '" stroke-width="' + sw + '" opacity=".8"' + dash + '/></g>';
+                    labels += '<text x="' + (cx + ux * (rr + 12)).toFixed(1) + '" y="' + (cy + uy * (rr + 11) + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
+                } else {
+                    const vx = b.x - a.x, vy = b.y - a.y, len = Math.sqrt(vx * vx + vy * vy), ux = vx / len, uy = vy / len, nx = -uy, ny = ux, bend = 26;
+                    const x1 = a.x + ux * (a.r + 2) + nx * 6, y1 = a.y + uy * (a.r + 2) + ny * 6, x2 = b.x - ux * (b.r + 8) + nx * 6, y2 = b.y - uy * (b.r + 8) + ny * 6;
+                    const cx = (x1 + x2) / 2 + nx * bend, cy = (y1 + y2) / 2 + ny * bend, mx = 0.25 * x1 + 0.5 * cx + 0.25 * x2, my = 0.25 * y1 + 0.5 * cy + 0.25 * y2;
+                    edges += '<g>' + tip + '<path d="M' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' Q' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + x2.toFixed(1) + ' ' + y2.toFixed(1) + '" fill="none" stroke="' + a.color + '" stroke-width="' + sw + '" stroke-linecap="round" opacity=".75"' + dash + ' marker-end="url(#seq-arr-' + a.k + ')"/></g>';
+                    labels += '<text x="' + mx.toFixed(1) + '" y="' + (my + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
+                }
+            }));
+            const nodes = SEQ_TYPES.map(t => '<g data-seqn="' + t.k + '" style="cursor:grab"><title>' + t.name + ':被回應 ' + seqRowTotal(m, t.k) + ' 次;被當作回應 ' + colTot[t.k] + ' 次</title><circle cx="' + t.x.toFixed(1) + '" cy="' + t.y.toFixed(1) + '" r="' + t.r.toFixed(1) + '" fill="' + t.color + '" stroke="#fff" stroke-width="3"/><text x="' + t.x.toFixed(1) + '" y="' + (t.y + 5).toFixed(1) + '" text-anchor="middle" class="seq-nm">' + t.name + '</text></g>').join('');
+            return defs + edges + nodes + labels;
+        }
+        function seqSvg(m) {
+            return '<svg viewBox="0 0 ' + SEQ_W + ' ' + SEQ_H + '" width="100%" role="img" aria-label="言談序列轉移網絡圖" style="background:#f8fafc;border-radius:14px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab"><style>.seq-lb{font:bold 12px sans-serif;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:3.5px;stroke-linejoin:round}.seq-nm{font:bold 14px sans-serif;fill:#fff;pointer-events:none}</style><g id="seq-vp" transform="translate(' + seqUI.px.toFixed(1) + ' ' + seqUI.py.toFixed(1) + ') scale(' + seqUI.z.toFixed(3) + ')">' + seqInner(m) + '</g></svg>';
+        }
+        // 互動:拖圓球(其他球慢慢跟過來)、滾輪縮放、拖背景移動、還原
+        function seqBind(box) {
+            const svg = box.querySelector('svg'); if (!svg) return;
+            const vp = () => svg.querySelector('#seq-vp');
+            const node = k => SEQ_TYPES.filter(t => t.k === k)[0];
+            const toSvg = e => { const r = svg.getBoundingClientRect(); return { x: (e.clientX - r.left) * (r.width ? SEQ_W / r.width : 1), y: (e.clientY - r.top) * (r.height ? SEQ_H / r.height : 1) }; };
+            const toWorld = p => ({ x: (p.x - seqUI.px) / seqUI.z, y: (p.y - seqUI.py) / seqUI.z });
+            const applyView = () => { vp().setAttribute('transform', 'translate(' + seqUI.px.toFixed(1) + ' ' + seqUI.py.toFixed(1) + ') scale(' + seqUI.z.toFixed(3) + ')'); };
+            const redraw = () => { if (seqUI.m) vp().innerHTML = seqInner(seqUI.m); };
+            let drag = null, pan = null, targets = {}, timer = 0;
+            const later = fn => { const raf = window.requestAnimationFrame; return raf ? raf(fn) : setTimeout(fn, 16); };
+            function separate() {
+                for (let i = 0; i < SEQ_TYPES.length; i++) for (let j = i + 1; j < SEQ_TYPES.length; j++) {
+                    const a = SEQ_TYPES[i], b = SEQ_TYPES[j]; let vx = b.x - a.x, vy = b.y - a.y, d = Math.sqrt(vx * vx + vy * vy); const need = a.r + b.r + 10;
+                    if (d >= need) continue; if (d < 0.01) { vx = 1; vy = 0; d = 1; } const push = need - d, ux = vx / d, uy = vy / d, aD = drag && drag.k === a.k, bD = drag && drag.k === b.k;
+                    const fixedMode = window.kbMove && window.kbMove.get() === 'fixed';
+                    if (aD && !bD) { if (fixedMode) { a.x -= ux * push; a.y -= uy * push; } else { b.x += ux * push; b.y += uy * push; } } else if (bD && !aD) { if (fixedMode) { b.x += ux * push; b.y += uy * push; } else { a.x -= ux * push; a.y -= uy * push; } } else { a.x -= ux * push / 2; a.y -= uy * push / 2; b.x += ux * push / 2; b.y += uy * push / 2; }
+                }
+            }
+            function tick() {
+                timer = 0; let moving = false;
+                SEQ_TYPES.forEach(t => { if (drag && drag.k === t.k) return; const g = targets[t.k]; if (!g) return; const ex = g.x - t.x, ey = g.y - t.y; if (Math.abs(ex) + Math.abs(ey) > 0.4) { t.x += ex * 0.28; t.y += ey * 0.28; moving = true; } else { t.x = g.x; t.y = g.y; } });
+                separate(); redraw();
+                if (drag || moving) timer = later(tick); else targets = {};
+            }
+            const kick = () => { if (!timer) timer = later(tick); };
+            svg.addEventListener('pointerdown', e => {
+                const g = e.target && e.target.closest ? e.target.closest('[data-seqn]') : null, p = toSvg(e);
+                if (g) { const t = node(g.getAttribute('data-seqn')), w = toWorld(p); drag = { k: t.k, ox: t.x - w.x, oy: t.y - w.y, base: {}, x0: t.x, y0: t.y }; SEQ_TYPES.forEach(q => { drag.base[q.k] = { x: q.x, y: q.y }; }); targets = {}; svg.style.cursor = 'grabbing'; }
+                else { pan = { x: p.x, y: p.y, px: seqUI.px, py: seqUI.py }; svg.style.cursor = 'grabbing'; }
+                try { svg.setPointerCapture(e.pointerId); } catch (x) {}
+                if (e.preventDefault) e.preventDefault();
+            });
+            svg.addEventListener('pointermove', e => {
+                if (!drag && !pan) return; const p = toSvg(e);
+                if (drag) {
+                    const w = toWorld(p), t = node(drag.k); t.x = w.x + drag.ox; t.y = w.y + drag.oy;
+                    if (window.kbMove && window.kbMove.get() === 'fixed') targets = {}; else SEQ_TYPES.forEach(q => { if (q.k !== drag.k) targets[q.k] = { x: drag.base[q.k].x + (t.x - drag.x0) * 0.55, y: drag.base[q.k].y + (t.y - drag.y0) * 0.55 }; });
+                    kick();
+                } else { seqUI.px = pan.px + (p.x - pan.x); seqUI.py = pan.py + (p.y - pan.y); applyView(); }
+            });
+            const up = () => { drag = null; pan = null; svg.style.cursor = 'grab'; kick(); };
+            svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+            const zoomAt = (f, p) => { const nz = Math.max(0.5, Math.min(3, seqUI.z * f)), k = nz / seqUI.z; seqUI.px = p.x - (p.x - seqUI.px) * k; seqUI.py = p.y - (p.y - seqUI.py) * k; seqUI.z = nz; applyView(); };
+            svg.addEventListener('wheel', e => { if (e.preventDefault) e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, toSvg(e)); }, { passive: false });
+            const mvBox = box.querySelector('[data-seq-mv]'); if (mvBox && window.kbMove) mvBox.appendChild(window.kbMove.ctl());
+            Array.prototype.forEach.call(box.querySelectorAll('[data-seq-z]'), b => b.addEventListener('click', () => {
+                const z = b.getAttribute('data-seq-z');
+                if (z === 'reset') { SEQ_TYPES.forEach(t => { t.x = SEQ_HOME[t.k].x; t.y = SEQ_HOME[t.k].y; }); seqUI.z = 1; seqUI.px = 0; seqUI.py = 0; targets = {}; redraw(); applyView(); }
+                else zoomAt(z === 'in' ? 1.25 : 0.8, { x: SEQ_W / 2, y: SEQ_H / 2 });
+            }));
+        }
+        function renderSequentialNetwork(nodes) {
+            const box = document.getElementById('seq-network'), ctl = document.getElementById('seq-controls'), ins = document.getElementById('seq-insight'); if (!box || !ctl || !ins) return;
+            const C = seqCompute(nodes), views = [['all', '整體'], ['p0', '前期'], ['p1', '中期'], ['p2', '後期']].filter(v => v[0] === 'all' || C.ph);
+            if (!views.some(v => v[0] === seqUI.view)) seqUI.view = 'all';
+            ctl.innerHTML = views.map(v => '<button type="button" data-sv="' + v[0] + '" aria-pressed="' + (seqUI.view === v[0]) + '" class="px-3 py-1 rounded-full text-xs font-bold border ' + (seqUI.view === v[0] ? 'text-white' : 'bg-white text-slate-600 border-slate-300') + '" style="' + (seqUI.view === v[0] ? 'background:#4f46e5;border-color:#4f46e5' : '') + '">' + v[1] + '</button>').join('') + (C.ph ? '' : '<span class="text-[11px] text-slate-400 self-center">貼文還不到 9 則,先只看整體</span>');
+            if (!ctl.__kbSeq) { ctl.__kbSeq = true; ctl.addEventListener('click', e => { const b = e.target.closest ? e.target.closest('[data-sv]') : null; if (!b) return; seqUI.view = b.getAttribute('data-sv'); renderSequentialNetwork(window.__seqNodes || []); }); }
+            window.__seqNodes = nodes;
+            const m = seqUI.view === 'all' ? C.all : C.ph[+seqUI.view.slice(1)], top = seqTop(m);
+            if (!top.length) { box.innerHTML = '<div class="text-sm text-slate-400 py-6 text-center">這一段還沒有「回應別人」的貼文。</div>'; ins.innerHTML = ''; return; }
+            seqUI.m = m; box.innerHTML = seqSvg(m) + SEQ_TOOLS; seqBind(box);
+            box.querySelector('svg').setAttribute('aria-label', '言談序列轉移網絡圖:最常見的接續是 ' + top.slice(0, 3).map(x => x.a.name + '接' + x.b.name + ' ' + Math.round(x.p) + '%').join('、'));
+            let html = '<b>最常見的接續:</b>' + top.slice(0, 3).map(x => '<span style="color:' + x.a.color + ';font-weight:700">' + x.a.name + '</span> → <span style="color:' + x.b.color + ';font-weight:700">' + x.b.name + '</span> ' + Math.round(x.p) + '%(' + x.c + ' 次)').join(';') + '。';
+            if (C.ph) {
+                const d = []; SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => { const t0 = seqRowTotal(C.ph[0], a.k), t2 = seqRowTotal(C.ph[2], a.k); if (t0 >= 10 && t2 >= 10) { const p0 = C.ph[0][a.k][b.k] / t0 * 100, p2 = C.ph[2][a.k][b.k] / t2 * 100; d.push({ a: a, b: b, p0: p0, p2: p2, d: p2 - p0 }); } }));
+                d.sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+                const t = d.slice(0, 2).filter(x => Math.abs(x.d) >= 8);
+                if (t.length) html += '<br><b>前期 → 後期變化最大:</b>' + t.map(x => x.a.name + ' → ' + x.b.name + ' ' + Math.round(x.p0) + '% → ' + Math.round(x.p2) + '%(' + (x.d > 0 ? '變多' : '變少') + ')').join(';') + '。';
+            }
+            ins.innerHTML = html;
         }
 
         function renderSequentialMatrix(nodes) {
@@ -1546,7 +1804,7 @@ async function geminiFetch(key, init) {
         }
 
         function populateTopicSelectors(topics) {
-            const selectors = ['topic-selector-ideas', 'topic-selector-quality', 'topic-selector-overview', 'topic-selector-academic'];
+            const selectors = ['topic-selector-top', 'topic-selector-ideas', 'topic-selector-quality', 'topic-selector-overview', 'topic-selector-academic'];
             let options = `<option value="all">所有主題 (All Topics)</option>`;
             if (topics.length > 0) options += topics.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
             else options = `<option value="all" disabled>暫無主題</option>`;
@@ -1562,7 +1820,7 @@ async function geminiFetch(key, init) {
 
         function filterDataByTopic(topic) {
             activeTopicFilter = topic;
-            const selectors = ['topic-selector-ideas', 'topic-selector-quality', 'topic-selector-overview', 'topic-selector-academic'];
+            const selectors = ['topic-selector-top', 'topic-selector-ideas', 'topic-selector-quality', 'topic-selector-overview', 'topic-selector-academic'];
             selectors.forEach(id => { const el = document.getElementById(id); if(el) el.value = topic; });
 
             if (globalRawDB && globalRawDB.nodes) {
@@ -1720,20 +1978,17 @@ async function geminiFetch(key, init) {
             overviewNetwork = new vis.Network(container, { nodes: snaNodesDS, edges: snaEdgesDS }, { nodes: { font: { face: 'Noto Sans TC' } }, physics: { stabilization: { enabled: true, iterations: 150, updateInterval: 50, fit: true }, barnesHut: { damping: 0.6 } } });
             // 排列穩定後就關閉物理運算,圖不會再一直晃動(仍可手動拖曳節點)
             const stopSnaPhysics = () => { if (overviewNetwork) overviewNetwork.setOptions({ physics: false }); };
-            overviewNetwork.once('stabilizationIterationsDone', stopSnaPhysics);
+            overviewNetwork.once('stabilizationIterationsDone', stopSnaPhysics); kbLively(overviewNetwork);
             setTimeout(stopSnaPhysics, 2500);
             kbAttachPlayer({ explainTitle: '全班互動網絡(誰回應了誰)的形成過程', id: 'sna', container: container, network: overviewNetwork, nodesDS: snaNodesDS, edgesDS: snaEdgesDS, labels: snaDays.stepLabels, steps: snaDays.steps, build: snaBuild });
-            const ctx1 = document.getElementById('principlesChart').getContext('2d');
             const typeCounts = { question:0, extend:0, improve:0, counter:0, riseabove:0 };
             stats.nodes.forEach(n => { if (typeCounts[n.type] !== undefined) typeCounts[n.type]++; });
-            if(principlesChartInstance) principlesChartInstance.destroy();
-            principlesChartInstance = new Chart(ctx1, { type: 'doughnut', data: { labels: ['提問', '延伸', '改進', '反駁', '整合'], datasets: [{ data: Object.values(typeCounts), backgroundColor: ['#3b82f6', '#eab308', '#22c55e', '#ef4444', '#a855f7'] }] }, options: { responsive: true, maintainAspectRatio: false } });
             try {
-                const sdP = kbStepDays(stats.nodes.map(n => n.date));
-                const cntAt = step => { const c = { question: 0, extend: 0, improve: 0, counter: 0, riseabove: 0 }; stats.nodes.forEach(n => { if (sdP.idx(n.date) <= step && c[n.type] !== undefined) c[n.type]++; }); return c; };
-                kbAttachReplay({ id: 'principles', anchor: document.getElementById('principlesChart').parentElement, labels: sdP.labels, explainTitle: '全班鷹架類型(提問/延伸/改進/反駁/整合)分布的累積',
-                    render: step => { principlesChartInstance.data.datasets[0].data = Object.values(cntAt(step)); principlesChartInstance.update('none'); },
-                    values: step => { const c = cntAt(step); return '提問' + c.question + '、延伸' + c.extend + '、改進' + c.improve + '、反駁' + c.counter + '、整合' + c.riseabove; } });
+                renderScaffoldPhases(stats.nodes, null);
+                const sdP = kbStepDays(stats.nodes.map(n => trajTs(n)));
+                kbAttachReplay({ id: 'principles', anchor: document.getElementById('principlesChart').parentElement.nextElementSibling, labels: sdP.labels, explainTitle: '全班鷹架類型(提問/延伸/改進/反駁/整合)在前、中、後期的比例變化',
+                    render: step => renderScaffoldPhases(stats.nodes.filter(n => sdP.idx(trajTs(n)) <= step), step),
+                    values: step => { const v = stats.nodes.filter(n => sdP.idx(trajTs(n)) <= step), P = scaffoldPhaseData(v); return P ? '貼文 ' + v.length + ' 則;前期 ' + P.txt[0] + ';後期 ' + P.txt[2] : (v.length ? '貼文 ' + v.length + ' 則(還太少,不分段)' : '尚無貼文'); } });
             } catch (e) { console.error(e); }
 
             renderKb12Radar(stats, typeCounts);
@@ -1877,6 +2132,7 @@ async function geminiFetch(key, init) {
                 else { const first = document.querySelector('.student-item'); if(first) first.click(); }
             }
 
+            const tbar = document.getElementById('topic-bar'); if (tbar) tbar.classList.toggle('hidden', ['overview', 'topics', 'quality', 'academic'].indexOf(viewName) < 0);
             document.getElementById('main-scroll-area').scrollTop = 0;
             if(window.innerWidth < 768) closeSidebar();
         }
@@ -1974,7 +2230,7 @@ async function geminiFetch(key, init) {
             const nodes = new vis.DataSet(lensBuild(lensLast).nodes), edges = new vis.DataSet(lensBuild(lensLast).edges);
             lensNetwork = new vis.Network(container, { nodes, edges }, { nodes: { font: { face: 'Noto Sans TC', color: '#000000', size: 14 } }, physics: { stabilization: { enabled: true, iterations: 100, updateInterval: 50, fit: true }, barnesHut: { damping: 0.6 } } });
             const stopLensPhysics = () => { if (lensNetwork) lensNetwork.setOptions({ physics: false }); };
-            lensNetwork.once('stabilizationIterationsDone', stopLensPhysics);
+            lensNetwork.once('stabilizationIterationsDone', stopLensPhysics); kbLively(lensNetwork);
             setTimeout(stopLensPhysics, 2500);
             kbAttachPlayer({ explainTitle: '深度對話透視鏡(事實、理論、挑戰、整合四類想法)的累積', id: 'lens', container: container, anchor: container.parentElement, network: lensNetwork, nodesDS: nodes, edgesDS: edges, labels: lensDays.stepLabels, steps: lensDays.steps, build: lensBuild });
             lensNetwork.on("click", function (params) {
@@ -2040,10 +2296,69 @@ async function geminiFetch(key, init) {
             const cpNodesDS = new vis.DataSet(cpBuild(cpLast).nodes), cpEdgesDS = new vis.DataSet(cpBuild(cpLast).edges);
             conceptNetworkInstance = new vis.Network(container, { nodes: cpNodesDS, edges: cpEdgesDS }, { nodes: { scaling: { min: 10, max: 30 } }, edges: { scaling: { min: 1, max: 5 }, smooth: { type: 'continuous' } }, physics: { stabilization: { enabled: true, iterations: 150, updateInterval: 50, fit: true }, barnesHut: { gravitationalConstant: -2000, damping: 0.6 } } });
             const stopConceptPhysics = () => { if (conceptNetworkInstance) conceptNetworkInstance.setOptions({ physics: false }); };
-            conceptNetworkInstance.once('stabilizationIterationsDone', stopConceptPhysics);
+            conceptNetworkInstance.once('stabilizationIterationsDone', stopConceptPhysics); kbLively(conceptNetworkInstance);
             setTimeout(stopConceptPhysics, 2500);
-            kbAttachPlayer({ explainTitle: '概念語義網絡(關鍵詞如何彼此連結)的成形過程', id: 'concept', container: container, network: conceptNetworkInstance, nodesDS: cpNodesDS, edgesDS: cpEdgesDS, labels: cpDays.stepLabels, steps: cpDays.steps, build: cpBuild });
+            let cpCurve = null;
+            try { cpCurve = conceptCurveDraw(document.getElementById('concept-card') || container.parentElement, container, cpDays.stepLabels, conceptCurveSeries(sortedKeywords, keywordMap, noteDay, cpDays.steps, globalAllNotes.length)); } catch (e) { console.error(e); }
+            kbAttachPlayer({ explainTitle: '概念語義網絡(關鍵詞如何彼此連結)的成形過程', id: 'concept', container: container, network: conceptNetworkInstance, nodesDS: cpNodesDS, edgesDS: cpEdgesDS, labels: cpDays.stepLabels, steps: cpDays.steps, build: cpBuild, onStep: i => { if (cpCurve) cpCurve.setCursor(i); } });
             conceptNetworkInstance.on("click", function (params) { if (params.nodes.length > 0) showKeywordContext(params.nodes[0], keywordMap[params.nodes[0]]); });
+        }
+
+        /* ---- 累積連結曲線:跟概念網絡一起播放(連線一條一條長出來,曲線的游標跟著走) ---- */
+        function conceptCurveSeries(kws, keywordMap, noteDay, steps, nNotes) {
+            // 每一對詞第一次一起出現的時間點;連線數 = 到這個時間點為止「已經有人一起提到」的詞對數(只會增加,不會往下掉)
+            const first = [];
+            for (let a = 0; a < kws.length; a++) for (let b = a + 1; b < kws.length; b++) {
+                const set = new Set(keywordMap[kws[b]]); let m = Infinity;
+                keywordMap[kws[a]].forEach(id => { if (set.has(id) && noteDay[id] < m) m = noteDay[id]; });
+                if (m !== Infinity) first.push(m);
+            }
+            const days = Object.keys(noteDay).map(k => noteDay[k]);
+            const edges = steps.map(st => first.filter(d => d <= st).length), posts = steps.map(st => days.filter(d => d <= st).length);
+            return { edges: edges, posts: posts, total: first.length, nPosts: nNotes };
+        }
+        function conceptCurveDraw(card, container, labels, S) {
+            const old = document.getElementById('concept-curve'); if (old) old.remove();
+            const box = document.createElement('div'); box.id = 'concept-curve'; box.style.cssText = 'margin-top:10px;border-top:1px solid #e2e8f0;padding-top:8px';
+            card.appendChild(box);
+            const N = labels.length, Emax = Math.max(1, S.edges[N - 1]), Pmax = Math.max(1, S.posts[N - 1]);
+            if (N < 2 || S.edges[N - 1] === 0) { box.innerHTML = '<div class="text-xs text-slate-500">還沒有兩個詞一起出現的貼文,所以沒有累積連結曲線。</div>'; return null; }
+            const W = 600, H = 190, ml = 34, mr = 34, mt = 12, mb = 24, pw = W - ml - mr, ph = H - mt - mb;
+            const X = i => ml + pw * i / (N - 1), YE = v => mt + ph * (1 - v / Emax), YP = v => mt + ph * (1 - v / Pmax);
+            const path = arr => arr.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + YE(v).toFixed(1)).join('');
+            const ppath = S.posts.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + YP(v).toFixed(1)).join('');
+            // 大幅增加的時間點(單步增加 ≥ max(3, 總數的 15%)),最多標 3 個
+            const jumps = []; for (let i = 1; i < N; i++) { const dlt = S.edges[i] - S.edges[i - 1]; if (dlt >= Math.max(3, Math.ceil(Emax * 0.15))) jumps.push({ i: i, d: dlt }); }
+            jumps.sort((a, b) => b.d - a.d); const marks = jumps.slice(0, 3).sort((a, b) => a.i - b.i);
+            let grid = ''; [0, 0.5, 1].forEach(f => { const y = mt + ph * (1 - f); grid += '<line x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y + '" y2="' + y + '" stroke="#e2e8f0" stroke-width="1"/><text x="' + (ml - 5) + '" y="' + (y + 3) + '" text-anchor="end" font-size="10" fill="#0f766e">' + Math.round(Emax * f) + '</text><text x="' + (W - mr + 5) + '" y="' + (y + 3) + '" font-size="10" fill="#64748b">' + Math.round(Pmax * f) + '</text>'; });
+            const ticks = []; for (let i = 0; i < N; i++) { if (i === 0 || !/\(/.test(labels[i])) ticks.push(i); }
+            const pick = ticks.length <= 6 ? ticks : [0, 1, 2, 3, 4, 5].map(k => ticks[Math.round(k * (ticks.length - 1) / 5)]);
+            let xl = ''; pick.forEach(i => { xl += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 7) + '" text-anchor="middle" font-size="10" fill="#64748b">' + labels[i] + '</text>'; });
+            const mk = marks.map(m => '<g class="cc-jump" data-i="' + m.i + '" style="cursor:pointer"><title>' + labels[m.i] + ':一口氣多了 ' + m.d + ' 條連線(點一下看那時候的網絡)</title><circle cx="' + X(m.i).toFixed(1) + '" cy="' + YE(S.edges[m.i]).toFixed(1) + '" r="6" fill="#fff" stroke="#ea580c" stroke-width="2.5"/><text x="' + X(m.i).toFixed(1) + '" y="' + (YE(S.edges[m.i]) - 10).toFixed(1) + '" text-anchor="middle" font-size="10" font-weight="700" fill="#c2410c">+' + m.d + '</text></g>').join('');
+            box.innerHTML = '<div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1"><b class="text-xs text-slate-700">累積連結曲線</b><span class="text-[11px]" style="color:#0f766e"><b>━</b> 連線數(左邊的數字)</span><span class="text-[11px] text-slate-500"><b>┅</b> 貼文數(右邊的數字)</span><span class="text-[11px]" style="color:#c2410c">○ 一口氣變多的時候(可以點)</span></div>' +
+                '<svg id="cc-svg" viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="累積連結曲線:到最後共 ' + S.edges[N - 1] + ' 條連線、' + S.posts[N - 1] + ' 則貼文" style="display:block;max-height:230px;touch-action:manipulation">' + grid + xl +
+                '<path d="' + path(S.edges) + 'L' + X(N - 1).toFixed(1) + ' ' + (mt + ph) + 'L' + X(0).toFixed(1) + ' ' + (mt + ph) + 'Z" fill="#14b8a6" fill-opacity=".14"/>' +
+                '<path d="' + ppath + '" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="4 3"/>' +
+                '<path d="' + path(S.edges) + '" fill="none" stroke="#0f766e" stroke-width="2.6" stroke-linejoin="round"/>' + mk +
+                '<line id="cc-cur" x1="0" x2="0" y1="' + mt + '" y2="' + (mt + ph) + '" stroke="#4f46e5" stroke-width="2"/><circle id="cc-dot" r="5" fill="#4f46e5" stroke="#fff" stroke-width="2"/>' +
+                '<line id="cc-hov" x1="0" x2="0" y1="' + mt + '" y2="' + (mt + ph) + '" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>' +
+                '<rect id="cc-hit" x="' + ml + '" y="' + mt + '" width="' + pw + '" height="' + ph + '" fill="transparent" style="cursor:pointer"/></svg>' +
+                '<div id="cc-read" class="text-xs text-slate-700 mt-1" aria-live="polite"></div><div id="cc-insight" class="text-xs text-slate-600 mt-1 leading-relaxed"></div>' +
+                '<div class="text-[11px] text-slate-400 mt-1">怎麼看:只算圖中這 15 個詞。兩個詞只要在同一則貼文裡出現過,就多一條連線;所以曲線只會往上、不會下降。點曲線上任何位置,上面的網絡就跳到那一天。</div>';
+            const q = id => box.querySelector('#' + id);
+            const line = i => labels[i] + ':連線 ' + S.edges[i] + ' 條(全部 ' + S.edges[N - 1] + ' 條)・貼文 ' + S.posts[i] + ' 則';
+            let cur = N - 1;
+            function setCursor(i) { cur = i; q('cc-cur').setAttribute('x1', X(i)); q('cc-cur').setAttribute('x2', X(i)); q('cc-dot').setAttribute('cx', X(i)); q('cc-dot').setAttribute('cy', YE(S.edges[i])); q('cc-read').innerHTML = '<b style="color:#4f46e5">現在看到</b> ' + line(i); }
+            const half = S.edges[Math.round((N - 1) / 2)], best = jumps.length ? jumps.slice().sort((a, b) => b.d - a.d)[0] : null;
+            q('cc-insight').textContent = '到時間的一半時,已經長出 ' + Math.round(half / Emax * 100) + '% 的連線' + (best ? ';' + labels[best.i] + ' 一口氣多了 ' + best.d + ' 條,是詞和詞開始大量連在一起的時候。' : ';連線是慢慢、平均地增加,沒有哪一天特別多。');
+            const seekTo = i => { const sk = document.querySelector('[data-kbnet="concept"] [data-a=seek]'); if (!sk) return; sk.value = String(i); sk.dispatchEvent(new Event('input', { bubbles: true })); };
+            const idxAt = ev => { const r = q('cc-hit').getBoundingClientRect(); return Math.max(0, Math.min(N - 1, Math.round((ev.clientX - r.left) / (r.width || 1) * (N - 1)))); };
+            q('cc-hit').addEventListener('click', ev => seekTo(idxAt(ev)));
+            q('cc-hit').addEventListener('mousemove', ev => { const i = idxAt(ev); q('cc-hov').setAttribute('x1', X(i)); q('cc-hov').setAttribute('x2', X(i)); q('cc-hov').setAttribute('visibility', 'visible'); q('cc-read').innerHTML = '<b style="color:#64748b">指到</b> ' + line(i) + ' <span style="color:#94a3b8">(點一下跳過去)</span>'; });
+            q('cc-hit').addEventListener('mouseleave', () => { q('cc-hov').setAttribute('visibility', 'hidden'); setCursor(cur); });
+            box.querySelectorAll('.cc-jump').forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); seekTo(Number(g.getAttribute('data-i'))); }));
+            setCursor(N - 1);
+            return { setCursor: setCursor, jumps: marks };
         }
 
         function showKeywordContext(word, noteIds) {
@@ -2783,7 +3098,7 @@ async function geminiFetch(key, init) {
             document.getElementById('ego-metric').innerHTML = '互動對象 <b>' + (data.visNodes.length - 1) + '</b> 人 · 回應他人 <b>' + data.egoOut + '</b> 次 · 被回應 <b>' + data.egoIn + '</b> 次 · 對象之間另有 <b>' + data.alterLinkCount + '</b> 組互動<br><span style="color:#2563eb">■</span> 他回應別人 <span style="color:#16a34a">■</span> 別人回應他 <span style="color:#94a3b8">■</span> 其他人彼此互動' + (activeTopicFilter !== 'all' ? '<br><span class="text-slate-400">此圖不受討論區篩選影響,顯示全部論壇互動</span>' : '');
             // 排列穩定後就關閉物理運算,圖不會再一直晃動(仍可手動拖曳節點)
             const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
-            egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics);
+            egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics); kbLively(egoNetworkInstance);
             setTimeout(stopEgoPhysics, 2500);
             kbAttachPlayer({ explainTitle: '這位學生的自我互動圈(他和誰互動)的形成過程', id: 'ego-t', container: container, anchor: container.parentElement, network: egoNetworkInstance, nodesDS: egoNodesDS, edgesDS: egoEdgesDS, labels: egoDays.stepLabels, steps: egoDays.steps, build: egoBuild });
             const ctxB = document.getElementById('balanceChart').getContext('2d'); if(balanceChartInstance) balanceChartInstance.destroy();
@@ -3229,11 +3544,11 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 ai_prompt: '如何引導學生把問題轉化為理論？'
             },
             'lag_sequence': {
-                title: '言談序列轉移',
-                theory: "序列分析:看「回應某一類貼文時,同學接著常用哪一類貼文」,找出對話的慣性。",
+                title: "言談序列轉移",
+                theory: "序列分析:看「回應某一類貼文時,同學接著常用哪一類」,找出對話的慣性。畫成網絡後,可以一眼看出哪些接續最常發生,以及前期、中期、後期的對話習慣有沒有改變。",
                 source: "Jeong, A. C. (2003). The sequential analysis of group interaction and critical thinking in online threaded discussions. <i>American Journal of Distance Education, 17</i>(1), 25–43. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1207/s15389286ajde1701_3\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Jeong, A. C. (2005). A guide to analyzing message–response sequences and group interaction patterns in computer-mediated communication. <i>Distance Education, 26</i>(3), 367–383. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/01587910500291470\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Allison, P. D., & Liker, J. K. (1982). Analyzing sequential categorical data on dyadic interaction: A comment on Gottman. <i>Psychological Bulletin, 91</i>(2), 393–403. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1037/0033-2909.91.2.393\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "統計「被回覆的貼文類型 → 回覆用的貼文類型」,以每一列的百分比呈現(反駁併入改進)。",
-                diff: "Jeong 的序列分析會用統計檢定(例如 z 值)判斷哪些接續「比隨機更常出現」;平台只呈現百分比,所以只能說「常見」,不能說「顯著」。若要檢定,可參考 Allison & Liker(1982)。",
+                how: "節點是貼文類型(提問、延伸、改進、整合;反駁併入改進)。每一則回應和它回應的那則貼文配成一對「被回應的類型 → 回應的類型」,統計每一列的百分比(每一列加起來 100%)。箭頭越粗,機率越高;繞著自己的圈圈是「接著又寫同一類」;只畫 15% 以上的接續,樣本少於 10 次的箭頭用虛線。前、中、後期是把目前看得到的貼文依時間平分成三段,回應算在它自己所在的那一段。表格仍收在「看數字表格」。",
+                diff: "Jeong 的序列分析會用統計檢定(如 z 值)判斷哪些接續比隨機更常發生;這裡只呈現百分比,所以只能說「常見」,不能說「顯著」。類型是學生自己選的,不是人工編碼。階段是依貼文數平分,不一定對應真正的教學單元。",
                 ai_prompt: '如何打破無效的討論循環？'
             },
             'brokers': {
@@ -3253,11 +3568,11 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 ai_prompt: '如何幫助邊緣成員融入核心？'
             },
             'principles': {
-                title: "鷹架分佈分析",
-                theory: "看各類貼文(提問、延伸、改進、整合)各占多少。",
+                title: "鷹架分佈:前期 → 後期",
+                theory: "看全班把想法「用什麼動作」說出來(提問、延伸、改進、反駁、整合),以及這些動作的比例從學期前期到後期怎麼變。如果提問變少、改進與整合變多,代表討論從「問問題」走向「把想法變好」。",
                 source: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
-                how: "統計各類貼文的占比。",
-                diff: "貼文類型是學生自己選的。研究(Chen 等人,2017)分析的是各類貼文如何前後接續,並沒有規定「理想比例」。",
+                how: "把目前看得到的全部貼文依時間平分成前期、中期、後期三段(每段貼文數一樣多),計算各類型在每一段占的百分比,堆成 100% 的柱子。圖上方一句話指出前期到後期變化最大的類型。播放時看的是「截至那一天為止」的三段。貼文少於 9 則時不分段。",
+                diff: "類型是學生發文時自己選的,不是人工編碼,所以只是「大致的討論動作」。三段是依貼文數平分,不一定對應真正的教學單元。某一類變多或變少本身不代表好壞,請回到原貼文看內容。",
                 ai_prompt: '如何提高「改進」與「整合」的比例？'
             },
             'kb12': {
@@ -3360,7 +3675,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: '概念網絡分析',
                 theory: "把貼文中常出現的詞,以「同一則貼文裡一起出現」連起來,看全班的思考焦點與概念之間的關聯。",
                 source: "Shaffer, D. W., Collier, W., & Ruis, A. R. (2016). A tutorial on epistemic network analysis: Analyzing the structure of connections in cognitive, social, and interaction data. <i>Journal of Learning Analytics, 3</i>(3), 9–45. <a class=\"text-indigo-600 underline\" href=\"https://learning-analytics.info/journals/index.php/JLA/article/view/4329\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文</a><br>Oshima, J., Oshima, R., & Matsuzawa, Y. (2012). Knowledge Building Discourse Explorer: A social network analysis application for knowledge building discourse. <i>Educational Technology Research and Development, 60</i>(5), 903–921. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-012-9265-2\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Matsuzawa, Y., Oshima, J., Oshima, R., Niihara, Y., & Sakai, S. (2011). KBDeX: A platform for exploring discourse in collaborative learning. <i>Procedia – Social and Behavioral Sciences, 26</i>, 198–207. <a class=\"text-indigo-600 underline\" href=\"https://www.ncbi.nlm.nih.gov/pmc/articles/7129265\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(PubMed Central)</a>",
-                how: "用中文斷詞取出詞語,去除停用詞,取出現在最多篇貼文的前 15 個詞;兩個詞出現在同一則貼文就連線。",
+                how: "用中文斷詞取出詞語,去除停用詞,取出現在最多篇貼文的前 15 個詞;兩個詞出現在同一則貼文就連線。圖下面的「累積連結曲線」把連線數隨時間的增加畫出來(虛線是貼文數),按播放時曲線上的游標會跟網絡一起前進;橘色圓圈是連線一口氣變多的時間點,點一下就跳過去。",
                 diff: "這是「詞共現網絡」,不是潛在語意分析(LSA)。先前引用的 Landauer 等人(1998)是另一種做法,已移除。詞共現只呈現「常一起出現」,不保證詞語的意思有關。",
                 ai_prompt: '如何引導學生連結圖中尚未相連的概念？'
             },
