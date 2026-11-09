@@ -450,9 +450,12 @@
                     <div class="text-2xl font-bold text-slate-700" id="avg-thread-depth">0.0</div>
                     <div class="text-[10px] text-slate-400 mt-1">Sustained Inquiry (理想 > 3.0)</div>
                 </div>
-                <div class="col-span-1 md:col-span-2 card bg-slate-50 border border-slate-200">
-                    <div class="flex justify-between items-center mb-2"><div class="text-xs text-slate-500 font-bold uppercase">知識推進軌跡 (Trajectory)</div><button class="ref-btn px-1 py-0 h-5 text-[10px]" onclick="openRef('kb_trajectory')"><i class="fas fa-book"></i> Ref</button></div>
-                    <div class="h-20 w-full relative"><canvas id="overviewTrajectoryChart"></canvas></div>
+                <div class="col-span-1 md:col-span-2 lg:col-span-4 card bg-slate-50 border border-slate-200" id="traj-card">
+                    <div class="flex justify-between items-center mb-2"><div class="text-sm text-slate-800 font-black"><i class="fas fa-seedling text-emerald-500 mr-1"></i>知識推進軌跡 (Trajectory):問題長大階梯 <span class="text-xs font-normal text-slate-400 ml-1">每一條是一個問題,看它被大家想到第幾層</span></div><button class="ref-btn px-1 py-0 h-5 text-[10px]" onclick="openRef('kb_trajectory')"><i class="fas fa-book"></i> Ref</button></div>
+                    <div id="traj-summary" class="mb-2"></div>
+                    <div id="traj-ladder"></div>
+                    <details class="mt-3" open><summary class="text-xs font-bold text-slate-600 cursor-pointer">看數字趨勢:🔵 提出的問題 vs 🟣 發展出的想法(兩條都是「累積」)</summary><div class="h-48 w-full relative mt-2"><canvas id="overviewTrajectoryChart"></canvas></div>
+                        <div class="mt-2 text-[11px] text-slate-500 leading-relaxed">怎麼看:<b style="color:#2563eb">藍線</b> = 到那天為止,全班一共提出了幾則「提問」;<b style="color:#9333ea">紫線</b> = 到那天為止,全班一共有幾則「改進」或「整合」的貼文,也就是想法被改好、被整理起來(接近「發展出的理論」)。<b>兩條線的距離 = 還沒被改進或整理的問題</b>:紫線越追近藍線,代表有問就有人想辦法往前走,想法在演化;如果藍線一直往上、紫線很平,代表問題越堆越多卻沒人接。滑鼠移到線上,會顯示那一天的數字。</div></details>
                 </div>
             </div>
 
@@ -559,7 +562,9 @@
                     <div class="grid grid-cols-1 gap-6">
                         <div class="card">
                             <div class="flex justify-between items-center mb-4"><h4 class="font-bold text-sm text-slate-700 uppercase">認知深度演化 (Depth Trajectory)</h4><button class="ref-btn" onclick="openRef('depth_trajectory')"><i class="fas fa-book"></i> Ref:</button></div>
-                            <div class="h-48 relative"><canvas id="studentDepthChart"></canvas></div>
+                            <div class="h-56 relative"><canvas id="studentDepthChart"></canvas></div>
+                            <div class="mt-2 text-[11px] text-slate-500 leading-relaxed">怎麼看:這條線<b>不是時間</b>,而是由淺到深的 <b>5 個階段</b>。<b>每個點 = 這位同學在那一項能力的分數換算</b>,灰色虛線是各階段的最高值:越貼近虛線代表那一項越強,掉下來的點就是可以陪他加強的地方。滑鼠移到點上,會顯示分數與意思。
+                                <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-3"><span>① 起步:有常常來、有被回應</span><span>② 主動:自己提問、提出解釋</span><span>③ 深化:改進、質疑想法</span><span>④ 整合:把想法整理成結論</span><span>⑤ 整體:一路持續探究</span></div></div>
                         </div>
                         <div class="card border-l-4 border-indigo-500 relative" id="ai-card">
                             <h4 class="font-bold text-sm text-slate-700 uppercase mb-3 flex items-center">
@@ -1152,6 +1157,7 @@ async function geminiFetch(key, init) {
            renderStaticDiagnosis(globalClassStats);
             try { showDiagnosisBadge(); const dc = aiCache.diagnosis && aiCache.diagnosis[activeTopicFilter]; const dbx = document.getElementById('ai-diagnosis-result'); if (dc && dbx && !dbx.querySelector('.fa-spinner')) dbx.innerHTML = dc.html; else if (dbx && !dc && !dbx.querySelector('.fa-spinner')) dbx.innerHTML = '<span class="text-slate-500">按下「產生 AI 診斷」,AI 會彙整 KB 12 原則檢核、各項指標、學生分佈與抽樣貼文,告訴您目前班級(或小組)的狀態、需要關注的學生,以及下一堂課可以怎麼做。</span>'; } catch (e) {}
             renderOverviewTrajectory(filteredNodes);
+            try { renderTrajectoryLadder(filteredNodes); } catch (e) { console.error(e); }
             renderSequentialMatrix(filteredNodes);
             renderKnowledgeBrokers(filteredNodes, students);
             try {
@@ -1221,11 +1227,122 @@ async function geminiFetch(key, init) {
             return pathCount > 0 ? totalDepth / pathCount : 0;
         }
 
+        // ===== 知識推進軌跡:問題長大階梯 =====
+        // 每個討論串(主貼文 + 底下所有回應)是一個「問題」。看串裡出現過的最高一類貼文,決定它走到第幾層:
+        //   🌱 第 1 層 提問(只有主貼文)  🌿 第 2 層 有人接著想(延伸或其他回應)
+        //   🔧 第 3 層 改進或不同看法(改進、反駁)  🌸 第 4 層 整理成結論(整合/昇華)
+        // 層數是依學生發文時自己選的貼文類型判斷,不判斷內容好壞。
+        const TRAJ_STAGES = [
+            { k: 1, icon: '🌱', name: '提問', color: '#3b82f6', tip: '有人提出了問題或想法' },
+            { k: 2, icon: '🌿', name: '有人接著想', color: '#eab308', tip: '有同學延伸、補充了這個想法' },
+            { k: 3, icon: '🔧', name: '改進/不同看法', color: '#10b981', tip: '有人改進它,或提出不同的看法' },
+            { k: 4, icon: '🌸', name: '整理成結論', color: '#8b5cf6', tip: '有人把大家的想法整理成更高層次的結論(昇華)' }
+        ];
+        const TRAJ_STAGE_OF = { extend: 2, improve: 3, counter: 3, riseabove: 4 };
+        const TRAJ_DAY = 86400000;
+        // 貼文時間(毫秒):有的資料用 dateTime,有的只有 date
+        const trajTs = n => (n.dateTime !== undefined && n.dateTime !== null) ? n.dateTime : (typeof n.date === 'number' ? n.date : new Date(n.date).getTime());
+        const trajUI = { filter: 'all', all: false, ctx: null, step: 0 };
+        const trajMD = ts => { const d = new Date(ts); return (d.getMonth() + 1) + '/' + d.getDate(); };
+        function trajBuild(nodes) {
+            const byId = {}; nodes.forEach(n => { byId[n.id] = n; });
+            const rootOf = n => { let c = n, g = 0; while (c.parentId && byId[c.parentId] && g++ < 300) c = byId[c.parentId]; return c; };
+            const th = {};
+            nodes.forEach(n => { const r = rootOf(n); (th[r.id] = th[r.id] || { root: r, posts: [] }).posts.push(n); });
+            return Object.keys(th).map(k => th[k]);
+        }
+        function trajAt(t, sd, k) {
+            if (sd.idx(trajTs(t.root)) > k) return null;
+            const vis = t.posts.filter(p => p.id !== t.root.id && sd.idx(trajTs(p)) <= k);
+            const reach = { 1: trajTs(t.root) };
+            vis.forEach(p => { const st = TRAJ_STAGE_OF[p.type] || 2; for (let x = 2; x <= st; x++) if (reach[x] === undefined || trajTs(p) < reach[x]) reach[x] = trajTs(p); });
+            const level = Math.max.apply(null, Object.keys(reach).map(Number));
+            const adv = level >= 2 ? Math.max.apply(null, Object.keys(reach).filter(x => +x >= 2).map(x => reach[x])) : 0;
+            return { id: t.root.id, root: t.root, replies: vis.length, level: level, reach: reach, adv: adv, last: Math.max.apply(null, [trajTs(t.root)].concat(vis.map(p => trajTs(p)))) };
+        }
+        function trajState(step) {
+            const c = trajUI.ctx; if (!c) return null;
+            const rows = c.threads.map(t => trajAt(t, c.sd, step)).filter(Boolean);
+            let cut = 0; c.nodes.forEach(n => { if (c.sd.idx(trajTs(n)) <= step && trajTs(n) > cut) cut = trajTs(n); });
+            const wk = cut - 7 * TRAJ_DAY;
+            rows.forEach(r => { r.moved = r.adv > wk; r.stuck = r.level === 1 && r.replies === 0 && (cut - trajTs(r.root)) >= 3 * TRAJ_DAY; r.age = Math.floor((cut - trajTs(r.root)) / TRAJ_DAY); r.newStage = {}; for (let x = 2; x <= 4; x++) if (r.reach[x] !== undefined && r.reach[x] > wk) r.newStage[x] = true; });
+            const n = rows.length, moved = rows.filter(r => r.moved).length, stuck = rows.filter(r => r.stuck).length, done = rows.filter(r => r.level === 4).length;
+            const text = n ? '共 ' + n + ' 個問題;這一週往前走了一步的有 ' + moved + ' 個;還沒人回應的有 ' + stuck + ' 個;已整理成結論的有 ' + done + ' 個' : '還沒有貼文';
+            return { rows: rows, cut: cut, n: n, moved: moved, stuck: stuck, done: done, text: text };
+        }
+        function trajDraw(step) {
+            const c = trajUI.ctx, box = document.getElementById('traj-ladder'), sum = document.getElementById('traj-summary'); if (!c || !box || !sum) return;
+            trajUI.step = step;
+            const S = trajState(step); window.__trajNow = S.text;
+            const chip = (id, label, n, col) => '<button type="button" data-tf="' + id + '" class="px-3 py-1 rounded-full text-xs font-bold border ' + (trajUI.filter === id ? 'text-white' : 'bg-white text-slate-600 border-slate-300') + '" style="' + (trajUI.filter === id ? 'background:' + col + ';border-color:' + col : '') + '">' + label + ' ' + n + '</button>';
+            sum.innerHTML = S.n ? '<div class="text-sm text-slate-700 leading-relaxed">' +
+                '全班目前有 <b>' + S.n + '</b> 個問題。這一週有 <b style="color:#d97706">' + S.moved + '</b> 個往前走了一步' + (S.stuck ? ',有 <b style="color:#dc2626">' + S.stuck + '</b> 個還沒人回應' : '') + ',已經整理成結論的有 <b style="color:#7c3aed">' + S.done + '</b> 個。</div>' +
+                '<div class="flex flex-wrap gap-2 mt-2">' + chip('all', '全部', S.n, '#475569') + chip('moved', '這週往前走', S.moved, '#d97706') + chip('stuck', '還沒人回應', S.stuck, '#dc2626') + '</div>' :
+                '<div class="text-sm text-slate-400">還沒有貼文,等同學發表後,這裡就會看到每個問題一格一格長大。</div>';
+            let rows = S.rows.slice();
+            if (trajUI.filter === 'moved') rows = rows.filter(r => r.moved); else if (trajUI.filter === 'stuck') rows = rows.filter(r => r.stuck);
+            rows.sort((a, b) => (b.moved - a.moved) || (b.adv - a.adv) || (b.level - a.level) || (b.last - a.last));
+            const total = rows.length, shown = trajUI.all ? rows : rows.slice(0, 10);
+            const legend = '<div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mb-1">' + TRAJ_STAGES.map(g => '<span class="inline-flex items-center gap-1" title="' + g.tip + '"><span style="width:10px;height:10px;border-radius:3px;background:' + g.color + ';display:inline-block"></span>' + g.icon + ' ' + g.name + '</span>').join('<span>→</span>') + '<span class="ml-2"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;box-shadow:0 0 0 2px #f59e0b;background:#fff"></span> 橘框 = 這一週剛走到這一格</span></div>';
+            const cell = (g, r) => {
+                const on = g.k <= r.level, d = r.reach[g.k];
+                return '<div style="width:56px;text-align:center;border-radius:10px;padding:3px 0;' + (on ? 'background:' + g.color + ';color:#fff;' : 'background:#e2e8f0;color:#94a3b8;') + (r.newStage[g.k] ? 'box-shadow:0 0 0 2px #f59e0b;' : '') + '" title="' + g.icon + ' ' + g.name + (on && d ? ':' + trajMD(d) + ' 走到這一格' : ':還沒走到') + '"><div style="font-size:15px;line-height:1.2;' + (on ? '' : 'opacity:.45') + '">' + g.icon + '</div><div style="font-size:9px;line-height:1.1">' + (on && d ? trajMD(d) : '&nbsp;') + '</div></div>';
+            };
+            const status = r => r.level === 4 ? '<span style="color:#7c3aed">🌸 已整理成結論(' + trajMD(r.reach[4]) + ')</span>' : r.level === 3 ? '<span style="color:#059669">🔧 被改進或質疑過(' + trajMD(r.reach[3]) + ')</span>' : r.level === 2 ? '<span style="color:#a16207">🌿 有 ' + r.replies + ' 則回應</span>' : (r.stuck ? '<span style="color:#dc2626">🌱 還沒人回應,已 ' + r.age + ' 天</span>' : '<span style="color:#2563eb">🌱 剛提出來</span>');
+            const html = shown.map(r => '<div class="flex items-center gap-2 py-1.5 border-t border-slate-100"><button type="button" data-tv="' + esc(r.id) + '" class="text-left flex-1 min-w-0 text-sm font-bold text-slate-800 hover:text-indigo-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="點一下看原文">' + (r.moved ? '<span style="color:#d97706">▲ </span>' : '') + esc(String(r.root.title || r.root.content || '(沒有標題)').slice(0, 26)) + '</button>' +
+                '<div class="flex gap-1 shrink-0">' + TRAJ_STAGES.map(g => cell(g, r)).join('') + '</div><div class="shrink-0 text-xs" style="width:11rem">' + status(r) + '</div></div>').join('');
+            box.innerHTML = S.n ? legend + (html || '<div class="text-sm text-slate-400 py-2">這個條件下沒有問題。</div>') + (total > shown.length ? '<div class="text-center mt-2"><button type="button" data-tmore="1" class="text-xs font-bold text-indigo-600 underline">看全部 ' + total + ' 個問題</button></div>' : (trajUI.all && total > 10 ? '<div class="text-center mt-2"><button type="button" data-tmore="0" class="text-xs font-bold text-indigo-600 underline">只看前 10 個</button></div>' : '')) : '';
+        }
+        function renderTrajectoryLadder(nodes) {
+            const box = document.getElementById('traj-ladder'); if (!box) return;
+            const sd = kbStepDays((nodes || []).map(n => trajTs(n)));
+            trajUI.ctx = { nodes: nodes || [], sd: sd, threads: trajBuild(nodes || []) };
+            if (!box.__kbTraj) {
+                box.__kbTraj = true;
+                const root = document.getElementById('traj-card');
+                root.addEventListener('click', e => {
+                    const t = e.target.closest ? e.target : null; if (!t) return;
+                    const v = t.closest('[data-tv]'), f = t.closest('[data-tf]'), m = t.closest('[data-tmore]');
+                    if (v) { const raw = getRealData(); KBUI.postViewer.open(v.getAttribute('data-tv'), { nodes: raw.nodes || [], topics: raw.topics || [], nameOf: u => ((raw.userList || {})[u] || {}).name || '同學' }); }
+                    else if (f) { trajUI.filter = f.getAttribute('data-tf'); trajUI.all = false; trajDraw(trajUI.step); }
+                    else if (m) { trajUI.all = m.getAttribute('data-tmore') === '1'; trajDraw(trajUI.step); }
+                });
+            }
+            const last = sd.labels.length - 1;
+            trajDraw(last);
+            try {
+                kbAttachReplay({ id: 'trajlad', anchor: box, labels: sd.labels, explainTitle: '全班「問題長大階梯」(每個問題被想到第幾層)的變化',
+                    render: step => trajDraw(step), values: step => { const S = trajState(step); return S ? S.text : '尚無貼文'; } });
+            } catch (e) { console.error(e); }
+        }
+
+        // ===== 認知深度演化:5 個點各代表一個由淺到深的階段(不是時間)=====
+        const DEPTH_POINTS = [
+            { label: ['① 起步', '持續參與'], cap: 20, idx: 4, name: '① 起步:持續參與', what: '有沒有常常來發言、想法有沒有被同學回應(持續探究分數)' },
+            { label: ['② 主動', '自己發起'], cap: 40, idx: 0, name: '② 主動:自己發起', what: '會不會自己提問、設定方向、提出解釋(主體性分數)' },
+            { label: ['③ 深化', '改進想法'], cap: 60, idx: 2, name: '③ 深化:改進想法', what: '有沒有改進或質疑想法(改進、反駁貼文的比例,觀點改進分數)' },
+            { label: ['④ 整合', '昇華成結論'], cap: 80, idx: 3, name: '④ 整合:昇華成結論', what: '會不會把大家的想法整理成更高層次的結論(昇華整合分數)' },
+            { label: ['⑤ 整體', '持續探究'], cap: 100, idx: 4, name: '⑤ 整體:一路持續探究', what: '一路下來持續探究的程度(持續探究分數)' }
+        ];
+        function depthChartConfig(trend) {
+            return { type: 'line', data: { labels: DEPTH_POINTS.map(p => p.label), datasets: [
+                { label: '這位同學', data: trend, borderColor: '#8B5CF6', backgroundColor: 'rgba(139, 92, 246, 0.15)', fill: true, tension: 0.2, pointRadius: 5, pointHoverRadius: 8, borderWidth: 3 },
+                { label: '這個階段的最高值', data: DEPTH_POINTS.map(p => p.cap), borderColor: '#cbd5e1', borderDash: [5, 4], pointRadius: 0, fill: false, borderWidth: 2 }] },
+                options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } },
+                        tooltip: { callbacks: {
+                            title: items => { const p = DEPTH_POINTS[items[0].dataIndex]; return p ? p.name : ''; },
+                            label: c => c.datasetIndex === 0 ? '圖上高度 ' + Math.round(c.parsed.y) + '(這一階段最高 ' + DEPTH_POINTS[c.dataIndex].cap + ')' : '這一階段的最高值 ' + DEPTH_POINTS[c.dataIndex].cap,
+                            afterBody: items => { const p = DEPTH_POINTS[items[0].dataIndex], rw = window.__depthRaw || [], sc = rw[p.idx]; return [p.what, sc === undefined ? '' : '他在這一項的分數:' + Math.round(sc) + ' / 100', '越貼近灰色虛線,代表這一項越強'].filter(Boolean); }
+                        } } },
+                    scales: { y: { beginAtZero: true, max: 100, ticks: { font: { size: 10 } }, title: { display: true, text: '換算高度', font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } } } };
+        }
+
         function renderOverviewTrajectory(nodes) {
             const ctx = document.getElementById('overviewTrajectoryChart').getContext('2d');
             if(overviewTrajectoryChart) overviewTrajectoryChart.destroy();
 
-            const sorted = [...nodes].sort((a,b) => a.dateTime - b.dateTime);
+            const sorted = [...nodes].sort((a, b) => trajTs(a) - trajTs(b));
             if(sorted.length === 0) return;
 
             const labels = [];
@@ -1240,7 +1357,7 @@ async function geminiFetch(key, init) {
                 if (n.type === 'improve' || n.type === 'riseabove') cumI++;
 
                 if (idx % Math.ceil(sorted.length / 20) === 0 || idx === sorted.length - 1) {
-                    labels.push(n.date);
+                    labels.push((function () { const dv = trajTs(n); const dd = new Date(dv); return isNaN(dd) ? String(n.date) : (dd.getMonth() + 1) + '/' + dd.getDate(); })());
                     dataQ.push(cumQ);
                     dataI.push(cumI);
                 }
@@ -1251,19 +1368,27 @@ async function geminiFetch(key, init) {
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: '提出的問題 (Questions)', data: dataQ, borderColor: '#3b82f6', tension: 0.4, pointRadius: 0 },
-                        { label: '改進與整合 (Improve + Rise-above)', data: dataI, borderColor: '#a855f7', tension: 0.4, pointRadius: 0 }
+                        { label: '🔵 提出的問題(累積提問貼文數)', data: dataQ, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 3, tension: 0.3, pointRadius: 0, pointHoverRadius: 6 },
+                        { label: '🟣 發展出的想法:改進+整合(累積貼文數)', data: dataI, borderColor: '#a855f7', backgroundColor: '#a855f7', borderWidth: 3, tension: 0.3, pointRadius: 0, pointHoverRadius: 6 }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { display: false },
-                        y: { display: false }
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: true, position: 'bottom', labels: { boxWidth: 16, font: { size: 12 } } },
+                        tooltip: { callbacks: {
+                            title: items => items.length ? '到 ' + items[0].label + ' 為止' : '',
+                            label: c => (c.datasetIndex === 0 ? '🔵 提出的問題:累積 ' : '🟣 發展出的想法(改進+整合):累積 ') + c.parsed.y + ' 則',
+                            afterBody: items => { const q = items.find(i => i.datasetIndex === 0), v = items.find(i => i.datasetIndex === 1); if (!q || !v) return ''; const gap = q.parsed.y - v.parsed.y; return gap > 0 ? ['差距 ' + gap + ' 則:提出的問題比改進、整合的多,還有問題在等人接手'] : ['紫線追上藍線:有問就有人把想法改進、整理起來']; }
+                        } }
                     },
-                    elements: { point: { radius: 0 } }
+                    scales: {
+                        x: { display: true, ticks: { maxTicksLimit: 6, font: { size: 10 } } },
+                        y: { display: true, beginAtZero: true, ticks: { precision: 0, font: { size: 10 } }, title: { display: true, text: '累積貼文數', font: { size: 10 } } }
+                    },
+                    elements: { point: { radius: 0, hoverRadius: 6, hitRadius: 14 } }
                 }
             });
             try { kbAttachSeriesPlayer({ id: 'traj', explainTitle: '全班提出的問題與改進、整合的想法(累積)的軌跡', chart: overviewTrajectoryChart }); } catch (e) {}
@@ -2659,7 +2784,7 @@ async function geminiFetch(key, init) {
             document.getElementById('bal-init').innerText = totalBal > 0 ? Math.round(data.balanceData[0]/totalBal*100) + '%' : '0%';
             document.getElementById('bal-build').innerText = totalBal > 0 ? Math.round(data.balanceData[1]/totalBal*100) + '%' : '0%';
             balanceChartInstance = new Chart(ctxB, { type: 'doughnut', data: { labels: ['自主', '協作'], datasets: [{ data: data.balanceData, backgroundColor: ['#3b82f6', '#22c55e'] }] }, options: { responsive: true, cutout: '70%', plugins: { legend: { display: false } } } });
-            const ctxD = document.getElementById('studentDepthChart').getContext('2d'); if(studentDepthChartInstance) studentDepthChartInstance.destroy(); studentDepthChartInstance = new Chart(ctxD, { type: 'line', data: { labels: ['階段1','階段2','階段3','階段4','當前'], datasets: [{ label:'深度發展', data: data.depthTrend, borderColor:'#8B5CF6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.3 }] }, options: { responsive:true, maintainAspectRatio:false, scales: { y: { beginAtZero: true, max: 100 } } } });
+            const ctxD = document.getElementById('studentDepthChart').getContext('2d'); if(studentDepthChartInstance) studentDepthChartInstance.destroy(); window.__depthRaw = data.radarData; studentDepthChartInstance = new Chart(ctxD, depthChartConfig(data.depthTrend));
 
             try {
                 const sdT = kbStepDays((db.nodes || []).map(n => new Date(n.date).getTime()));
@@ -2680,7 +2805,7 @@ async function geminiFetch(key, init) {
                     },
                     values: step => { const m = metricsAt(step); return m ? '自己發起 ' + m.balanceData[0] + ' 篇、協作回應 ' + m.balanceData[1] + ' 篇' : '尚無貼文'; } });
                 kbAttachReplay({ id: 'stu-depth', anchor: document.getElementById('studentDepthChart').parentElement, labels: sdT.labels, explainTitle: who + ' 的認知深度演化(五個階段的深度發展)',
-                    render: step => { const m = metricsAt(step); studentDepthChartInstance.data.datasets[0].data = m ? m.depthTrend : [0, 0, 0, 0, 0]; studentDepthChartInstance.update('none'); },
+                    render: step => { const m = metricsAt(step); window.__depthRaw = m ? m.radarData : []; studentDepthChartInstance.data.datasets[0].data = m ? m.depthTrend : [0, 0, 0, 0, 0]; studentDepthChartInstance.update('none'); },
                     values: step => { const m = metricsAt(step); return m ? '深度發展 ' + m.depthTrend.map(v => Math.round(v)).join('→') : '尚無貼文'; } });
                 const dpWrap = document.querySelector('[data-kbnet="stu-depth"]');
                 if (dpWrap) kbAddExplain(dpWrap, { title: who + ' 的完整知識建構歷程(從最初到最後)', label: '📖 AI 歷程故事', table: () => kbStoryText(userId) }, 'stu-story');
@@ -3089,11 +3214,11 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 ai_prompt: '根據這些總體數據，我下一堂課最該做什麼？'
             },
             'kb_trajectory': {
-                title: '知識推進軌跡',
-                theory: "觀察「提出的問題」與「改進、整合的想法」如何隨時間累積。",
-                source: "Scardamalia, M., & Bereiter, C. (2014). Knowledge building and knowledge creation: Theory, pedagogy, and technology. In R. K. Sawyer (Ed.), <i>The Cambridge Handbook of the Learning Sciences</i> (2nd ed., pp. 397–417). Cambridge University Press. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1017/CBO9781139519526.025\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "「提出的問題」= 提問類貼文的累積數;「改進與整合」= 改進類加整合類貼文的累積數(圖例已由「發展的理論」改標,因為這些貼文不一定是理論)。",
-                diff: "用貼文類型近似「問題」與「想法的進展」。Scardamalia & Bereiter(2014)談的是知識創造的歷程,並沒有規定這種計算方式。",
+                title: "知識推進軌跡:問題長大階梯",
+                theory: "看每一個問題被大家「想到第幾層」:提問 → 有人接著想 → 改進或不同看法 → 整理成結論。層數越高,代表這個問題被想得越遠,是「知識往前推進」最直接的樣子。",
+                source: "Scardamalia, M., & Bereiter, C. (2014). Knowledge building and knowledge creation: Theory, pedagogy, and technology. In R. K. Sawyer (Ed.), <i>The Cambridge Handbook of the Learning Sciences</i> (2nd ed., pp. 397–417). Cambridge University Press. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1017/CBO9781139519526.025\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Zhang, J., Tao, D., Chen, M.-H., Sun, Y., Judson, D., & Naqvi, S. (2018). Co-organizing the collective journey of inquiry with Idea Thread Mapper. <i>Journal of the Learning Sciences, 27</i>(3), 390–430. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508406.2018.1444992\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
+                how: "把每個討論串(一則主貼文加上它底下所有回應)當成一個問題。看這個串裡出現過的最高一類貼文:只有提問 = 第 1 層;有延伸或其他回應 = 第 2 層;有改進或反駁 = 第 3 層;有整合(昇華) = 第 4 層。每一格標出「第一次走到那一層」的日期;橘框代表最近 7 天剛走到;▲ 代表這一週往前走了一步。「還沒人回應」是提出超過 3 天都沒有任何回應。播放鈕可以看全班的問題一格一格長高。",
+                diff: "層數是依學生發文時自己選的貼文類型判斷,不判斷內容好壞,也不保證想法正確。同一串裡只要出現過某一類貼文就算走到那一層,不看是不是同一位同學。原本的兩條累積線仍保留在卡片下方「看數字趨勢」裡。",
                 ai_prompt: '如何引導學生把問題轉化為理論？'
             },
             'lag_sequence': {
@@ -3308,7 +3433,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: '深度演化軌跡',
                 theory: "把這位同學的五力分數換算成一條隨「深度」上升的曲線,看他的參與如何由淺入深。",
                 source: "Reimann, P. (2009). Time is precious: Variable- and event-centred approaches to process analysis in CSCL research. <i>International Journal of Computer-Supported Collaborative Learning, 4</i>(3), 239–257. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11412-009-9070-z\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "由五力分數換算出五個點(約對應提問→主動→改進→整合→持續探究)。",
+                how: "這條線的 5 個點不是時間,而是由淺到深的 5 個階段:① 起步(持續參與,取持續探究分數 ÷ 4,最高 20)、② 主動(自己發起,主體性 ÷ 2,最高 40)、③ 深化(改進想法,觀點改進 ÷ 1.2,最高 60)、④ 整合(昇華成結論,昇華整合分數,最高 80)、⑤ 整體(持續探究分數,最高 100)。每個點的高度 = 這位同學在那一項的分數換算;灰色虛線是各階段的最高值。播放時,看的是『截至那一天為止』的分數。",
                 diff: "這是由平台公式換算的示意曲線,不是測量思維層次。先前引用的 Piaget 是兒童認知發展理論,並不支持這個算法,已移除。",
                 ai_prompt: '如何幫助深度停滯的學生突破瓶頸？'
             },
@@ -3386,9 +3511,9 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 meaningText = '這就像是去醫院做全身健康檢查的「總結報告」。不用看懂每一個數據，直接看這份診斷，系統會告訴你現在班級最迫切需要老師做什麼介入。';
             }
             else if (key === 'kb_trajectory') {
-                dynamicVal = '看「問題」與「理論」的賽跑';
-                dynamicStatus = '觀點演化健康度';
-                meaningText = '如果藍線（狂問問題）一直衝，紫線（提出理論解釋）卻是平的，代表「班上充滿疑惑卻沒人解答」。最好的狀態是紫線緊追著藍線，代表有問必有答，想法有在前進！';
+                dynamicVal = window.__trajNow || '看每個問題走到第幾層';
+                dynamicStatus = '問題長大階梯';
+                meaningText = '每一條是一個問題。如果大部分問題都停在 🌱(沒人回應),代表「班上有很多疑惑卻還沒被接住」;如果有越來越多問題長到 🔧、🌸,代表大家在互相改進、把想法整理起來,知識有在往前走!橘框是這一週剛走到的那一格。';
             }
             else if (key === 'lag_sequence') {
                 dynamicVal = '看出班上的「回話習慣」';
@@ -3518,7 +3643,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                     } else if (key === 'depth_trajectory') {
                         dynamicVal = '看見他的思考進化史';
                         dynamicStatus = '個人進步曲線';
-                        meaningText = '如果這條線越來越高，代表他從開學「只會問簡單問題」，進步到現在「會解釋背後原因」甚至「能做大總結」了！老師請不吝給予稱讚。';
+                        meaningText = '這條線不是「時間」,是由淺到深的 5 個階段:① 起步參與、② 自己發起、③ 改進想法、④ 整合成結論、⑤ 整體持續探究。每個點的高度是他在那一項的分數換算,灰色虛線是各階段的最高值。哪一個點離虛線最遠,就是最值得陪他加強的地方;如果越往右越貼近虛線,代表他不只會參與,還會改進想法、整合結論。';
                     } else if (key === 'lexical_fingerprint') {
                         dynamicVal = '他腦袋裡的關鍵字';
                         dynamicStatus = '個人的思考指紋';
