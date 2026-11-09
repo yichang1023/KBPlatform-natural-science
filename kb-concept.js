@@ -104,6 +104,22 @@
       return ps.some(function (p) { return p.rep.some(function (r) { return r.step <= k && r.ty === 'c'; }) && ps.some(function (q) { return q.step > p.step && q.step <= k && (q.ty === 'i' || q.ty === 'r'); }); });
     };
     m.linkWeight = function (l, k) { return l.posts.filter(function (p) { return p.step <= k; }).length; };
+    /* 核心 / 邊緣:只看「這一天為止、已經出現」的詞,依「連到幾個其他的詞」判斷(簡單規則,不是統計檢定)
+     *  - 雲裡要有 5 個以上的詞才判斷
+     *  - 核心:連到的詞數排在前 25%(含並列),而且至少連到 3 個詞
+     *  - 邊緣:只連到 0~1 個詞
+     *  - 其他:中間偏外 */
+    m.roleAt = function (c, k) {
+      var vis = concepts.filter(function (x) { return m.visible(x, k); });
+      if (vis.length < 5 || !m.visible(c, k)) return null;
+      var deg = {}, w = {}; vis.forEach(function (x) { deg[x.t] = 0; w[x.t] = 0; });
+      links.forEach(function (l) { var wt = m.linkWeight(l, k); if (!wt || deg[l.a] === undefined || deg[l.b] === undefined) return; deg[l.a]++; deg[l.b]++; w[l.a] += wt; w[l.b] += wt; });
+      var sorted = vis.map(function (x) { return x.t; }).sort(function (a, b) { return (deg[b] - deg[a]) || (w[b] - w[a]) || (a < b ? -1 : 1); });
+      var nCore = Math.max(1, Math.ceil(vis.length * 0.25)), thr = deg[sorted[nCore - 1]];
+      var role = (deg[c.t] >= 3 && deg[c.t] >= thr) ? 'core' : (deg[c.t] <= 1 ? 'edge' : 'mid');
+      return { role: role, degree: deg[c.t], weight: w[c.t], n: vis.length };
+    };
+    m.rolesAt = function (k) { var out = { core: [], edge: [], mid: [], n: 0 }; concepts.forEach(function (c) { if (!m.visible(c, k)) return; out.n++; var r = m.roleAt(c, k); if (r) out[r.role].push(c.t); }); return out; };
     m.related = function (c, k) {
       var out = []; links.forEach(function (l) { var w = m.linkWeight(l, k); if (!w) return; var other = l.a === c.t ? l.b : (l.b === c.t ? l.a : null); if (!other) return; var oc = concepts.filter(function (x) { return x.t === other; })[0]; if (oc && m.visible(oc, k)) out.push({ t: other, w: w }); });
       return out.sort(function (a, b) { return b.w - a.w; });
@@ -321,6 +337,7 @@
       '.kbc-card{margin-top:12px;background:#fff;border:1px solid rgba(80,130,210,.3);border-radius:18px;padding:16px 18px;box-shadow:0 12px 34px -20px rgba(30,70,150,.45);font-size:var(--kbc-fs,15px)}',
       '.kbc-card.flash{animation:kbc-fl 1.1s ease-out 2}@keyframes kbc-fl{0%{box-shadow:0 0 0 0 rgba(53,198,255,.9)}100%{box-shadow:0 0 0 22px rgba(53,198,255,0)}}',
       '.kbc-card h3{margin:0;font-size:1.6em}.kbc-card .sub{color:var(--sub);font-size:.86em;margin:4px 0}',
+      '.kbc-pr{margin-top:12px;padding:12px 14px;border:1.5px dashed #9cc0f2;border-radius:14px;background:#f5f9ff;font-size:.95em;line-height:1.7}.kbc-pr h4{margin:0 0 4px;font-size:1em}.kbc-pr label.o{display:block;margin:4px 0;cursor:pointer}.kbc-pr textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:8px;font:inherit;margin-top:6px}.kbc-pr button.sv{margin-top:8px;padding:6px 14px;border-radius:10px;border:0;background:#4f46e5;color:#fff;font-weight:700;cursor:pointer}.kbc-pr .hist{margin-top:8px;font-size:.88em;color:#475569}.kbc-pr .note{font-size:.8em;color:#64748b;margin-top:6px}.kbc-role{display:inline-block;padding:1px 8px;border-radius:99px;font-size:.8em;font-weight:700}.kbc-rp{display:inline-block;margin:2px 4px 2px 0;padding:2px 10px;border-radius:99px;border:1px solid #bcd3f5;background:#fff;color:#1d4ed8;font-weight:700;cursor:pointer}',
       '.kbc-card.collapsed .kbc-body{display:none}.kbc-tog{margin-left:6px;font-weight:700}',
       '.kbc-fs{margin-left:auto;display:flex;gap:4px;align-items:center;font-size:12px;color:var(--sub)}.kbc-fs button{border:1px solid rgba(80,130,210,.35);background:#fff;border-radius:8px;padding:1px 9px;cursor:pointer;font-weight:700;color:var(--ink)}',
       '.kbc-path{margin:10px 0 0;position:relative;padding-left:22px}.kbc-path:before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:linear-gradient(180deg,var(--q),var(--r));opacity:.55;border-radius:2px}',
@@ -459,8 +476,49 @@
     inst.setCardOpen = function (v) { cardOpen = !!v; try { global.localStorage.setItem(openKey, cardOpen ? '1' : '0'); } catch (e) {} applyOpen(); };
     inst.isCardOpen = function () { return cardOpen; };
     function bindTog() { var b = card.querySelector('[data-tog]'); if (b) b.onclick = function () { inst.setCardOpen(!cardOpen); }; applyOpen(); }
+    /* ---- 核心 / 邊緣概念追問(由頁面提供 opts.probe = { readonly, history(term), save(record) }) ---- */
+    function rolesSummary() {
+      if (!opts.probe) return '';
+      var r = model.rolesAt(inst.k);
+      if (r.n < 5) return '<div class="sub" style="margin-top:8px">雲裡有 5 個以上的詞,就能看出哪些詞在中間、哪些在邊邊。</div>';
+      var chips = function (arr) { return arr.map(function (t) { return '<button type="button" class="kbc-rp" data-rp="' + esc(t) + '">' + esc(t) + '</button>'; }).join(''); };
+      if (!r.core.length && !r.edge.length) return '<div class="sub" style="margin-top:8px">目前的詞都差不多連在一起,還看不出中間和邊邊。</div>';
+      return '<div class="sub" style="margin-top:10px"><b>在中間的詞(核心)</b>:' + (chips(r.core) || '還沒有') + '</div><div class="sub"><b>在邊邊的詞(邊緣)</b>:' + (chips(r.edge) || '還沒有') + '</div><div class="sub">點一個詞,回答它為什麼在中間或邊邊。</div>';
+    }
+    function bindRoles() { card.querySelectorAll('[data-rp]').forEach(function (b) { b.onclick = function () { inst.select(b.getAttribute('data-rp'), false); }; }); }
+    function probeHtml(c) {
+      var P = opts.probe; if (!P) return '';
+      var rl = model.roleAt(c, inst.k);
+      if (!rl) return '<div class="kbc-pr"><div class="note">雲裡的詞還不夠多(要 5 個以上),多發幾則貼文,就能看出哪些詞在中間、哪些在邊邊。</div></div>';
+      var tag = rl.role === 'core' ? '<span class="kbc-role" style="background:#dbeafe;color:#1d4ed8">核心概念(在中間)</span>' : rl.role === 'edge' ? '<span class="kbc-role" style="background:#f1f5f9;color:#475569">邊緣概念(在邊邊)</span>' : '<span class="kbc-role" style="background:#ecfdf5;color:#047857">中間偏外</span>';
+      var h = '<div class="kbc-pr" data-k="probe"><h4>' + tag + ' 「' + esc(c.t) + '」連到 ' + rl.degree + ' 個詞</h4>';
+      if (rl.role === 'mid') return h + '<div class="note">它和幾個詞一起出現,不是最中間,也不是最邊邊。</div></div>';
+      var dis = P.readonly ? ' disabled' : '';
+      if (rl.role === 'core') h += '<div>想一想:<b>為什麼「' + esc(c.t) + '」會在中間?</b>它和你正在想的問題有什麼關係?</div>';
+      else h += '<div>想一想:<b>「' + esc(c.t) + '」為什麼在邊邊?</b>你覺得比較像哪一種?</div>' + [['ignored', '被忽略了:很重要,但還沒有人討論'], ['undeveloped', '還沒發展:我有想法,但還沒說清楚'], ['weak', '關係不大:跟我的主題沒有很相關'], ['unsure', '我還不確定']].map(function (o) { return '<label class="o"><input type="radio" name="kbc-pr-ch" value="' + o[0] + '"' + dis + '> ' + o[1] + '</label>'; }).join('');
+      h += '<textarea data-k="pr-text" rows="2" maxlength="300" placeholder="' + (rl.role === 'core' ? '例如:因為我每次都在講它,而且和很多想法有關。' : '例如:我還沒有做實驗,所以還沒說清楚。') + '"' + dis + '></textarea>';
+      h += P.readonly ? '<div class="note">老師檢視模式:只能看,不能代學生回答。</div>' : '<button type="button" class="sv" data-k="pr-save">存下我的想法</button>';
+      var hist = P.history ? P.history(c.t) : [];
+      if (hist.length) h += '<div class="hist"><b>我之前的回答</b>' + hist.slice(0, 3).map(function (x) { return '<div>' + esc(x.time) + ' ' + (x.choice ? '〔' + esc(x.choice) + '〕' : '') + esc(x.text) + '</div>'; }).join('') + '</div>';
+      return h + '<div class="note">「在中間」只代表它和很多詞一起出現,不代表比較重要或比較正確;「在邊邊」也不一定不好,可能只是還沒被討論到。</div></div>';
+    }
+    function bindProbe(c) {
+      var P = opts.probe; if (!P || P.readonly) return;
+      var sv = card.querySelector('[data-k=pr-save]'); if (!sv) return;
+      sv.onclick = function () {
+        var rl = model.roleAt(c, inst.k); if (!rl) return;
+        var tx = card.querySelector('[data-k=pr-text]'), ch = card.querySelector('input[name=kbc-pr-ch]:checked'), box = card.querySelector('.kbc-pr');
+        var text = tx ? tx.value.trim() : '', choice = ch ? ch.value : '';
+        function say(msg, col) { var n = box.querySelector('[data-k=pr-msg]'); if (!n) { n = doc.createElement('div'); n.className = 'note'; n.setAttribute('data-k', 'pr-msg'); box.appendChild(n); } n.style.color = col; n.textContent = msg; }
+        if (rl.role === 'edge' && !choice) { say('先選一個你覺得最像的喔 👆', '#be123c'); return; }
+        if (!text && !choice) { say('寫一點想法再存喔 ✏️', '#be123c'); if (tx) tx.focus(); return; }
+        var ok = P.save({ term: c.t, role: rl.role, degree: rl.degree, weight: rl.weight, n: rl.n, choice: choice || undefined, text: text, step: inst.k });
+        if (ok === false) { say('這次沒有存成功', '#be123c'); return; }
+        drawCard(); var b2 = card.querySelector('.kbc-pr'); if (b2) { var d2 = doc.createElement('div'); d2.className = 'note'; d2.setAttribute('data-k', 'pr-msg'); d2.style.color = '#047857'; d2.textContent = '已存下 ✓ 老師也能在 ASRA 紀錄看到。'; b2.appendChild(d2); }
+      };
+    }
     function drawCard() {
-      applyFs(); var c = conceptOf(inst.sel); if (!c) { card.innerHTML = '<div class="kbc-empty">點雲裡的一個詞,看它的故事。</div>'; return; }
+      applyFs(); var c = conceptOf(inst.sel); if (!c) { card.innerHTML = '<div class="kbc-empty">點雲裡的一個詞,看它的故事。</div>' + rolesSummary(); bindRoles(); return; }
       var ps = model.postsAt(c, inst.k);
       var fsBar = '<div class="kbc-fs">字大小 <button type="button" data-fs="-1" aria-label="縮小字">A−</button><button type="button" data-fs="1" aria-label="放大字">A＋</button><button type="button" data-tog class="kbc-tog" title="展開或收合故事卡">▾ 收合</button></div>';
       if (!ps.length) { card.innerHTML = '<div style="display:flex;align-items:center"><h3>' + esc(c.t) + '</h3>' + fsBar + '</div><div class="kbc-body"><div class="kbc-empty">第 ' + inst.k + ' 天,「' + esc(c.t) + '」還沒有出現。把進度往後拉看看。</div></div>'; bindFs(); bindTog(); return; }
@@ -474,7 +532,7 @@
         p.rep.forEach(function (rp) { if (rp.step <= inst.k) h += '<div class="kbc-rep">' + esc(opts.labels ? opts.labels[rp.step] : '第 ' + rp.step + ' 天') + ' ' + esc(rp.by) + ' 回應 <span class="kbc-tg" style="--cc:var(--' + rp.ty + ')">' + esc(STATE_TYPE(rp.ty)) + '</span>' + (rp.text ? '「' + esc(rp.text) + '」' : '') + '</div>'; });
       });
       h += '</div><div class="kbc-two"><div class="kbc-box"><div class="sub" style="margin:0">證據</div>' + (ev ? '已經有 ' + ev + ' 則貼文提到實驗、觀察或資料' : '還沒有提到實驗或資料來支持') + '</div><div class="kbc-box next"><div class="sub" style="margin:0;font-weight:700">下一步可以做什麼</div>' + STATE_NEXT[st] + (ev ? '' : ' 也可以找一個實驗或資料。') + '</div></div>';
-      h += '</div>'; card.innerHTML = h; bindFs(); bindTog();
+      h += probeHtml(c) + '</div>'; card.innerHTML = h; bindFs(); bindTog(); bindProbe(c);
       card.querySelectorAll('[data-go]').forEach(function (b) { b.onclick = function () { if (opts.onGoPost) opts.onGoPost(b.getAttribute('data-go'), b.getAttribute('data-topic')); }; });
     }
     function STATE_TYPE(k) { return { q: '提問', e: '延伸', i: '改進', c: '反例', r: '昇華' }[k] || k; }

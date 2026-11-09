@@ -19,7 +19,9 @@
 (function (global) {
   'use strict';
   var PREFIX = 'kb_asra_v1_';
-  var KINDS = { note: '一句話', refl: '反思', plan: '計畫', reeval: '再評估' };
+  var KINDS = { note: '一句話', refl: '反思', plan: '計畫', reeval: '再評估', concept: '概念追問' };
+  var ROLE_NAME = { core: '核心概念', edge: '邊緣概念' };
+  var CHOICE_NAME = { ignored: '被忽略了', undeveloped: '還沒發展', weak: '關係不大', unsure: '還不確定' };
   var ACT_NAME = { evidence: '補證據', revise: '改想法', team: '找夥伴' };
   // 六個反思題:改寫自國際研究使用的反思單(Yang et al., 2026, 附錄 B),用國小學生看得懂的說法;分成「分析 → 問題 → 計畫」三階段
   var QS = {
@@ -101,10 +103,11 @@
 
   /* ---------- 整理成畫面用的資料 ---------- */
   function derive(uid) {
-    var list = entries(uid), S = { notes: {}, refl: [], plans: [], seen: seenGet(uid) }, byPlan = {};
+    var list = entries(uid), S = { notes: {}, refl: [], plans: [], concepts: [], seen: seenGet(uid) }, byPlan = {};
     list.forEach(function (e) {
       if (e.kind === 'note') S.notes[e.ref || 'mon'] = e.text;
       else if (e.kind === 'refl') S.refl.push({ id: e.id, postId: e.postId, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle, q3: e.q3 || '', q4: e.q4 || '' });
+      else if (e.kind === 'concept') S.concepts.push({ id: e.id, term: e.term, role: e.role, choice: e.choice || '', text: e.text || '', ts: e.ts });
       else if (e.kind === 'plan') { var p = { id: e.id, postId: e.postId, act: e.act, text: e.text, q5: e.q5 || '', ts: e.ts, ideaTitle: e.ideaTitle, reeval: [] }; S.plans.push(p); byPlan[e.id] = p; }
     });
     list.forEach(function (e) { if (e.kind === 'reeval' && byPlan[e.planId]) byPlan[e.planId].reeval.push({ result: e.result, ts: e.ts, follow: e.follow }); });
@@ -115,6 +118,7 @@
     var base = { kind: e.kind, label: KINDS[e.kind] || e.kind, time: fmtTime(e.ts), date: fmtDate(e.ts), idea: e.ideaTitle || '', topic: e.topic || '', text: e.text || '', act: '', result: '', follow: e.follow || null, q3: e.q3 || '', q4: e.q4 || '', q5: e.q5 || '' };
     if (e.kind === 'note' && QS[NOTE_Q[e.ref || 'mon']]) { var qq = QS[NOTE_Q[e.ref || 'mon']]; base.label = '第' + qq.no + '題:' + qq.short; }
     if (e.kind === 'plan') { base.act = ACT_NAME[e.act] || e.act || ''; }
+    if (e.kind === 'concept') { base.idea = e.term || ''; base.act = (ROLE_NAME[e.role] || '') + (e.choice ? '・' + (CHOICE_NAME[e.choice] || e.choice) : ''); if (!base.text && e.choice) base.text = '選了「' + (CHOICE_NAME[e.choice] || e.choice) + '」'; }
     if (e.kind === 'reeval') { base.result = e.result === 'better' ? '變好了' : '還要再努力'; base.text = base.result; }
     return base;
   }
@@ -164,7 +168,7 @@
   }
 
   global.KBAsra = {
-    KINDS: KINDS, ACT_NAME: ACT_NAME, QS: QS, PHASE: PHASE,
+    KINDS: KINDS, ACT_NAME: ACT_NAME, QS: QS, PHASE: PHASE, ROLE_NAME: ROLE_NAME, CHOICE_NAME: CHOICE_NAME,
     append: append, entries: entries, uids: uids, derive: derive, describe: describe, pending: pending,
     seenGet: seenGet, seenSet: seenSet, fmtTime: fmtTime, fmtDate: fmtDate, toCSV: toCSV,
     onChange: function (f) { if (typeof f === 'function') listeners.push(f); },

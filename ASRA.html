@@ -198,12 +198,16 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     }).join('');
     var byTopic = {}; d.ideas.forEach(function (x) { var k = x.topic || '(沒有分類)'; byTopic[k] = (byTopic[k] || 0) + 1; });
     var tchips = Object.keys(byTopic).sort(function (a, b) { return byTopic[b] - byTopic[a]; }).map(function (k) { return '<span class="pill todo">' + esc(cut(k, 14)) + ' · ' + byTopic[k] + ' 個想法</span>'; }).join(' ');
+    var cps = (S.concepts || []).slice().sort(function (a, b) { return b.ts - a.ts; });
+    var qc = '<div class="card fade"><h4 class="font-black text-slate-800 mb-1"><i class="fas fa-bullseye mr-1 text-indigo-500"></i>我的概念追問</h4><p class="text-xs text-slate-500 mb-2">在「知識羅盤」的概念雲點一個詞,回答它為什麼在中間(核心)或在邊邊(邊緣)。答案會存在這裡,老師也看得到。</p>' +
+      (cps.length ? cps.slice(0, 6).map(function (x) { return '<div class="py-2 border-t border-slate-100"><div class="flex flex-wrap items-center gap-2"><span class="pill ' + (x.role === 'core' ? 'ok' : 'todo') + '">' + esc(x.term) + ' · ' + esc(KBAsra.ROLE_NAME[x.role] || '') + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(x.ts) + '</span>' + (x.choice ? '<span class="pill warn">' + esc(KBAsra.CHOICE_NAME[x.choice] || x.choice) + '</span>' : '') + '</div>' + (x.text ? '<div class="text-sm text-slate-700 mt-1">' + esc(x.text) + '</div>' : '') + '</div>'; }).join('') : '<p class="text-sm text-slate-400">還沒有追問過。</p>') +
+      '<p class="mt-3 text-sm"><a class="text-indigo-600 font-bold underline" id="to-concept" href="' + backHref() + '#concept-card"><i class="fas fa-cloud mr-1"></i>去概念雲選一個詞追問</a></p></div>';
     var q2 = '<div class="card fade"><label for="q2-note">' + qlab('q2') + '</label><p class="text-xs text-slate-500 mb-2">看看上面的想法:你在哪些討論區說得最多?哪些很少提到?</p>' + (tchips ? '<div class="flex flex-wrap gap-1 mb-2">' + tchips + '</div>' : '') +
       '<textarea id="q2-note" rows="2" maxlength="200" placeholder="例如:我講「光」講得最多,「影子」講得很少。"' + (readonly ? ' disabled' : '') + '>' + esc(S.notes.q2 || '') + '</textarea></div>';
     return head(2, '量量走多遠', 'Evaluation · 知識進展評估', '', story) +
       '<div class="card fade"><div class="flex flex-wrap gap-2 mb-3">' + stPill('ok') + '<span class="text-xs text-slate-500 self-center">有人回應、也有證據</span>' + stPill('check') + '<span class="text-xs text-slate-500 self-center">有人回應但還沒證據</span>' + stPill('wait') + '<span class="text-xs text-slate-500 self-center">還沒人回應</span>' + stPill('grow') + '<span class="text-xs text-slate-500 self-center">已經被改進或整合</span></div>' +
       '<div class="grid md:grid-cols-2 gap-3">' + (cards || '<p class="text-slate-400 text-sm">還沒有貼文</p>') + '</div>' +
-      (list.length > 8 ? '<div class="text-center mt-3"><button type="button" class="btn g" id="toggle-all">' + (showAll ? '只看最新 8 個' : '看全部 ' + list.length + ' 個想法') + '</button></div>' : '') + '</div>' + q2;
+      (list.length > 8 ? '<div class="text-center mt-3"><button type="button" class="btn g" id="toggle-all">' + (showAll ? '只看最新 8 個' : '看全部 ' + list.length + ' 個想法') + '</button></div>' : '') + '</div>' + q2 + qc;
   }
 
   /* ---- 3. 用證據想一想 ---- */
@@ -262,7 +266,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   /* ---- 5. 回頭再檢查 ---- */
   function panelIter() {
     var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; });
-    if (!plans.length) return head(5, '回頭再檢查', 'Iterative Improvement · 持續改進與再評估', '', '你還沒有訂計畫。到上一步訂一個小計畫、去論壇做做看,再回來檢查有沒有進步!');
+    if (!plans.length) return head(5, '回頭再檢查', 'Iterative Improvement · 持續改進與再評估', '', '你還沒有訂計畫。到上一步訂一個小計畫、去論壇做做看,再回來檢查有沒有進步!') + panelLog();
     var cards = plans.map(function (p) {
       var t = ideaById(p.postId) || { title: '(想法)', topicId: '', id: p.postId }, f = ASRA.followUp(nodes, uid, p), last = p.reeval && p.reeval.length ? p.reeval[p.reeval.length - 1] : null;
       var msg = f.acted ? '太棒了!計畫訂好後,你在這個討論區又發了 <b>' + f.mine + '</b> 則貼文' + (f.replies ? ',還有 <b>' + f.replies + '</b> 則同學的新回應' : '') + (f.evid ? ',其中 ' + f.evid + ' 則有寫證據' : '') + '。' : '計畫訂好之後,還沒有看到新的貼文或回應。去論壇做一做吧!';
@@ -278,7 +282,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   function panelLog() {
     var list = KBAsra.entries(uid).slice().reverse();
     if (!list.length) return '';
-    var col = { note: 'bg-slate-100 text-slate-600', refl: 'bg-indigo-100 text-indigo-700', plan: 'bg-emerald-100 text-emerald-700', reeval: 'bg-amber-100 text-amber-700' };
+    var col = { note: 'bg-slate-100 text-slate-600', refl: 'bg-indigo-100 text-indigo-700', plan: 'bg-emerald-100 text-emerald-700', reeval: 'bg-amber-100 text-amber-700', concept: 'bg-sky-100 text-sky-700' };
     var rows = list.map(function (e) {
       var d = KBAsra.describe(e);
       return '<div class="py-2 border-t border-slate-100 flex gap-3"><div class="w-28 flex-shrink-0 text-xs text-slate-500">' + d.time + '</div><div class="min-w-0"><span class="inline-block text-[11px] font-black px-2 py-0.5 rounded-full ' + (col[e.kind] || '') + '">' + d.label + (d.act ? ':' + d.act : '') + '</span>' +

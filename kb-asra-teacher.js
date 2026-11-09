@@ -71,7 +71,7 @@
   function tile(n, label, sub, tone) { return '<div class="rounded-xl border p-3 ' + (tone || 'bg-white border-slate-200') + '"><div class="text-2xl font-black text-slate-800">' + n + '</div><div class="text-xs font-bold text-slate-600">' + label + '</div>' + (sub ? '<div class="text-[11px] text-slate-400 mt-0.5">' + sub + '</div>' : '') + '</div>'; }
   function bar(label, n, max, color, extra) { return '<div class="flex items-center gap-2 mb-1.5"><span class="w-14 text-sm font-bold text-slate-700 shrink-0">' + label + '</span><div class="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden"><i class="block h-full rounded-full" style="width:' + Math.round(n / Math.max(max, 1) * 100) + '%;background:' + color + '"></i></div><span class="w-20 text-right text-sm font-black text-slate-700 shrink-0">' + n + (extra || '') + '</span></div>'; }
   function pill(t, cls) { return '<span class="inline-block text-[11px] font-black px-2 py-0.5 rounded-full ' + cls + '">' + t + '</span>'; }
-  var KCOL = { note: 'bg-slate-100 text-slate-600', refl: 'bg-indigo-100 text-indigo-700', plan: 'bg-emerald-100 text-emerald-700', reeval: 'bg-amber-100 text-amber-700' };
+  var KCOL = { note: 'bg-slate-100 text-slate-600', refl: 'bg-indigo-100 text-indigo-700', plan: 'bg-emerald-100 text-emerald-700', reeval: 'bg-amber-100 text-amber-700', concept: 'bg-sky-100 text-sky-700' };
   var SNAME = { wait: '等同學回應', check: '待查證', ok: '有證據', grow: '在發展' };
   var SCOL = { wait: '#94a3b8', check: '#f59e0b', ok: '#10b981', grow: '#8b5cf6' };
   function asraHref(id) { return 'ASRA.html?student=' + encodeURIComponent(id); }
@@ -157,7 +157,7 @@
   function tabLog(D) {
     var list = visibleEntries(D), shown = list.slice(0, UI.limit);
     var opts = '<option value="all">全部學生</option>' + D.rows.slice().sort(function (a, b) { return a.u.name < b.u.name ? -1 : 1; }).map(function (r) { return '<option value="' + esc(r.u.id) + '"' + (UI.stu === r.u.id ? ' selected' : '') + '>' + esc(r.u.name) + (r.E.length ? '(' + r.E.length + ')' : '') + '</option>'; }).join('');
-    var kinds = [['all', '全部'], ['refl', '反思'], ['plan', '計畫'], ['note', '一句話']].map(function (k) { return '<option value="' + k[0] + '"' + (UI.kind === k[0] ? ' selected' : '') + '>' + k[1] + '</option>'; }).join('');
+    var kinds = [['all', '全部'], ['refl', '反思'], ['plan', '計畫'], ['note', '一句話'], ['concept', '概念追問']].map(function (k) { return '<option value="' + k[0] + '"' + (UI.kind === k[0] ? ' selected' : '') + '>' + k[1] + '</option>'; }).join('');
     return '<div class="flex flex-wrap items-center gap-2 mb-2"><select data-act="stu" class="border border-slate-300 rounded-lg px-2 py-1 text-sm">' + opts + '</select><select data-act="kind" class="border border-slate-300 rounded-lg px-2 py-1 text-sm">' + kinds + '</select><span class="text-xs text-slate-500">共 ' + list.length + ' 筆(新的在上面);每筆都留著原本的日期時間,不會被改掉。</span></div>' +
       '<div class="rounded-xl bg-white border border-slate-200 px-4">' + (shown.map(entryCard).join('') || '<p class="py-6 text-center text-slate-400 text-sm">還沒有符合的紀錄。學生在 ASRA 頁寫下反思或計畫後,會出現在這裡。</p>') + '</div>' +
       (list.length > shown.length ? '<div class="text-center mt-3"><button type="button" data-act="more" class="px-4 py-1.5 rounded-full bg-slate-200 hover:bg-slate-300 text-sm font-bold text-slate-700">再看 ' + Math.min(40, list.length - shown.length) + ' 筆</button></div>' : '');
@@ -170,6 +170,7 @@
       ['回應別人 / 被回應 / 夥伴數', '社會網絡分析(SNA)的「誰回應誰」:入度、出度、接近中心性。', '老師分析已算「中介中心性」(知識經紀人),並畫出互動圈與誰回應誰;接近中心性還沒有。學生端只呈現互動圈與次數。平台有記錄「學生點開看過哪些貼文」(從開始記錄後才有),目前只統計篇數,還沒畫成「誰讀了誰」的閱讀網絡。'],
       ['想法狀態(有證據/待查證/在發展/等回應)', '有潛力的想法(promising ideas)、想法改進(idea improvement)。', '用關鍵字比對「實驗、觀察、資料…」判斷證據,是規則式近似,不是人工編碼,可能誤判。國際研究的「潛力想法」是由學生自己評選,平台目前沒有學生評選功能,所以這裡只是近似。'],
       ['反思文字(含日期時間)', '反思單與訪談的質性編碼:後設認知、調節、認知主體性。', '這裡提供原文與日期,編碼要由研究者人工做;可匯出 CSV。'],
+      ['核心 / 邊緣概念追問', '概念網絡裡,中心的節點是討論的焦點,邊緣的節點可能是被忽略、還沒發展、或關係不大的方向(Yang 等人 2026 圖 7 教師引導全班這樣讀圖);學生要自己解釋為什麼。', '平台的核心/邊緣是簡單規則(連到的詞數前 25% 且至少 3 個為核心;只連 0~1 個為邊緣;雲裡要有 5 個以上的詞),詞是自動從貼文抓出來的,可能抓不準。「在中間」不代表比較重要或比較正確。這裡記下學生自己的解釋,沒有判斷對錯。'],
       ['計畫 → 行動 → 再評估', '自我調整與持續改進:反思之後有沒有真的行動、結果有沒有變好。', '每次再評估會一併記下當時計畫後的新貼文與新回應數,可追蹤個人層級的前後變化。'],
       ['尚未收集', '認知情緒問卷、領域前後測、認知主體性問卷。', '目前平台沒有這些資料;若要做研究,需另外施測再合併。']
     ];
