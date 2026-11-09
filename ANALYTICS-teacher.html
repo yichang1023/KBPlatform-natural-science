@@ -2623,6 +2623,7 @@ async function geminiFetch(key, init) {
             document.getElementById('profile-name').innerText = displayName;
             document.getElementById('profile-id').innerText = data.user.id;
             document.getElementById('profile-notes-count').innerText = data.noteCount;
+            try { const stEl = document.getElementById('profile-status-text'); if (stEl) stEl.textContent = '已選取:發文 ' + data.noteCount + ' 篇、回應別人 ' + data.outDegree + ' 次、被別人回應 ' + data.inDegree + ' 次、用過 ' + ((data.vocabTerms || []).length) + ' 種專業詞'; } catch (e) {}
             document.getElementById('profile-avatar').innerText = displayName[0];
 
             const badge = document.getElementById('kb-role-badge'); badge.innerText = data.role; badge.className = `text-[10px] px-2 py-0.5 rounded-full border font-bold tracking-wide ${data.badgeColor}`; badge.classList.remove('hidden');
@@ -3009,7 +3010,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
         <div class="mt-3 p-3 bg-purple-50 text-purple-800 text-sm rounded border border-purple-100 relative">
             <button onclick="fetchRefAIInsight('${safeKey}', '${safePrompt}', '${safeVal}', '${safeStatus}', true, '${studentId}')" class="absolute top-2 right-2 text-[10px] text-purple-500 hover:bg-purple-200 px-1.5 py-0.5 rounded"><i class="fas fa-sync-alt mr-1"></i>重新診斷</button>
             <div class="text-[10px] text-purple-400 mb-1">${window.__geminiModel ? ('模型:' + window.__geminiModel + ';') : ''}依目前數據產生,僅供教學參考;學生姓名不會傳給 AI</div>
-            ${marked.parse(shown)}
+            <div class="kb-ai-body">${marked.parse(shown)}</div>
         </div>`;
 
     if (!aiFailed) aiCache.refs[cacheKey] = html; // 失敗的結果不暫存,下次點擊會重新呼叫

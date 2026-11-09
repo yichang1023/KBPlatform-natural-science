@@ -419,7 +419,7 @@
                     <h3 class="section-title mb-0 text-indigo-800"><i class="fas fa-robot text-indigo-500 mr-2"></i> AI 導師洞察</h3>
                     <button class="text-[10px] bg-indigo-100 px-2 py-1 rounded text-indigo-600 hover:bg-indigo-200 transition font-bold" onclick="triggerAIAnalysis('advice')"><i class="fas fa-sync-alt mr-1"></i>更新</button>
                 </div>
-                <div id="ai-feedback" class="flex-1 text-sm text-slate-700 leading-relaxed overflow-y-auto custom-scrollbar pr-2 min-h-[140px] max-h-[180px]">
+                <div id="ai-feedback" class="flex-1 text-sm text-slate-700 leading-relaxed overflow-y-auto custom-scrollbar pr-2 min-h-[140px] max-h-[380px]">
                     <div class="flex flex-col items-center justify-center h-full opacity-60 text-center">
                         <i class="fas fa-magic text-2xl mb-2 text-indigo-300"></i>
                         <p class="text-xs">點擊更新按鈕，獲取專屬學習建議<br>或產生備審自述草稿。</p>
@@ -479,10 +479,10 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                 <!-- 1. 觀點多樣性 (獨立卡片) -->
-                <div class="card bg-white hover:border-sky-300 transition group cursor-pointer" onclick="openRefModal('diversity')">
+                <div class="card bg-white hover:border-sky-300 transition group">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-sm font-bold text-slate-700 flex items-center"><i class="fas fa-lightbulb text-sky-500 mr-2"></i> 觀點多樣性 (Diversity)</h3>
-                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-sky-400 transition text-xs"></i>
+                        <button type="button" onclick="event.stopPropagation(); openRefModal('diversity')" class="ref-btn" title="這個指標怎麼算、依據哪些研究"><i class="fas fa-info mr-1"></i> Ref.</button>
                     </div>
                     <div class="flex items-end gap-2 mb-2">
                         <span class="text-3xl font-black text-slate-800" id="topic-count-val">0</span>
@@ -495,10 +495,10 @@
                 </div>
 
                 <!-- 2. 認知路徑長度 (獨立卡片) -->
-                <div class="card bg-white hover:border-indigo-300 transition group cursor-pointer" onclick="openRefModal('path_length')">
+                <div class="card bg-white hover:border-indigo-300 transition group">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-sm font-bold text-slate-700 flex items-center"><i class="fas fa-road text-indigo-500 mr-2"></i> 認知路徑長度 (Path Length)</h3>
-                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-indigo-400 transition text-xs"></i>
+                        <button type="button" onclick="event.stopPropagation(); openRefModal('path_length')" class="ref-btn" title="這個指標怎麼算、依據哪些研究"><i class="fas fa-info mr-1"></i> Ref.</button>
                     </div>
                     <div class="flex items-end gap-2 mb-2">
                         <span class="text-3xl font-black text-slate-800" id="avg-depth-val">0</span>
@@ -512,10 +512,10 @@
                 </div>
 
                 <!-- 3. 語義與詞彙深度 (獨立狀態卡) -->
-                <div class="card bg-white hover:border-teal-300 transition group cursor-pointer" onclick="openRefModal('lexical')">
+                <div class="card bg-white hover:border-teal-300 transition group">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-sm font-bold text-slate-700 flex items-center"><i class="fas fa-book-reader text-teal-500 mr-2"></i> 語義深度 (Lexical Depth)</h3>
-                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-teal-400 transition text-xs"></i>
+                        <button type="button" onclick="event.stopPropagation(); openRefModal('lexical')" class="ref-btn" title="這個指標怎麼算、依據哪些研究"><i class="fas fa-info mr-1"></i> Ref.</button>
                     </div>
                     <div class="mb-3">
                         <span id="lexical-level-badge" class="px-3 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold border border-slate-200">
@@ -912,7 +912,7 @@ async function initApiKey() {
             if (textContent) {
                 // 將 AI 生成的 Markdown 轉為 HTML 並套用設計樣式，加入重新分析按鈕
                 const htmlContent = `
-                    <div class="ai-insight-content bg-gradient-to-br from-indigo-50/80 to-white p-5 rounded-xl border border-indigo-100 shadow-sm fade-in relative group">
+                    <div class="ai-insight-content kb-ai-body bg-gradient-to-br from-indigo-50/80 to-white p-5 rounded-xl border border-indigo-100 shadow-sm fade-in relative group">
                         <button onclick="forceReanalyze('${key}')" class="absolute top-3 right-3 text-[10px] bg-white/80 border border-indigo-100 text-indigo-500 hover:bg-indigo-500 hover:text-white px-2.5 py-1.5 rounded transition shadow-sm font-bold flex items-center opacity-0 group-hover:opacity-100 focus:opacity-100"><i class="fas fa-sync-alt mr-1"></i>重新分析</button>
                         ${marked.parse(window.kbAiUnscrub ? window.kbAiUnscrub(textContent) : textContent)}
                     </div>`;
@@ -1995,8 +1995,36 @@ async function initApiKey() {
         const feedbackContainer = document.getElementById('ai-feedback');
 
         const originalText = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 思考中...';
-        const s = currentUserStats, ctx = `角色:${document.getElementById('role-title').innerText}。發文:${s.totalNotes},回覆:${s.linksCount},被引:${s.repliedCount}。鷹架:${s.scaffoldCounts.question}/${s.scaffoldCounts.extend}/${s.scaffoldCounts.improve}/${s.scaffoldCounts.riseabove}。`;
-        const promptText = mode === 'advice' ? `根據數據：${ctx} 給予該學生3點具體的知識建構改進建議 (繁體中文，語氣鼓勵，限150字內)。` : `根據數據：${ctx} 為學生撰寫一份「學習歷程檔案」的自我反思草稿 (Reflection Draft)。第一人稱，學術且真誠，限200字內。`;
+        const s = currentUserStats;
+        const ident = window.__kbIdent || (window.__kbIdent = kbAiIdent(globalData.userList));
+        let story = ''; try { story = kbStoryText(currentUserId); } catch (e) { console.error(e); }
+        const roleName = document.getElementById('role-title').innerText;
+        const facts = ident.scrub([
+            '- 我的角色(系統用規則估計,只當參考):' + roleName,
+            '- 我發了 ' + s.totalNotes + ' 篇貼文,回應別人 ' + s.linksCount + ' 次,別人回應我 ' + s.repliedCount + ' 次',
+            '- 我用過的鷹架:提問 ' + s.scaffoldCounts.question + '、延伸 ' + s.scaffoldCounts.extend + '、改進 ' + s.scaffoldCounts.improve + '、反駁 ' + (s.scaffoldCounts.counter || 0) + '、昇華 ' + s.scaffoldCounts.riseabove,
+            '- 我的互動圈有 ' + s.networkSize + ' 位同學;我參與的討論平均延伸 ' + s.avgDepth.toFixed(1) + ' 層;參與 ' + s.uniqueTopicsCount + ' 個主題'
+        ].join('\n'));
+        const NL2 = '\n';
+        const promptText = mode === 'advice'
+            ? kbRefPrompt({ audience: 'student', title: 'AI 導師洞察', meaning: 'AI 導師看你的貼文和互動紀錄,幫你找出做得好的地方,以及接下來可以試試看的事。',
+                current: '(見下面的背景資料)', data: facts, timeline: story,
+                question: '請替我挑出最值得被稱讚的一件事,再給我 3 個接下來做得到的小行動。',
+                extraRules: '全文控制在 300~450 字;角色是系統用規則估計的,請當成參考,不要說成定論。' })
+            : [
+                '你是一位很會說故事的學習歷程輔導老師,熟悉知識建構 (Knowledge Building)。請幫這位學生寫一份「備審自述草稿」。學生與同學的姓名一律已換成 S01、S02… 代號,請不要猜真實姓名;文中用「我」稱呼學生自己。',
+                '【這份草稿是什麼】學生在知識建構論壇裡討論的學習歷程自述,用第一人稱「我」寫,讓老師或評審讀了就知道:我做了什麼、我怎麼進步、我學到什麼。這只是草稿,學生會自己修改成自己的話。',
+                '【背景資料】' + NL2 + facts,
+                story ? '【從最初到最後的資料(依日期)】' + NL2 + story : '',
+                '【怎麼寫】',
+                '1. 開頭先給一行「🔑 一句話亮點」:用粗體一句話說出我最值得被看見的特色(要有資料依據)。',
+                '2. 接著分成 3~4 個小段,每段一個生動的小標題(例如「🌱 起步:我先提出了一個問題」「🔧 轉折:被同學問倒之後」「🌳 成果:我把大家的想法整理起來」),依時間順序,寫出做了什麼、遇到什麼困難、怎麼改進、學到什麼;一定要引用資料裡的日期、數字和討論的主題,但不可誇大、不可編造。',
+                '3. 重要的數字與關鍵詞用粗體;專有名詞(例如昇華、鷹架)第一次出現時,馬上用括號,用日常的話解釋一句。',
+                '4. 最後一小段「🎯 接下來我想」,寫 2 個具體的小目標。',
+                '5. 資料看不出來的地方,寫成【待補:…】讓學生自己補上(例如想放的作品、同學的回饋);不要硬猜。',
+                '【語言】國小高年級學生寫得出來、外行人(家長、評審)也看得懂:短句、日常用字;繁體中文;約 350~550 字;不要用表格;每個小標題最多一個 emoji。',
+                '【規則】只能根據上面的資料下結論並引用具體數字;學生本人一律用「我」,同學用代號(如 S03)。'
+            ].filter(Boolean).join(NL2);
 
         try {
             const response = await geminiFetch(apiKey, {
@@ -2007,9 +2035,14 @@ async function initApiKey() {
             const data = await response.json();
 
             // Extract the result text
-            const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text || "無法生成回應，請稍後再試。";
+            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "無法生成回應，請稍後再試。";
+            const textContent = window.kbAiUnscrub ? window.kbAiUnscrub(rawText) : rawText;
 
-            feedbackContainer.innerHTML = `<div class="p-3 bg-white/60 rounded-lg border border-indigo-50/50">${marked.parse(textContent)}</div>`;
+            feedbackContainer.innerHTML = '<div class="p-3 bg-white/60 rounded-lg border border-indigo-50/50"><div class="kb-ai-body">' + marked.parse(textContent) + '</div>' +
+                '<div class="mt-2 flex items-center gap-2 text-[10px] text-slate-400"><span>AI 依你的紀錄推論,請自己檢查,改成自己的話。</span>' +
+                (mode === 'portfolio' ? '<button type="button" id="ai-copy-draft" class="ml-auto px-2 py-0.5 rounded border border-indigo-200 text-indigo-600 font-bold hover:bg-indigo-50">複製草稿</button>' : '') + '</div></div>';
+            const cp = document.getElementById('ai-copy-draft');
+            if (cp) cp.onclick = function () { const txt = feedbackContainer.querySelector('.kb-ai-body').innerText; try { navigator.clipboard.writeText(txt); cp.textContent = '已複製'; } catch (e) { cp.textContent = '請自行選取複製'; } };
         } catch (e) {
             console.error("AI Analysis error:", e);
             feedbackContainer.innerHTML = '<span class="text-red-500">AI 分析失敗，請檢查網路連線或稍後再試。</span>';

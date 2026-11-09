@@ -8,6 +8,21 @@
   'use strict';
   var doc = global.document;
 
+  // AI 解說文字的共同樣式(AI 解說歷程、Ref 的 AI 診斷、AI 導師洞察都套用,讀起來一致、重點醒目)
+  (function () {
+    if (!doc || doc.getElementById('kb-ai-body-css')) return;
+    var st = doc.createElement('style'); st.id = 'kb-ai-body-css';
+    st.textContent = '.kb-ai-body{line-height:1.8;font-size:14px;color:#1e293b;word-break:break-word}' +
+      '.kb-ai-body h1,.kb-ai-body h2,.kb-ai-body h3,.kb-ai-body h4{font-weight:800;color:#4c1d95;margin:16px 0 6px;line-height:1.4}' +
+      '.kb-ai-body h1,.kb-ai-body h2{font-size:1.1em}.kb-ai-body h3,.kb-ai-body h4{font-size:1.03em}' +
+      '.kb-ai-body>:first-child{margin-top:0}.kb-ai-body p{margin:6px 0}' +
+      '.kb-ai-body ul,.kb-ai-body ol{margin:6px 0 6px 1.3em;padding:0}.kb-ai-body ul{list-style:disc}.kb-ai-body ol{list-style:decimal}.kb-ai-body li{margin:3px 0}' +
+      '.kb-ai-body strong{color:#5b21b6;font-weight:800;background:linear-gradient(transparent 60%,#ede9fe 60%)}' +
+      '.kb-ai-body blockquote{border-left:3px solid #c4b5fd;margin:8px 0;padding:2px 10px;color:#475569;background:#faf5ff;border-radius:0 6px 6px 0}' +
+      '.kb-ai-body hr{margin:12px 0;border:0;border-top:1px dashed #ddd6fe}';
+    (doc.head || doc.documentElement).appendChild(st);
+  })();
+
   function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function md(t) { if (global.marked && global.marked.parse) { try { return global.marked.parse(t); } catch (e) {} } return esc(t).replace(/\n/g, '<br>'); }
   function hash(str) { var h = 0; for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return h; }
@@ -19,8 +34,8 @@
     return [
       '【怎麼寫】',
       '1. 先自己判斷「這個項目用哪種方式講最容易懂」(可以是說故事、生活比喻、比賽、種樹、蓋積木、搭公車…),挑一種最貼切的就好,不要同時用太多比喻。',
-      '2. 開頭先用一句話說清楚:這張圖/這個數字在看什麼。',
-      '3. 接著依時間順序,分成 3~4 個章節,每章取一個生動的小標題(例如「起步:先有問題,才有討論」),說明那段時間發生了什麼、為什麼重要、有什麼轉折;一定要引用資料裡的日期、數字與代號(如 S03),讓人看得到畫面,但不可誇大、不可編造。',
+      '2. 開頭先給一行「🔑 一句話重點」(用粗體,一句話直接說結論,讓人不用往下讀也知道大意),再用一句話說清楚:這張圖/這個數字在看什麼。',
+      '3. 重要的數字、日期、關鍵詞用粗體標出來,讓人一眼看到重點;每段最多 3~4 句。接著依時間順序,分成 3~4 個章節,每章取一個生動的小標題(例如「起步:先有問題,才有討論」),說明那段時間發生了什麼、為什麼重要、有什麼轉折;一定要引用資料裡的日期、數字與代號(如 S03),讓人看得到畫面,但不可誇大、不可編造。',
       '4. 遇到專有名詞(例如吉尼係數、昇華、網路密度)第一次出現時,馬上用括號,用小朋友聽得懂的話解釋一句。',
       '5. 最後用一小段「這代表什麼」做總結,並' + (forStudent ? '給你 2~3 個接下來可以做的具體小行動' : '給 2~3 個老師可以馬上用的具體做法(也可以提醒學生能怎麼做)') + ',同時誠實說出還需要加強的地方。',
       '6. 資料看不出來的地方,直接說「資料看不出來」,不要硬猜。',
