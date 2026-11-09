@@ -133,6 +133,8 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   function add(e) { var x = KBAsra.append(uid, e); reload(); return x; }
 
   function link(n) { return 'Knowledge Building Forum.html?topic=' + encodeURIComponent(n.topicId) + '&node=' + encodeURIComponent(n.id); }
+  // 「看原文」:在目前畫面彈出唯讀視窗,不離開 ASRA 頁面(按住 Ctrl 點才會另開論壇分頁)
+  function openOrig(id) { KBUI.postViewer.open(id, { nodes: nodes, topics: topics, nameOf: nameOf }); }
   function tyDot(t) { return '<span class="ty" style="background:' + ASRA.TCOLOR[t] + '">' + (ASRA.TSYM[t] || '·') + '</span>'; }
   function stPill(s) { return { wait: '<span class="pill todo"><i class="fas fa-hourglass-half"></i> 等同學回應</span>', check: '<span class="pill warn"><i class="fas fa-flask"></i> 待查證</span>', ok: '<span class="pill ok"><i class="fas fa-circle-check"></i> 有證據</span>', grow: '<span class="pill dev"><i class="fas fa-seedling"></i> 在發展</span>' }[s]; }
   function ideaById(id) { return data.ideas.filter(function (i) { return i.id === id; })[0]; }
@@ -194,7 +196,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
       return '<div class="idea"><div class="flex items-start gap-2">' + tyDot(i.type) + '<div class="flex-1 min-w-0"><div class="font-black text-slate-800 truncate">' + esc(i.title) + '</div><div class="text-xs text-slate-500">' + ASRA.mmdd(i.date) + (i.topic ? ' · ' + esc(cut(i.topic, 14)) : '') + '</div></div>' + stPill(i.status) + '</div>' +
         '<p class="text-sm text-slate-600 mt-2">' + esc(cut(i.content, 70)) + '</p>' +
         '<div class="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-600"><span><i class="fas fa-reply mr-1"></i>同學回應 ' + i.replies + ' 則</span>' + (i.diff ? '<span class="text-rose-600"><i class="fas fa-triangle-exclamation mr-1"></i>不同看法 ' + i.diff + ' 則</span>' : '') + '<span>' + (i.ownEvid ? '<i class="fas fa-circle-check text-emerald-600 mr-1"></i>我有寫證據' : '<i class="fas fa-circle-question text-amber-600 mr-1"></i>我還沒寫證據') + '</span></div>' +
-        '<div class="flex gap-2 mt-3"><a class="btn g" style="padding:.3rem .8rem;font-size:.8rem" href="' + esc(link(i)) + '">看原文</a><button type="button" class="btn p" style="padding:.3rem .8rem;font-size:.8rem" data-reflect="' + esc(i.id) + '">拿這個去反思 <i class="fas fa-arrow-right"></i></button></div></div>';
+        '<div class="flex gap-2 mt-3"><button type="button" class="btn g" style="padding:.3rem .8rem;font-size:.8rem" data-view="' + esc(i.id) + '" data-kbhref="' + esc(link(i)) + '">看原文</button><button type="button" class="btn p" style="padding:.3rem .8rem;font-size:.8rem" data-reflect="' + esc(i.id) + '">拿這個去反思 <i class="fas fa-arrow-right"></i></button></div></div>';
     }).join('');
     var byTopic = {}; d.ideas.forEach(function (x) { var k = x.topic || '(沒有分類)'; byTopic[k] = (byTopic[k] || 0) + 1; });
     var tchips = Object.keys(byTopic).sort(function (a, b) { return byTopic[b] - byTopic[a]; }).map(function (k) { return '<span class="pill todo">' + esc(cut(k, 14)) + ' · ' + byTopic[k] + ' 個想法</span>'; }).join(' ');
@@ -221,7 +223,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var i = ideaById(selIdea);
     var opts = d.ideas.slice().sort(function (a, b) { return (b.date || 0) - (a.date || 0); }).map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === selIdea ? ' selected' : '') + '>' + ASRA.mmdd(x.date) + ' ' + ASRA.TNAME[x.type] + ':' + esc(cut(x.title, 20)) + '</option>'; }).join('');
     var reps = i.replyNodes.slice().sort(function (a, b) { return (a.date || 0) - (b.date || 0); }).map(function (r) {
-      return '<div class="flex gap-2 py-2 border-t border-slate-100">' + tyDot(r.type) + '<div class="min-w-0"><div class="text-xs text-slate-500">' + esc(nameOf(r.author)) + ' · ' + ASRA.mmdd(r.date) + '</div><div class="text-sm text-slate-700">' + esc(cut(r.content || r.title, 90)) + '</div></div></div>';
+      return '<div class="flex gap-2 py-2 border-t border-slate-100" data-view="' + esc(r.id) + '" data-kbhref="' + esc(link(r)) + '" style="cursor:pointer" title="點一下看這則回應的原文">' + tyDot(r.type) + '<div class="min-w-0"><div class="text-xs text-slate-500">' + esc(nameOf(r.author)) + ' · ' + ASRA.mmdd(r.date) + '</div><div class="text-sm text-slate-700">' + esc(cut(r.content || r.title, 90)) + '</div></div></div>';
     }).join('') || '<p class="text-sm text-slate-400 py-2">還沒有同學回應這個想法。</p>';
     var hints = [];
     hints.push(i.ownEvid ? '✅ 你的貼文裡有寫到證據(像是實驗、觀察、資料)。' : '❓ 你的貼文裡還沒看到證據。想想:我是怎麼知道的?');
@@ -231,7 +233,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var history = mine.map(function (r) { return '<div class="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 mb-2"><div class="text-[11px] text-indigo-500 font-bold">' + KBAsra.fmtTime(r.ts) + '</div><div class="text-sm text-slate-700 whitespace-pre-wrap">' + esc(r.text) + '</div></div>'; }).join('');
     return head(3, '用證據想一想', 'Evidence-based Reflection · 證據支持的反思', '', '挑一個想法,看看當時的討論(證據)。再回答兩個問題:<b>我的想法有越想越深入嗎?還有哪些地方要再想深一點?</b>') +
       '<div class="card fade"><label class="font-black text-slate-700 text-sm">我要反思哪一個想法?</label><select id="idea-sel">' + opts + '</select>' +
-      '<div class="grid md:grid-cols-2 gap-4 mt-4"><div class="idea"><div class="text-xs font-black text-indigo-600 mb-1">我的想法</div><div class="flex gap-2">' + tyDot(i.type) + '<div><div class="font-black text-slate-800">' + esc(i.title) + '</div><p class="text-sm text-slate-600 mt-1">' + esc(i.content) + '</p></div></div><div class="mt-2">' + stPill(i.status) + ' <a class="text-xs text-indigo-600 underline ml-2" href="' + esc(link(i)) + '">到論壇看原文</a></div></div>' +
+      '<div class="grid md:grid-cols-2 gap-4 mt-4"><div class="idea"><div class="text-xs font-black text-indigo-600 mb-1">我的想法</div><div class="flex gap-2">' + tyDot(i.type) + '<div><div class="font-black text-slate-800">' + esc(i.title) + '</div><p class="text-sm text-slate-600 mt-1">' + esc(i.content) + '</p></div></div><div class="mt-2">' + stPill(i.status) + ' <button type="button" class="text-xs text-indigo-600 underline ml-2" data-view="' + esc(i.id) + '" data-kbhref="' + esc(link(i)) + '">看原文</button></div></div>' +
       '<div class="idea"><div class="text-xs font-black text-indigo-600 mb-1">同學的回應(證據)</div>' + reps + '</div></div>' +
       '<div class="say mt-4"><b>分析小提醒</b><br>' + hints.join('<br>') + '</div>' +
       '<div class="mt-4"><label for="refl-text">' + qlab('q3') + '</label><div class="mt-1 text-xs text-slate-500">不知道怎麼開頭?點一點:</div><div>' + starterRow(STARTERS, 'refl-text') + '</div>' +
@@ -379,6 +381,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     if (!readonly) KBAsra.seenSet(uid, 0); build();
     KB.on(function (keys, remote) { if (remote && KB.auth.current()) { try { build(); } catch (e) {} } });
     window.addEventListener('kb-asra-error', function () { syncNote(); });
+    if (!$('panel').__pv) { $('panel').__pv = 1; $('panel').addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('[data-view]') : null; if (!b) return; e.preventDefault(); openOrig(b.getAttribute('data-view')); }); }
     KBAsra.onChange(function () { if (uid) { try { reload(); renderStepper(); if (STEPS[cur].k === 'iter' || STEPS[cur].k === 'refl' || STEPS[cur].k === 'plan') renderPanel(); } catch (e) {} } });
   }
   window.addEventListener('load', init);

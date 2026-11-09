@@ -1495,7 +1495,11 @@ async function initApiKey() {
         const model = KBConcept.build({ nodes: globalData.nodes, userId: uid, step: ts => sd.idx(ts), name: nameOf, topics: globalData.topics || [], max: 12 });
         window.__kbCC = KBConcept.create(host, model, {
             labels: sd.labels,
-            onGoPost: (id, topicId) => { KBUI.go('Knowledge Building Forum.html?topic=' + encodeURIComponent(topicId) + '&node=' + encodeURIComponent(id)); },
+            onGoPost: (id, topicId) => {
+                const ev = window.event, url = 'Knowledge Building Forum.html?topic=' + encodeURIComponent(topicId) + '&node=' + encodeURIComponent(id);
+                if (ev && (ev.ctrlKey || ev.metaKey || ev.button === 1)) { KBUI.go(url, ev); return; }   // 按住 Ctrl:另開論壇分頁
+                KBUI.postViewer.open(id, { nodes: globalData.nodes, topics: globalData.topics || [], nameOf: nameOf });   // 平常:在這個畫面彈出唯讀視窗
+            },
             // 核心/邊緣概念追問:學生本人可以回答,答案存進 ASRA 紀錄;老師預覽時只能看
             probe: (function () {
                 const canWrite = !!(gateUser && gateUser.role === 'student' && String(gateUser.id) === String(uid));

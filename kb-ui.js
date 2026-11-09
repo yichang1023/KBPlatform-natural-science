@@ -303,9 +303,74 @@
   doc.addEventListener('click', onNewTabClick, true);
   doc.addEventListener('auxclick', function (e) { if (e.button === 1) onNewTabClick(e); }, true);
 
+  /* ---------- 唯讀的「看原文」視窗:不離開目前頁面,只能看、不能編輯 ----------
+   *  KBUI.postViewer.open(貼文編號, { nodes, topics, nameOf(學生編號) })  三個選項都可省略(預設讀 KB 資料)
+   *  視窗內可以點上一層(這則回應的對象)或下面的回應,在視窗裡一則一則看;「在論壇開啟」才會另開分頁。 */
+  var PV_TYPE = { question: ['提問', '#3b82f6'], extend: ['延伸', '#eab308'], improve: ['改進', '#10b981'], counter: ['反駁', '#ef4444'], riseabove: ['整合', '#8b5cf6'] };
+  function pvFmt(ts) { var d = new Date(ts); return isNaN(d) ? '' : d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(); }
+  function pvCss() {
+    if (doc.getElementById('kbui-pv-css')) return;
+    var st = doc.createElement('style'); st.id = 'kbui-pv-css';
+    st.textContent = '.kbui-pv{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.55);backdrop-filter:blur(2px)}' +
+      '.kbui-pv-card{background:#fff;border-radius:18px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 60px -20px rgba(15,23,42,.5);overflow:hidden;font-family:inherit}' +
+      '.kbui-pv-h{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #e2e8f0}' +
+      '.kbui-pv-dot{width:40px;height:40px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;flex:none}' +
+      '.kbui-pv-meta{flex:1;min-width:0;font-size:12px;color:#64748b;line-height:1.5}.kbui-pv-meta b{font-size:13px;letter-spacing:.04em}' +
+      '.kbui-pv-x{border:0;background:transparent;font-size:20px;color:#94a3b8;cursor:pointer;padding:4px 8px}.kbui-pv-x:hover{color:#475569}' +
+      '.kbui-pv-b{padding:18px 22px;overflow:auto;flex:1}.kbui-pv-b h3{margin:0 0 8px;font-size:20px;font-weight:900;color:#0f172a;line-height:1.4}' +
+      '.kbui-pv-t{white-space:pre-wrap;line-height:1.85;color:#334155;font-size:15px;margin:0}' +
+      '.kbui-pv-sec{margin:16px 0 6px;font-size:12px;font-weight:800;color:#64748b}' +
+      '.kbui-pv-lk{display:block;width:100%;text-align:left;border:1px solid #e2e8f0;background:#f8fafc;border-radius:12px;padding:8px 12px;margin:6px 0;font-size:13px;line-height:1.6;color:#334155;cursor:pointer}.kbui-pv-lk:hover{background:#eef2ff;border-color:#c7d2fe}' +
+      '.kbui-pv-tag{display:inline-block;color:#fff;font-size:11px;font-weight:800;padding:0 8px;border-radius:99px}' +
+      '.kbui-pv-f{display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid #e2e8f0;background:#f8fafc;flex-wrap:wrap}' +
+      '.kbui-pv-btn{border:0;border-radius:10px;padding:8px 16px;background:#4f46e5;color:#fff;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;display:inline-block}.kbui-pv-btn.g{background:#e2e8f0;color:#334155}' +
+      '.kbui-pv-note{font-size:12px;color:#94a3b8}';
+    (doc.head || doc.documentElement).appendChild(st);
+  }
+  function openPost(id, ctx) {
+    ctx = ctx || {}; pvCss();
+    var K = global.KB, nodes = ctx.nodes || (K && K.content ? (K.content.get().nodes || []) : []);
+    var topics = ctx.topics || (K && K.content ? (K.content.get().topics || []) : []);
+    var byId = {}; nodes.forEach(function (n) { byId[n.id] = n; });
+    var names = null;
+    function nameOf(u) { if (ctx.nameOf) return ctx.nameOf(u); try { if (!names) names = K.compat.userList(K.auth.current().role); return (names[u] && names[u].name) || '同學'; } catch (e) { return '同學'; } }
+    function topicName(t) { var x = topics.filter(function (o) { return String(o.id) === String(t); })[0]; return x ? (x.name || x.title || '') : ''; }
+    function href(n) { return 'Knowledge Building Forum.html?topic=' + encodeURIComponent(n.topicId) + '&node=' + encodeURIComponent(n.id); }
+    function snip(n) { var s = String((n.title ? n.title + ' — ' : '') + (n.content || '')).replace(/\s+/g, ' '); return s.length > 70 ? s.slice(0, 70) + '…' : s; }
+    function tp(n) { return PV_TYPE[n.type] || ['想法', '#64748b']; }
+    var stack = [id], prevFocus = doc.activeElement;
+    var ov = doc.createElement('div'); ov.className = 'kbui-pv'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', '貼文原文');
+    doc.body.appendChild(ov);
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    function close() { doc.removeEventListener('keydown', onKey, true); if (ov.parentNode) ov.parentNode.removeChild(ov); try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {} }
+    function draw() {
+      var n = byId[stack[stack.length - 1]], h;
+      if (!n) h = '<div class="kbui-pv-card"><div class="kbui-pv-b"><p class="kbui-pv-t">找不到這則貼文(可能已被刪除)。</p></div><div class="kbui-pv-f"><span style="flex:1"></span><button type="button" class="kbui-pv-btn" data-a="close">關閉</button></div></div>';
+      else {
+        var t = tp(n), par = n.parentId ? byId[n.parentId] : null, kids = nodes.filter(function (x) { return x.parentId === n.id; }).sort(function (a, b) { return (a.date || 0) - (b.date || 0); });
+        h = '<div class="kbui-pv-card"><div class="kbui-pv-h"><span class="kbui-pv-dot" style="background:' + t[1] + '">' + esc(t[0].charAt(0)) + '</span><div class="kbui-pv-meta"><b style="color:' + t[1] + '">' + esc(t[0]) + '</b><div>' + esc(nameOf(n.author)) + ' · ' + pvFmt(n.date) + (topicName(n.topicId) ? ' · ' + esc(topicName(n.topicId)) : '') + '</div></div><button type="button" class="kbui-pv-x" data-a="close" aria-label="關閉">✕</button></div>' +
+          '<div class="kbui-pv-b"><h3>' + esc(n.title || '(沒有標題)') + '</h3><p class="kbui-pv-t">' + esc(n.content || '') + '</p>' +
+          (par ? '<div class="kbui-pv-sec">這則是回應</div><button type="button" class="kbui-pv-lk" data-go="' + esc(par.id) + '"><b>' + esc(nameOf(par.author)) + '</b>:' + esc(snip(par)) + '</button>' : '') +
+          (kids.length ? '<div class="kbui-pv-sec">同學的回應 ' + kids.length + ' 則</div>' + kids.slice(0, 20).map(function (k) { var kt = tp(k); return '<button type="button" class="kbui-pv-lk" data-go="' + esc(k.id) + '"><span class="kbui-pv-tag" style="background:' + kt[1] + '">' + esc(kt[0]) + '</span> <b>' + esc(nameOf(k.author)) + '</b> ' + pvFmt(k.date) + ':' + esc(snip(k)) + '</button>'; }).join('') + (kids.length > 20 ? '<div class="kbui-pv-note">還有 ' + (kids.length - 20) + ' 則,請到論壇查看。</div>' : '') : '') + '</div>' +
+          '<div class="kbui-pv-f"><span class="kbui-pv-note">這裡只能看,不能編輯。</span><span style="flex:1"></span>' + (stack.length > 1 ? '<button type="button" class="kbui-pv-btn g" data-a="back">← 上一則</button>' : '') + '<a class="kbui-pv-btn g" href="' + esc(href(n)) + '" target="_blank" rel="noopener">在論壇開啟</a><button type="button" class="kbui-pv-btn" data-a="close">關閉</button></div></div>';
+      }
+      ov.innerHTML = h; var cl = ov.querySelector('[data-a=close]'); if (cl && cl.focus) cl.focus();
+    }
+    ov.addEventListener('click', function (e) {
+      if (e.target === ov) { close(); return; }
+      var b = e.target.closest ? e.target.closest('[data-a],[data-go]') : null; if (!b) return;
+      if (b.getAttribute('data-go')) { stack.push(b.getAttribute('data-go')); draw(); var bd = ov.querySelector('.kbui-pv-b'); if (bd) bd.scrollTop = 0; }
+      else if (b.getAttribute('data-a') === 'back') { stack.pop(); draw(); }
+      else if (b.getAttribute('data-a') === 'close') close();
+    });
+    doc.addEventListener('keydown', onKey, true);
+    draw();
+    return { close: close };
+  }
+
   global.KBUI = {
     toast: toast, modal: modal, confirm: confirmBox, confirmText: confirmText, changePassword: changePassword,
     mountUserBar: mountUserBar, requireLogin: requireLogin, announce: announce, navItems: navItems,
-    menuHTML: menuHTML, wireMenu: wireMenu, esc: esc, injectCSS: injectCSS, ensureConsent: ensureConsent, go: go
+    menuHTML: menuHTML, wireMenu: wireMenu, esc: esc, injectCSS: injectCSS, ensureConsent: ensureConsent, go: go, postViewer: { open: openPost }
   };
 })(window);
