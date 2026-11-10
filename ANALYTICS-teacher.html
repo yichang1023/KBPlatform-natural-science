@@ -528,10 +528,10 @@
                     <div id="seq-controls" class="flex flex-wrap gap-2 mb-2" role="group" aria-label="選擇要看的階段"></div>
                     <div id="seq-insight" class="text-xs text-slate-700 leading-relaxed mb-2"></div>
                     <div id="seq-network" class="w-full"></div>
-                    <p class="text-[11px] text-slate-500 leading-relaxed mt-1"><b>怎麼看:</b>圓越大,表示這一類貼文越多。<b>箭頭 A → B</b> = 有人回應了一則 A 之後,常常接著寫 B;箭頭越粗,機率越高;繞著自己的圈圈 = 接著又寫同一類。只畫出機率 15% 以上的接續。(反駁併入「改進」)</p>
+                    <p class="text-[11px] text-slate-500 leading-relaxed mt-1"><b>怎麼看:</b>圓越大,表示這一類貼文越多。<b>箭頭 A → B</b> = 有人回應了一則 A 之後,常常接著寫 B;箭頭越粗,機率越高;繞著自己的圈圈 = 接著又寫同一類。只畫出機率 15% 以上的接續。(反駁併入「改進」)<br><b>想知道百分比怎麼來的?</b>把滑鼠移到線上的百分比(手機點一下),會說明「有幾則貼文在回應這一類、其中幾則是哪一類」和算式。</p>
                     <details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">看數字表格(每一列加起來是 100%)</summary>
                         <div class="overflow-x-auto mt-2"><div id="sequential-matrix-container" class="min-w-[300px]"></div></div>
-                        <div class="mt-2 text-xs text-slate-400 italic text-right">* 數值代表轉移機率 (%)，顏色越深機率越高。參考 Jeong (2003)。</div>
+                        <div class="mt-2 text-xs text-slate-400 italic text-right">* 數值代表轉移機率 (%)，顏色越深機率越高。把滑鼠移到數字上可以看它是怎麼算出來的。參考 Jeong (2003)。</div>
                     </details>
                 </div>
                 <div class="card">
@@ -1552,6 +1552,62 @@ async function geminiFetch(key, init) {
             return { all: all, ph: usePh ? ph : null, n: list.length };
         }
         function seqRowTotal(m, a) { return SEQ_TYPES.reduce((s, b) => s + m[a][b.k], 0); }
+        // ===== 百分比說明泡泡:滑鼠移到(鍵盤停在、手機點一下)帶 data-seqtip 的數字,說明「這個百分比怎麼算出來的」 =====
+        const SEQ_SCOPE = { all: '整體(全部貼文)', p0: '前期(最早的三分之一貼文)', p1: '中期(中間的三分之一貼文)', p2: '後期(最晚的三分之一貼文)' };
+        const seqEsc = x => String(x).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        function seqTipAttr(an, bn, c, tot, scope) {
+            const raw = tot ? c / tot * 100 : 0, p = Math.round(raw), same = Math.abs(raw - p) < 0.05;
+            const parts = [an + ' → ' + bn + ' ' + p + '%'];
+            if (!tot) parts.push('範圍:' + scope + '。這裡還沒有人回應過「' + an + '」,所以算不出比例。');
+            else {
+                parts.push('範圍:' + scope);
+                parts.push('有 ' + tot + ' 則貼文是在回應「' + an + '」,其中 ' + c + ' 則本身是「' + bn + '」。');
+                parts.push('算式:' + c + ' ÷ ' + tot + ' = ' + (same ? p + '%' : raw.toFixed(1) + '%(四捨五入顯示 ' + p + '%)'));
+                parts.push('同一列(接在「' + an + '」後面)的百分比加起來是 100%。');
+                if (tot < 10) parts.push('⚠ 只有 ' + tot + ' 則,樣本很少,僅供參考。');
+            }
+            if (an === '改進' || bn === '改進') parts.push('「反駁」併在「改進」裡一起算。');
+            return seqEsc(parts.join('||'));
+        }
+        function seqChgTip(x) {
+            const one = (lab, c, t, p) => lab + ':有 ' + t + ' 則是在回應「' + x.a.name + '」,其中 ' + c + ' 則是「' + x.b.name + '」 → ' + c + ' ÷ ' + t + ' = ' + Math.round(p) + '%';
+            return seqEsc([x.a.name + ' → ' + x.b.name + ':前期 ' + Math.round(x.p0) + '% → 後期 ' + Math.round(x.p2) + '%',
+                one('前期', x.c0, x.t0, x.p0), one('後期', x.c2, x.t2, x.p2),
+                '算式:變化 = 後期 − 前期 ≈ ' + (x.d > 0 ? '+' : '') + Math.round(x.d) + ' 個百分點',
+                '只比較前期、後期「回應「' + x.a.name + '」的貼文」都有 10 則以上的接續,太少的不比。'].join('||'));
+        }
+        (function () {
+            if (window.__kbSeqTip) return; window.__kbSeqTip = true;
+            let tip = null, cur = null, timer = 0, down = false;
+            const ensure = () => { if (tip) return tip; tip = document.createElement('div'); tip.id = 'kbseq-tip'; tip.setAttribute('role', 'tooltip'); tip.style.cssText = 'position:fixed;z-index:9999;max-width:290px;background:#1e293b;color:#fff;font-size:12px;line-height:1.55;padding:9px 11px;border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.3);pointer-events:none;display:none;left:0;top:0'; document.body.appendChild(tip); return tip; };
+            const find = t => (t && t.closest) ? t.closest('[data-seqtip]') : null;
+            const hide = () => { if (tip) tip.style.display = 'none'; cur = null; clearTimeout(timer); };
+            const put = (x, y) => { const r = tip.getBoundingClientRect(); let L = x + 14, T = y + 18; if (L + r.width > window.innerWidth - 8) L = Math.max(8, x - r.width - 14); if (T + r.height > window.innerHeight - 8) T = Math.max(8, y - r.height - 14); tip.style.left = L + 'px'; tip.style.top = T + 'px'; };
+            const show = (el, x, y) => {
+                ensure();
+                if (el !== cur) {
+                    cur = el; tip.textContent = '';
+                    el.getAttribute('data-seqtip').split('||').forEach((txt, i) => {
+                        const d = document.createElement('div'); d.textContent = txt;
+                        d.style.cssText = i === 0 ? 'font-weight:800;font-size:13px' : /^算式/.test(txt) ? 'margin-top:4px;background:rgba(255,255,255,.15);border-radius:6px;padding:2px 7px;font-weight:700' : /^⚠/.test(txt) ? 'margin-top:4px;color:#fde68a' : 'margin-top:3px;opacity:.92';
+                        tip.appendChild(d);
+                    });
+                }
+                tip.style.display = 'block'; put(x, y);
+            };
+            const move = e => { if (down) return; const el = find(e.target); if (el) show(el, e.clientX, e.clientY); else if (cur) hide(); };
+            document.addEventListener('mouseover', move);
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseout', e => { if (cur && !find(e.relatedTarget)) hide(); });
+            document.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') { down = true; hide(); } });
+            window.addEventListener('pointerup', () => { down = false; });
+            window.addEventListener('pointercancel', () => { down = false; });
+            document.addEventListener('wheel', hide, { passive: true });
+            window.addEventListener('scroll', hide, { passive: true, capture: true });
+            document.addEventListener('click', e => { if (!(window.matchMedia && window.matchMedia('(hover: none)').matches)) return; const el = find(e.target); if (el) { show(el, e.clientX, e.clientY); clearTimeout(timer); timer = setTimeout(hide, 6000); } else hide(); });
+            document.addEventListener('focusin', e => { const el = find(e.target); if (el) { const r = el.getBoundingClientRect(); show(el, r.left + r.width / 2, r.bottom - 8); } });
+            document.addEventListener('focusout', hide);
+        })();
         function seqTop(m) {
             const out = []; SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => { const tot = seqRowTotal(m, a.k); if (tot && m[a.k][b.k]) out.push({ a: a, b: b, c: m[a.k][b.k], p: m[a.k][b.k] / tot * 100, tot: tot }); }));
             return out.sort((x, y) => y.c - x.c);
@@ -1566,26 +1622,26 @@ async function geminiFetch(key, init) {
             SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => {
                 const tot = seqRowTotal(m, a.k), c = m[a.k][b.k]; if (!tot || !c) return;
                 const p = c / tot; if (p < 0.15) return;
-                const sw = (1.5 + 9 * p).toFixed(1), dash = tot < 10 ? ' stroke-dasharray="5 4"' : '', tip = '<title>' + a.name + ' → ' + b.name + ':' + Math.round(p * 100) + '%(回應「' + a.name + '」共 ' + tot + ' 次,其中 ' + c + ' 次接著是「' + b.name + '」)' + (tot < 10 ? ' 樣本很少,僅供參考' : '') + '</title>';
+                const sw = (1.5 + 9 * p).toFixed(1), dash = tot < 10 ? ' stroke-dasharray="5 4"' : '', tipA = ' data-seqtip="' + seqTipAttr(a.name, b.name, c, tot, SEQ_SCOPE[seqUI.view] || SEQ_SCOPE.all) + '"';
                 if (a.k === b.k) {
                     // 自己接自己的圈:朝「離大家中心最遠」的方向畫(球被拖到哪裡,圈就跟著轉)
                     let ux = a.x - mxs, uy = a.y - mys; const ul = Math.sqrt(ux * ux + uy * uy); if (ul < 1) { ux = 0; uy = -1; } else { ux /= ul; uy /= ul; }
                     const cx = a.x + ux * (a.r + 14), cy = a.y + uy * (a.r + 14), rr = 17;
-                    edges += '<g>' + tip + '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + rr + '" fill="none" stroke="' + a.color + '" stroke-width="' + sw + '" opacity=".8"' + dash + '/></g>';
-                    labels += '<text x="' + (cx + ux * (rr + 12)).toFixed(1) + '" y="' + (cy + uy * (rr + 11) + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
+                    edges += '<g' + tipA + '><circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + rr + '" fill="none" stroke="' + a.color + '" stroke-width="' + sw + '" opacity=".8"' + dash + '/></g>';
+                    labels += '<text' + tipA + ' x="' + (cx + ux * (rr + 12)).toFixed(1) + '" y="' + (cy + uy * (rr + 11) + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
                 } else {
                     const vx = b.x - a.x, vy = b.y - a.y, len = Math.sqrt(vx * vx + vy * vy), ux = vx / len, uy = vy / len, nx = -uy, ny = ux, bend = 26;
                     const x1 = a.x + ux * (a.r + 2) + nx * 6, y1 = a.y + uy * (a.r + 2) + ny * 6, x2 = b.x - ux * (b.r + 8) + nx * 6, y2 = b.y - uy * (b.r + 8) + ny * 6;
                     const cx = (x1 + x2) / 2 + nx * bend, cy = (y1 + y2) / 2 + ny * bend, mx = 0.25 * x1 + 0.5 * cx + 0.25 * x2, my = 0.25 * y1 + 0.5 * cy + 0.25 * y2;
-                    edges += '<g>' + tip + '<path d="M' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' Q' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + x2.toFixed(1) + ' ' + y2.toFixed(1) + '" fill="none" stroke="' + a.color + '" stroke-width="' + sw + '" stroke-linecap="round" opacity=".75"' + dash + ' marker-end="url(#seq-arr-' + a.k + ')"/></g>';
-                    labels += '<text x="' + mx.toFixed(1) + '" y="' + (my + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
+                    edges += '<g' + tipA + '><path d="M' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' Q' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + x2.toFixed(1) + ' ' + y2.toFixed(1) + '" fill="none" stroke="' + a.color + '" stroke-width="' + sw + '" stroke-linecap="round" opacity=".75"' + dash + ' marker-end="url(#seq-arr-' + a.k + ')"/></g>';
+                    labels += '<text' + tipA + ' x="' + mx.toFixed(1) + '" y="' + (my + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
                 }
             }));
             const nodes = SEQ_TYPES.map(t => '<g data-seqn="' + t.k + '" style="cursor:grab"><title>' + t.name + ':被回應 ' + seqRowTotal(m, t.k) + ' 次;被當作回應 ' + colTot[t.k] + ' 次</title><circle cx="' + t.x.toFixed(1) + '" cy="' + t.y.toFixed(1) + '" r="' + t.r.toFixed(1) + '" fill="' + t.color + '" stroke="#fff" stroke-width="3"/><text x="' + t.x.toFixed(1) + '" y="' + (t.y + 5).toFixed(1) + '" text-anchor="middle" class="seq-nm">' + t.name + '</text></g>').join('');
             return defs + edges + nodes + labels;
         }
         function seqSvg(m) {
-            return '<svg viewBox="0 0 ' + SEQ_W + ' ' + SEQ_H + '" width="100%" role="img" aria-label="言談序列轉移網絡圖" style="background:#f8fafc;border-radius:14px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab"><style>.seq-lb{font:bold 12px sans-serif;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:3.5px;stroke-linejoin:round}.seq-nm{font:bold 14px sans-serif;fill:#fff;pointer-events:none}</style><g id="seq-vp" transform="translate(' + seqUI.px.toFixed(1) + ' ' + seqUI.py.toFixed(1) + ') scale(' + seqUI.z.toFixed(3) + ')">' + seqInner(m) + '</g></svg>';
+            return '<svg viewBox="0 0 ' + SEQ_W + ' ' + SEQ_H + '" width="100%" role="img" aria-label="言談序列轉移網絡圖" style="background:#f8fafc;border-radius:14px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab"><style>.seq-lb{cursor:help;font:bold 12px sans-serif;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:3.5px;stroke-linejoin:round}.seq-nm{font:bold 14px sans-serif;fill:#fff;pointer-events:none}</style><g id="seq-vp" transform="translate(' + seqUI.px.toFixed(1) + ' ' + seqUI.py.toFixed(1) + ') scale(' + seqUI.z.toFixed(3) + ')">' + seqInner(m) + '</g></svg>';
         }
         // 互動:拖圓球(其他球慢慢跟過來)、滾輪縮放、拖背景移動、還原
         function seqBind(box) {
@@ -1650,12 +1706,12 @@ async function geminiFetch(key, init) {
             if (!top.length) { box.innerHTML = '<div class="text-sm text-slate-400 py-6 text-center">這一段還沒有「回應別人」的貼文。</div>'; ins.innerHTML = ''; return; }
             seqUI.m = m; box.innerHTML = seqSvg(m) + SEQ_TOOLS; seqBind(box);
             box.querySelector('svg').setAttribute('aria-label', '言談序列轉移網絡圖:最常見的接續是 ' + top.slice(0, 3).map(x => x.a.name + '接' + x.b.name + ' ' + Math.round(x.p) + '%').join('、'));
-            let html = '<b>最常見的接續:</b>' + top.slice(0, 3).map(x => '<span style="color:' + x.a.color + ';font-weight:700">' + x.a.name + '</span> → <span style="color:' + x.b.color + ';font-weight:700">' + x.b.name + '</span> ' + Math.round(x.p) + '%(' + x.c + ' 次)').join(';') + '。';
+            let html = '<b>最常見的接續:</b>' + top.slice(0, 3).map(x => '<span data-seqtip="' + seqTipAttr(x.a.name, x.b.name, x.c, x.tot, SEQ_SCOPE[seqUI.view] || SEQ_SCOPE.all) + '" style="cursor:help;border-bottom:1px dotted #94a3b8"><span style="color:' + x.a.color + ';font-weight:700">' + x.a.name + '</span> → <span style="color:' + x.b.color + ';font-weight:700">' + x.b.name + '</span> ' + Math.round(x.p) + '%(' + x.c + ' 次)</span>').join(';') + '。';
             if (C.ph) {
-                const d = []; SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => { const t0 = seqRowTotal(C.ph[0], a.k), t2 = seqRowTotal(C.ph[2], a.k); if (t0 >= 10 && t2 >= 10) { const p0 = C.ph[0][a.k][b.k] / t0 * 100, p2 = C.ph[2][a.k][b.k] / t2 * 100; d.push({ a: a, b: b, p0: p0, p2: p2, d: p2 - p0 }); } }));
+                const d = []; SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => { const t0 = seqRowTotal(C.ph[0], a.k), t2 = seqRowTotal(C.ph[2], a.k); if (t0 >= 10 && t2 >= 10) { const p0 = C.ph[0][a.k][b.k] / t0 * 100, p2 = C.ph[2][a.k][b.k] / t2 * 100; d.push({ a: a, b: b, p0: p0, p2: p2, d: p2 - p0, c0: C.ph[0][a.k][b.k], t0: t0, c2: C.ph[2][a.k][b.k], t2: t2 }); } }));
                 d.sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
                 const t = d.slice(0, 2).filter(x => Math.abs(x.d) >= 8);
-                if (t.length) html += '<br><b>前期 → 後期變化最大:</b>' + t.map(x => x.a.name + ' → ' + x.b.name + ' ' + Math.round(x.p0) + '% → ' + Math.round(x.p2) + '%(' + (x.d > 0 ? '變多' : '變少') + ')').join(';') + '。';
+                if (t.length) html += '<br><b>前期 → 後期變化最大:</b>' + t.map(x => '<span data-seqtip="' + seqChgTip(x) + '" style="cursor:help;border-bottom:1px dotted #94a3b8">' + x.a.name + ' → ' + x.b.name + ' ' + Math.round(x.p0) + '% → ' + Math.round(x.p2) + '%(' + (x.d > 0 ? '變多' : '變少') + ')</span>').join(';') + '。';
             }
             ins.innerHTML = html;
         }
@@ -1703,7 +1759,7 @@ async function geminiFetch(key, init) {
                             if(pct > 50) text = 'white';
                             else text = '#1e3a8a';
                         }
-                        html += `<td><div class="seq-cell" style="background-color:${bg}; color:${text}">${pct}%</div></td>`;
+                        html += `<td><div class="seq-cell" tabindex="0" data-seqtip="${seqTipAttr(labels[rowType], labels[colType], count, rowTotal, SEQ_SCOPE.all)}" style="cursor:help;background-color:${bg}; color:${text}">${pct}%</div></td>`;
                     });
                     html += `</tr>`;
                 });

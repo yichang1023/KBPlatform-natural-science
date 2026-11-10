@@ -81,6 +81,7 @@
       lockout: { maxFails: 5, minutes: 10 },
       analysis: { agencyPass: 0.7, agencyRate: 0.6, agencyTargets: { init: 0.25, mon: 0.5, exp: 0.3 }, kbDiversityContrast: 0.3, kbSources: 0.05, kbQuestion: 0.15, extraTerms: '', ignoredTerms: '' },
       ai: { enabled: true, stripNames: true, model: 'auto' },
+      media: { enabled: true },   // 發言視窗的「📷 加照片 / 🎙️ 錄音」(設定中心可關閉)
       voice: { enabled: true },   // 發言視窗的「🎤 用說的」語音輸入(測試中;設定中心可關閉,關閉後回到只有打字)
       requireStudentPwChange: false,   // 目前統一不強制改密碼(此設定已不再生效)
       consent: { enabled: false, version: 1, text: '歡迎使用本平台。本平台用於課程學習與教學研究:你在論壇的發言與操作紀錄會被保存,並可能以匿名方式(姓名會以代號取代)用於教學分析與研究。請妥善保管自己的帳號與密碼,不要借給別人使用。若有疑問請洽老師。按「同意並繼續」表示你已閱讀並同意。' }

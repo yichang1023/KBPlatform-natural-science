@@ -16,6 +16,7 @@
 <script src="kb-cloud.js"></script>
     <script src="kb-ui.js"></script>
     <script src="kb-voice.js"></script>
+    <script src="kb-media.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -195,6 +196,7 @@
                 <div class="relative">
                     <textarea id="node-content" rows="4" class="w-full px-4 py-3 border border-slate-300 rounded-lg outline-none text-base" placeholder="輸入詳細內容..."></textarea>
                 </div>
+                <div id="kbm-box"></div>
                 <div id="ai-suggestion-box" class="hidden mt-2 bg-blue-50 border border-blue-100 text-blue-800 p-3 rounded-lg text-sm flex items-start gap-3 shadow-sm">
                     <i class="fa-solid fa-lightbulb text-yellow-500 mt-1 shrink-0"></i>
                     <div>
@@ -225,6 +227,7 @@
             <div class="p-4 md:p-6 overflow-y-auto custom-scroll flex-1">
                 <h2 id="detail-title" class="text-lg md:text-2xl font-bold mb-4 text-slate-900 leading-snug"></h2>
                 <p id="detail-content" class="text-sm md:text-lg leading-relaxed whitespace-pre-wrap text-slate-700"></p>
+                <div id="detail-media" style="display:none"></div>
             </div>
             <div class="p-3 md:p-4 border-t border-slate-100 bg-slate-50 rounded-b-xl flex justify-end gap-3 shrink-0">
                 <button id="btn-detail-reply" class="px-5 py-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 text-sm font-medium w-full md:w-auto justify-center"><i class="fa-solid fa-reply"></i> 延伸</button>
@@ -736,6 +739,7 @@
             if (pid) { try { KB.content.markRead(pid); } catch (e) {} }   // 要回覆別人的想法,一定先讀過了(分析頁的「閱讀他人」)
             window.state.composer.editingId = null;
             try { if (window.KBVoice) { KBVoice.reset(); KBVoice.refresh(); } } catch (e) {}
+            try { if (window.KBMedia) { KBMedia.mount(); KBMedia.reset(); } } catch (e) {}
             const hh = document.querySelector('#modal-node h3'); if (hh) hh.textContent = '貢獻想法';
             const pb = document.querySelector('#modal-node button[onclick*="submitNode"]'); if (pb) pb.textContent = '發布';
             window.state.composer.parentId = pid;
@@ -759,6 +763,7 @@
             try { if (window.KBVoice) { KBVoice.reset(); KBVoice.refresh(); } } catch (e) {}
             document.getElementById('node-title').value = n.title || '';
             document.getElementById('node-content').value = n.content || '';
+            try { if (window.KBMedia) KBMedia.load(n.media || []); } catch (e) {}
             const hh = document.querySelector('#modal-node h3'); if (hh) hh.textContent = '編輯我的貼文';
             const pb = document.querySelector('#modal-node button[onclick*="submitNode"]'); if (pb) pb.textContent = '儲存修改';
         };
@@ -797,10 +802,13 @@
             const content = document.getElementById('node-content').value;
             if(!title) return window.ui.showToast('請輸入標題', 'error');
             if(!content) return window.ui.showToast('請輸入內容', 'error');
+            let mediaList = [];
+            try { if (window.KBMedia && KBMedia.enabled()) { const g = KBMedia.gate(); if (g) return window.ui.showToast(g, 'error'); mediaList = KBMedia.collect(); } } catch (e) {}
             if (window.state.composer.editingId) {
                 const en = window.state.nodes.find(x => x.id === window.state.composer.editingId);
                 if (!en || !KB.can('forum.editOwn', { author: en.author })) return window.ui.showToast('你沒有編輯這則貼文的權限', 'error');
                 en.title = title; en.content = content; en.type = window.state.composer.selectedScaffold; en.editedAt = Date.now();
+                if (mediaList.length) en.media = mediaList; else delete en.media;
                 try { const vm = window.KBVoice && KBVoice.collect(); if (vm) en.voice = vm; } catch (e) {}
                 KB.content.audit('post.edit', en.id, (title || '').slice(0, 40));
                 window.state.composer.editingId = null;
@@ -844,7 +852,7 @@
                 parentId: pid,
                 cluster: randomCluster,
                 promisingness: defaultPromisingness
-            }, voiceMeta ? { voice: voiceMeta } : {}));
+            }, voiceMeta ? { voice: voiceMeta } : {}, mediaList.length ? { media: mediaList } : {}));
             KB.content.audit('post.create', window.state.currentTopicId || '', (title || '').slice(0, 40));
             window.dataManager.save();
             window.ui.closeModal('modal-node');
@@ -865,6 +873,7 @@
             document.getElementById('detail-author').innerText = u.name;
             document.getElementById('detail-date').innerText = new Date(n.date).toLocaleDateString('zh-TW');
             document.getElementById('detail-content').innerText = n.content;
+            try { if (window.KBMedia) KBMedia.renderView(document.getElementById('detail-media'), n.media || []); } catch (e) {}
             document.getElementById('btn-detail-reply').style.display = KB.can('forum.post') ? '' : 'none';
             document.getElementById('btn-detail-reply').onclick = () => {
                 window.ui.closeModal('modal-detail');
@@ -1656,6 +1665,7 @@
             document.getElementById(id).classList.add('hidden');
             if(id === 'modal-node') {
                 try { if (window.KBVoice) KBVoice.reset(); } catch (e) {}
+                try { if (window.KBMedia) KBMedia.reset(); } catch (e) {}
                 document.getElementById('node-title').value = '';
                 document.getElementById('node-content').value = '';
                 document.getElementById('ai-suggestion-box').classList.add('hidden');
@@ -1995,7 +2005,7 @@
                             <img src="${user.avatar}" class="w-4 h-4 rounded-full">
                             <span>${user.name}</span>
                         </div>
-                        <span>${new Date(node.date).toLocaleDateString()}</span>
+                        <span>${(node.media && node.media.length && window.KBMedia) ? '<span title="有附照片或錄音" style="margin-right:6px">' + KBMedia.badge(node.media) + '</span>' : ''}${new Date(node.date).toLocaleDateString()}</span>
                     </div>
                 </div>`;
             }).join('');

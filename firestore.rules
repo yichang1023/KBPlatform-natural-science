@@ -31,6 +31,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // 發言附件(照片/錄音):一個檔案一份文件 kb_v2_media/<編號>,內容是壓縮後的 data URL。
+    // 只能新增、不能改、不能刪;單檔 data URL 上限 900000 字元(Firestore 單份文件上限約 1MB)。
+    // 讀取是公開的(和其他資料一樣,知道網址的人看得到),請提醒小朋友不要拍到臉、名牌、住址。
+    match /kb_v2_media/{mid} {
+      allow read: if true;
+      allow create: if mid.matches('m[A-Za-z0-9_-]{6,60}')
+        && request.resource.data.keys().hasOnly(['d', 'm', 't', 'w', 'h', 'dur'])
+        && request.resource.data.d is string
+        && request.resource.data.d.size() <= 900000
+        && request.resource.data.m is string
+        && request.resource.data.m.matches('(image|audio)/[a-z0-9.+-]+');
+      allow update, delete: if false;
+    }
+
     // 稽核紀錄:每天一份文件,只能新增與更新
     match /kb_v2_audit/{day} {
       allow read: if true;

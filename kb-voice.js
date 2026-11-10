@@ -825,7 +825,7 @@
 
   global.KBVoice = {
     init: function (o) { o = o || {}; cfg.getContext = o.getContext || null; if (o.silenceMs) cfg.silenceMs = o.silenceMs; if (o.noSpeechMs) cfg.noSpeechMs = o.noSpeechMs; (o.fields || []).forEach(function (x) { attach(x.el, x); }); },
-    attach: attach, refresh: refresh, stop: cancelAll, reset: reset, collect: collect, enabled: enabled, supported: supported,
+    attach: attach, refresh: refresh, stop: cancelAll, isActive: function () { return !!A; }, reset: reset, collect: collect, enabled: enabled, supported: supported,
     _t: { tidyPunct: tidyPunct, SPOKEN_WORDS: SPOKEN_WORDS, punctuate: punctuate, enderFor: enderFor, isQuestionText: isQuestionText, setAuto: function (v) { cfg.autoPunct = v; }, setProto: function (p) { cfg.proto = p; }, cfg: cfg, pickBest: pickBest, applyFixes: applyFixes, spokenPunct: spokenPunct, composeText: composeText, joinerFor: joinerFor, detectPitch: detectPitch, pitchRise: pitchRise, composedFor: composedFor, rebase: rebase, squeezeSpaces: squeezeSpaces, processSegmentText: processSegmentText, buildVocab: buildVocab, looksLikeQuestion: looksLikeQuestion, state: function () { return { A: A, fields: fields }; }, LEXICON: LEXICON, FIX: FIX }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

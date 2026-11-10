@@ -566,6 +566,8 @@
         inpRow('連續登入失敗幾次後鎖定', '', 'ap-maxfails', c.lockout.maxFails, 'number', 'min="2" max="20"') +
         inpRow('鎖定時間(分鐘)', '', 'ap-lockmin', c.lockout.minutes, 'number', 'min="1" max="1440"') +
         '<div class="pt-2"><button class="btn btn-p btn-sm" data-act="ap-sec-save">儲存登入安全設定</button></div>') +
+      card('發言附件(照片與錄音)', 'fa-paperclip',
+        setRow('發言可以附照片與錄音(📷 加照片、🎙️ 錄音)', '開啟後,發言視窗會多「加照片」和「錄音」兩個按鈕。每則最多 3 張照片、1 段錄音(最長 2 分鐘);照片會自動縮小。檔案存在雲端,公開網站上等於「知道網址的人都看得到」,請提醒小朋友不要拍到自己或同學的臉、名牌、地址。關閉後只剩打字。需要先在 Firebase 發布含「kb_v2_media」的新規則,否則附件傳不上去。', sw('mediaEnabled', (c.media || { enabled: true }).enabled !== false))) +
       card('語音輸入(實驗中)', 'fa-microphone',
         setRow('發言視窗的語音輸入(🎤 用說的)', '開啟後,發言視窗的標題與內容旁邊會多一個「用說的」按鈕,小朋友可以用講的輸入,說完還能檢查、修改。關閉後就只有原本的打字輸入。注意:要用 Chrome 或 Edge、需要麥克風與網路,語音會送到瀏覽器的語音服務轉成文字。', sw('voiceEnabled', (c.voice || { enabled: true }).enabled !== false))) +
       card('使用說明與同意書', 'fa-file-signature',
@@ -740,7 +742,7 @@
     guestEnabled: function (v) { KB.settings.update({ guestEnabled: v }); }, studentEditOwn: function (v) { KB.settings.update({ studentEditOwn: v }); },
     forumLocked: function (v) { KB.settings.update({ forumLocked: v }); }, postWindowEnabled: function (v) { KB.settings.update({ postWindow: { enabled: v } }); },
     aiEnabled: function (v) { KB.settings.update({ ai: { enabled: v } }); }, annEnabled: function (v) { KB.settings.update({ announcement: { enabled: v } }); },
-    maintenance: function (v) { KB.settings.update({ maintenance: v }); }, voiceEnabled: function (v) { KB.settings.update({ voice: { enabled: v } }); }, consentEnabled: function (v) { KB.settings.update({ consent: { enabled: v } }); }, requireStudentPwChange: function (v) { KB.settings.update({ requireStudentPwChange: v }); }
+    maintenance: function (v) { KB.settings.update({ maintenance: v }); }, voiceEnabled: function (v) { KB.settings.update({ voice: { enabled: v } }); }, mediaEnabled: function (v) { KB.settings.update({ media: { enabled: v } }); }, consentEnabled: function (v) { KB.settings.update({ consent: { enabled: v } }); }, requireStudentPwChange: function (v) { KB.settings.update({ requireStudentPwChange: v }); }
   };
 
   document.addEventListener('click', function (e) {

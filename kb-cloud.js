@@ -7,6 +7,7 @@
  *    kb_v2/nodes__<討論區>__<序號>                     貼文,每份最多 500 則
  *    kb_v2/settings                                    { value: {...} }
  *    kb_v2/asra__<學號>                                ASRA 反思與計畫的歷史紀錄 { items: { 紀錄編號: 紀錄 } }(只增不改,見 kb-asra.js)
+ *    kb_v2_media/<附件編號>                             發言附的照片/錄音(壓縮後的 data URL),看貼文時才載入(見 kb-media.js)
  *    kb_v2_audit/<日期>                                稽核紀錄,依日期分文件
  *  寫入只改「有變動的那一筆」(欄位層級更新),所以兩個人同時發文不會互相蓋掉。
  *  備份檔只存在各裝置瀏覽器,不上雲端(請定期匯出完整備份)。
@@ -17,6 +18,7 @@
   if (!KB || !CFG) return;
   var COL = CFG.collection || 'kb_v2', ACOL = CFG.auditCollection || 'kb_v2_audit';
   var SDK = CFG.sdk || 'https://www.gstatic.com/firebasejs/9.22.1/';
+  var MCOL = CFG.mediaCollection || 'kb_v2_media';
   var KEYS = ['users', 'classes', 'groups', 'topics', 'nodes', 'trash'];
   var ORDERED = { topics: 1, classes: 1, groups: 1, trash: 1 };
   var BUCKET_MAX = 500;
@@ -26,6 +28,22 @@
 
   KB.cloud = { mode: 'cloud', state: 'connecting', error: '' };
   KB.ready = new Promise(function (res) { readyResolve = res; });
+
+  /* ---------- 發言附件(照片/錄音)---------- 一個檔案一份文件 kb_v2_media/<id> { d: data URL, m: 檔案類型, t: 時間, w,h,dur };只能新增,不能改、不能刪 */
+  function withTimeout(p, ms) { return new Promise(function (res, rej) { var t = setTimeout(function () { rej(new Error('timeout')); }, ms); p.then(function (v) { clearTimeout(t); res(v); }, function (e) { clearTimeout(t); rej(e); }); }); }
+  KB.cloud.mediaPut = function (id, rec) {
+    return KB.ready.then(function () {
+      if (!db) throw new Error('offline');
+      var o = { d: rec.d, m: rec.m, t: rec.t || Date.now() }; if (rec.w) { o.w = rec.w; o.h = rec.h; } if (rec.dur) o.dur = rec.dur;
+      return withTimeout(db.collection(MCOL).doc(String(id)).set(o), 25000);
+    });
+  };
+  KB.cloud.mediaGet = function (id) {
+    return KB.ready.then(function () {
+      if (!db) throw new Error('offline');
+      return withTimeout(db.collection(MCOL).doc(String(id)).get(), 25000).then(function (s) { return s.exists ? s.data() : null; });
+    });
+  };
 
   function setState(st, err) {
     KB.cloud.state = st; KB.cloud.error = err || '';
