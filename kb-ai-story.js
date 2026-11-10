@@ -212,7 +212,7 @@
     var nodes = o.nodes.slice().sort(function (a, b) { return a.date - b.date; }), byId = {};
     nodes.forEach(function (n) { byId[n.id] = n; });
     var days = global.kbMakeDays(nodes.map(function (n) { return n.date; })), me = o.userId == null ? null : String(o.userId);
-    var TYPE = { question: '提問', extend: '延伸', improve: '改進', counter: '反駁', riseabove: '整合' };
+    var TYPE = { question: '提問', extend: '延伸', improve: '改進', counter: '反例', riseabove: '整合' };
     var PRI = { riseabove: 0, improve: 1, counter: 2, question: 3, extend: 4 };
     var rows = [], cumPosts = 0, pairs = {}, partners = {};
     days.labels.forEach(function (lb, k) {

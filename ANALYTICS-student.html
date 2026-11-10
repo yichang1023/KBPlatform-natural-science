@@ -202,6 +202,7 @@
 <script src="kb-cloud.js"></script>
     <script src="kb-ui.js"></script>
 <script src="kb-replay.js"></script>
+<script src="kb-why.js"></script>
 <script src="kb-vocab.js"></script>
 <script src="kb-ai-story.js"></script>
 <script src="kb-forest.js"></script>
@@ -461,7 +462,7 @@
                 </div>
                 <div class="flex-1 flex items-end gap-3 pt-4 pb-2" id="scaffold-bars"></div>
                 <div class="flex justify-between text-[11px] font-bold text-slate-400 border-t border-slate-100 pt-2 px-1">
-                    <span class="w-full text-center">提問</span><span class="w-full text-center">延伸</span><span class="w-full text-center">改進</span><span class="w-full text-center">反駁</span><span class="w-full text-center">昇華</span>
+                    <span class="w-full text-center">提問</span><span class="w-full text-center">延伸</span><span class="w-full text-center">改進</span><span class="w-full text-center">反例</span><span class="w-full text-center">昇華</span>
                 </div>
             </div>
 
@@ -651,7 +652,7 @@
                         <div class="font-bold text-rose-600 mb-0.5">📖 怎麼看這張圖?</div>
                         <div>橫軸是你的每一則發言(N1 = 第 1 則);縱軸是想法的「高度」:每發言一次就往上爬一格,線越往上,代表你的想法累積得越多。</div>
                         <div class="mt-1.5 space-y-0.5">
-                            <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:2px solid #f43f5e;vertical-align:-3px;margin-right:4px"></span><b>紅色小點</b> = 一般發言。其中<b>提問、反駁</b>會讓線稍微下沉一點,表示你碰到了值得想的難題。</div>
+                            <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:2px solid #f43f5e;vertical-align:-3px;margin-right:4px"></span><b>紅色小點</b> = 一般發言。其中<b>提問、反例</b>會讓線稍微下沉一點,表示你碰到了值得想的難題。</div>
                             <div><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#fbbf24;border:2px solid #d97706;vertical-align:-3px;margin-right:4px"></span><b>黃色點</b> = <b>改進</b>:把想法改得更好,多爬 0.5。</div>
                             <div><span style="display:inline-block;width:15px;height:15px;border-radius:50%;background:#fbbf24;border:2px solid #d97706;vertical-align:-3px;margin-right:4px"></span><b>黃色大點</b> = <b>昇華</b>:把零散的想法整合成新觀點,一口氣多爬 2,是最大的進步!</div>
                             <div class="text-slate-400">把滑鼠移到任何一個點上,會顯示那一則發言的內容。</div>
@@ -840,20 +841,20 @@ async function initApiKey() {
         'roles': { title: '知識角色 (Epistemic Roles)', theory: "系統用你的貼文比例,幫你看看目前比較像哪一種夥伴:開創者、連結者、整合者、維護者。這四種角色是平台自己設計的分類,方便你看見自己的特色。", cite: "(平台自訂分類,沒有單一文獻。精神上呼應「每個人都為社群的知識負責」:Zhang, J., Scardamalia, M., Reeve, R., & Messina, R. (2009). Designs for collective cognitive responsibility in knowledge-building communities. <i>Journal of the Learning Sciences, 18</i>(1), 7–44. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508400802581676\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>)", how: "取四項分數(開創力、連結力、整合力、維護力)中最高、且超過 40 分的一項;都沒超過 40 分就是「新手」。", diff: "分數與門檻是平台設定的,不是考試成績,也不會改變。" },
         'initiator': { title: '開創力 (Initiator)', theory: "看你提問、開新話題、提出下一步的貼文占多少。", cite: "Zhang, J., Scardamalia, M., Reeve, R., & Messina, R. (2009). Designs for collective cognitive responsibility in knowledge-building communities. <i>Journal of the Learning Sciences, 18</i>(1), 7–44. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508400802581676\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "(提問、開新話題或提出下一步的貼文數 ÷ 全部貼文數),35% 算滿分,再乘上發文累積程度。", diff: "35% 是平台設定的目標,不是研究結論。" },
         'builder': { title: '連結力 (Builder)', theory: "看你有多常回應別人的想法。", cite: "Scardamalia, M., & Bereiter, C. (2006). Knowledge building: Theory, pedagogy, and technology. In R. K. Sawyer (Ed.), <i>The Cambridge Handbook of the Learning Sciences</i> (第 97 頁起). Cambridge University Press. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1017/CBO9780511816833.008\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a> <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/2006_KBTheory.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(ikit.org)</a>", how: "(回應別人貼文的篇數 ÷ 全部貼文數),90% 算滿分。", diff: "90% 是平台設定的目標。" },
-        'synthesizer': { title: '整合力 (Synthesizer)', theory: "看你有沒有把大家的想法整理成更好的結論(昇華),也看你有沒有改進想法。", cite: "Zhang, J., Scardamalia, M., Reeve, R., & Messina, R. (2009). Designs for collective cognitive responsibility in knowledge-building communities. <i>Journal of the Learning Sciences, 18</i>(1), 7–44. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508400802581676\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "整合貼文占比(12% 算滿分,占 60%)+ 改進/反駁貼文占比(45% 算滿分,占 40%)。", diff: "比例是平台設定的目標。貼文類型是你自己選的。" },
+        'synthesizer': { title: '整合力 (Synthesizer)', theory: "看你有沒有把大家的想法整理成更好的結論(昇華),也看你有沒有改進想法。", cite: "Zhang, J., Scardamalia, M., Reeve, R., & Messina, R. (2009). Designs for collective cognitive responsibility in knowledge-building communities. <i>Journal of the Learning Sciences, 18</i>(1), 7–44. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508400802581676\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "整合貼文占比(12% 算滿分,占 60%)+ 改進/反例貼文占比(45% 算滿分,占 40%)。", diff: "比例是平台設定的目標。貼文類型是你自己選的。" },
         'sustainer': { title: '維護力 (Sustainer)', theory: "看你有沒有一直參與,而且你的想法有沒有帶動別人回應。", cite: "Oshima, J., Oshima, R., & Matsuzawa, Y. (2012). Knowledge Building Discourse Explorer: A social network analysis application for knowledge building discourse. <i>Educational Technology Research and Development, 60</i>(5), 903–921. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-012-9265-2\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "有發文的日期占全部發文日的比例(占 50%)+ 被別人回覆的比例(80% 算滿分,占 50%)。", diff: "比例是平台設定的目標。" },
         'created': { title: '發文貢獻 (Contribution)', theory: '「集體認知責任」要求每個成員都需對社群知識做出貢獻。', cite: "Zhang, J., Scardamalia, M., Reeve, R., & Messina, R. (2009). Designs for collective cognitive responsibility in knowledge-building communities. <i>Journal of the Learning Sciences, 18</i>(1), 7–44. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508400802581676\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "你的貼文總數。", diff: "發文多不一定想法好,請和其他項目一起看。" },
         'read': { title: '閱讀廣度 (Reading Breadth)', theory: '廣泛閱讀他人筆記是理解社群分散知識的前提，體現「觀點多樣性」。這個數字是真實紀錄:學生在論壇「點開」別人的想法(看完整內容)的不同篇數,同一則只算一次、自己的不算;系統從開始記錄這項資料之後才會累計。', cite: "Zhang, J., & Sun, Y. (2011). Reading for idea advancement in a Grade 4 knowledge building community. <i>Instructional Science, 39</i>(4), 429–452. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11251-010-9135-4\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "你在論壇點開看過的別人的不同貼文數(同一則只算一次,自己的不算)。", diff: "只算「點開看」,不代表看懂。" },
         'buildon': { title: '觀點連結 (Build-ons)', theory: 'Build-on 代表你不僅閱讀，還進一步延伸或修正他人的想法，是知識演化的動力。', cite: "Scardamalia, M., & Bereiter, C. (2006). Knowledge building: Theory, pedagogy, and technology. In R. K. Sawyer (Ed.), <i>The Cambridge Handbook of the Learning Sciences</i> (第 97 頁起). Cambridge University Press. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1017/CBO9780511816833.008\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a> <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/2006_KBTheory.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(ikit.org)</a>", how: "你回應別人貼文的次數。" },
         'impact': { title: '社群影響力 (Community Impact)', theory: '透過「被引用數 (In-degree)」衡量你的想法激發了多少後續討論。', cite: "Oshima, J., Oshima, R., & Matsuzawa, Y. (2012). Knowledge Building Discourse Explorer: A social network analysis application for knowledge building discourse. <i>Educational Technology Research and Development, 60</i>(5), 903–921. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-012-9265-2\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "別人回覆你貼文的次數(被引用數)。", diff: "被回覆多不一定代表想法好,也可能是大家有不同意見。" },
         'evolution': { title: '想法演化 (Idea Evolution)', theory: '此軌跡圖展示你的想法如何隨時間經歷「提問 -> 修正 -> 整合」的歷程。', cite: "Zhang, J., Tao, D., Chen, M.-H., Sun, Y., Judson, D., & Naqvi, S. (2018). Co-organizing the collective journey of inquiry with Idea Thread Mapper. <i>Journal of the Learning Sciences, 27</i>(3), 390–430. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508406.2018.1444992\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Reimann, P. (2009). Time is precious: Variable- and event-centred approaches to process analysis in CSCL research. <i>International Journal of Computer-Supported Collaborative Learning, 4</i>(3), 239–257. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11412-009-9070-z\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "依時間畫出你的貼文類型(提問、延伸、改進、整合…)。" },
-        'scaffold': { title: '思考鷹架 (Scaffolds)', theory: '鷹架是支持高階思維的語言模板，幫助學生進行更細緻的論證與反思。', cite: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "統計你用了各種思考鷹架(提問、延伸、改進、反駁、昇華)各幾次。", diff: "鷹架是你發文時自己選的。" },
+        'scaffold': { title: '思考鷹架 (Scaffolds)', theory: '鷹架是支持高階思維的語言模板，幫助學生進行更細緻的論證與反思。', cite: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "統計你用了各種思考鷹架(提問、延伸、改進、反例、昇華)各幾次。", diff: "鷹架是你發文時自己選的。" },
         'radar': { title: '知識五力 (Competency Radar)', theory: "把你的四項能力(開創、連結、整合、維護)畫成一張圖,看看你的樣貌。", cite: "Scardamalia, M., Bransford, J., Kozma, B., & Quellmalz, E. (2012). New assessments and environments for knowledge building. In P. Griffin, B. McGaw, & E. Care (Eds.), <i>Assessment and teaching of 21st century skills</i> (pp. 231–300). Springer. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/978-94-007-2324-5_5\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "四項分數取自「知識角色」。", diff: "這是平台設計的分數,不是標準化測驗。先前引用的 Lai & Law(2006)是談同儕鷹架的研究,與這張圖不同,已移除。" },
         'lexical': { title: '語義與詞彙深度 (Lexical Depth)', theory: "看你的貼文裡「說理用語」(因為、所以、發現)和「單元專業詞」(例如光線、反射)用了多少。", cite: "相關背景:<br>Sun, Y., Zhang, J., & Scardamalia, M. (2010). Knowledge building and vocabulary growth over two years, Grades 3 and 4. <i>Instructional Science, 38</i>(2), 147–171. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11251-008-9082-5\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Nagy, W., & Townsend, D. (2012). Words as tools: Learning academic vocabulary as language acquisition. <i>Reading Research Quarterly, 47</i>(1), 91–108. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1002/rrq.011\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "兩個部分。①語義階段 LV.1–LV.3:用短詞表計次——學術詞 14 個(理論、機制、證明…)、邏輯詞 13 個(因為、所以、導致…),也參考整合力、連結力分數。②專業詞:你用過幾種單元詞庫裡的專業詞(例如光線、反射),每種只算一次。", diff: "詞表和詞庫都是平台準備的,沒在裡面的好詞不會被算到;不用這些詞,也不代表你不會思考。LV 與專業詞數是鼓勵用的小標籤,不是考試成績。" },
         'concept_evolution': { title: '概念演化軌跡 (Concept Evolution Map)', theory: '從你的貼文找出你常用的概念詞,用雲的大小表示用了幾次、用顏色表示這個想法現在的狀態(提問中、被延伸、改進中、被質疑、已整合),虛線連起常一起出現的詞,具象化你的想法如何出現、被回應、被改進、被整合。狀態依你的貼文類型與同學回應判斷,是系統的規則估計,僅供參考。', cite: "Oshima, J., Oshima, R., & Matsuzawa, Y. (2012). Knowledge Building Discourse Explorer: A social network analysis application for knowledge building discourse. <i>Educational Technology Research and Development, 60</i>(5), 903–921. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-012-9265-2\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Shaffer, D. W., Collier, W., & Ruis, A. R. (2016). A tutorial on epistemic network analysis: Analyzing the structure of connections in cognitive, social, and interaction data. <i>Journal of Learning Analytics, 3</i>(3), 9–45. <a class=\"text-indigo-600 underline\" href=\"https://learning-analytics.info/journals/index.php/JLA/article/view/4329\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文</a>", how: "從你的貼文找出常用的概念詞,詞越大代表用越多次;顏色是依你的貼文類型與同學回應判斷的狀態。點一個詞,下面的故事卡會告訴你它在雲的「中間(核心)」還是「邊邊(邊緣)」:核心是連到最多其他詞的前 25%(至少連到 3 個詞),邊緣是只連到 0~1 個詞,雲裡要有 5 個以上的詞才判斷。然後請你回答它為什麼在那裡,答案會存進 ASRA 紀錄。", diff: "狀態與核心/邊緣都是系統用簡單規則估計的,僅供參考。「在中間」只代表它和很多詞一起出現,不代表比較重要或比較正確;「在邊邊」也可能只是還沒被討論到,或詞是自動抓的、抓得不準。" },
         'echo_chamber': { title: '跨溫層破壁指數 (Echo-Chamber Breaking)', theory: "看你有沒有回應很少互動的同學,把不同圈子的想法串起來。能連結不同圈子的人,在網絡研究裡被稱為「橋樑」。", cite: "Burt, R. S. (2004). Structural holes and good ideas. <i>American Journal of Sociology, 110</i>(2), 349–399. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1086/421787\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Matsuzawa, Y., Oshima, J., Oshima, R., Niihara, Y., & Sakai, S. (2011). KBDeX: A platform for exploring discourse in collaborative learning. <i>Procedia – Social and Behavioral Sciences, 26</i>, 198–207. <a class=\"text-indigo-600 underline\" href=\"https://www.ncbi.nlm.nih.gov/pmc/articles/7129265\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(PubMed Central)</a>(KBDeX 工具介紹)", how: "計算你向外回覆的對象與次數,以及是否集中在少數同學身上。", diff: "「破壁分數」是平台設計的指標;Burt 談的是組織中的結構洞,不是這個分數。" },
         'idea_lineage': { title: '念念成櫻 (Idea Lineage)', theory: '追蹤你拋出的單一觀點如何被他人質疑、補充並收斂。體現了「集體認知責任」。', cite: "Zhang, J., Tao, D., Chen, M.-H., Sun, Y., Judson, D., & Naqvi, S. (2018). Co-organizing the collective journey of inquiry with Idea Thread Mapper. <i>Journal of the Learning Sciences, 27</i>(3), 390–430. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508406.2018.1444992\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "追蹤你最好的一個想法,後來被多少人接續、往下延伸了幾層。" },
-        'eureka_arc': { title: '認知頓悟軌跡 (Eureka Arc)', theory: "看你有沒有經過「疑惑、提問或反駁」之後,後來走到「整合」。研究發現,適度的困惑有機會促進學習。", cite: "D’Mello, S., Lehman, B., Pekrun, R., & Graesser, A. (2014). Confusion can be beneficial for learning. <i>Learning and Instruction, 29</i>, 153–170. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1016/j.learninstruc.2012.05.003\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "統計你的提問與反駁次數,以及整合次數。", diff: "「頓悟」是平台的說法;研究談的是困惑與學習的關係,並沒有這條軌跡的計算方式。" },
+        'eureka_arc': { title: '認知頓悟軌跡 (Eureka Arc)', theory: "看你有沒有經過「疑惑、提問或反例」之後,後來走到「整合」。研究發現,適度的困惑有機會促進學習。", cite: "D’Mello, S., Lehman, B., Pekrun, R., & Graesser, A. (2014). Confusion can be beneficial for learning. <i>Learning and Instruction, 29</i>, 153–170. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1016/j.learninstruc.2012.05.003\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "統計你的提問與反例次數,以及整合次數。", diff: "「頓悟」是平台的說法;研究談的是困惑與學習的關係,並沒有這條軌跡的計算方式。" },
         'diversity': { title: '觀點多樣性 (Idea Diversity)', theory: '衡量參與不同主題討論的廣度。', cite: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>", how: "你參與了幾個不同的討論主題。" },
         'path_length': { title: '認知路徑長度 (Path Length)', theory: '衡量討論串的延續深度。', cite: "Hewitt, J. (2005). Toward an understanding of how threads die in asynchronous computer conferences. <i>Journal of the Learning Sciences, 14</i>(4), 567–589. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1207/s15327809jls1404_4\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Zhang, J., Scardamalia, M., Lamon, M., Messina, R., & Reeve, R. (2007). Socio-cognitive dynamics of knowledge building in the work of 9- and 10-year-olds. <i>Educational Technology Research and Development, 55</i>(2), 117–145. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/s11423-006-9019-0\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>", how: "你參與的討論串,平均被接續了幾層。", diff: "層數只代表對話延續多久。" }
     };
@@ -923,12 +924,12 @@ async function initApiKey() {
         else if (key === 'buildon') specificData = `觀點連結 (Build-on) 次數：${stats.linksCount} 次`;
         else if (key === 'impact') specificData = `社群影響力 (被回覆總數)：${stats.repliedCount} 次`;
         else if (key === 'radar') specificData = `五力分數 - 開創:${stats.roleMetrics.initiator}, 連結:${stats.roleMetrics.builder}, 整合:${stats.roleMetrics.synthesizer}, 維護:${stats.roleMetrics.sustainer}`;
-        else if (key === 'scaffold') specificData = `鷹架使用次數 - 提問:${stats.scaffoldCounts.question}, 延伸:${stats.scaffoldCounts.extend}, 改進:${stats.scaffoldCounts.improve}, 反駁:${stats.scaffoldCounts.counter}, 昇華:${stats.scaffoldCounts.riseabove}`;
+        else if (key === 'scaffold') specificData = `鷹架使用次數 - 提問:${stats.scaffoldCounts.question}, 延伸:${stats.scaffoldCounts.extend}, 改進:${stats.scaffoldCounts.improve}, 反例:${stats.scaffoldCounts.counter}, 昇華:${stats.scaffoldCounts.riseabove}`;
         else if (key === 'evolution') specificData = `最近發文數：${stats.recentNotes.length} 篇，展現了想法演化的軌跡`;
         else if (key === 'interaction_circle') specificData = `互動圈涵蓋人數：${stats.networkSize} 人`;
         else if (key === 'echo_chamber') specificData = `跨溫層破壁分數：${stats.echoStats.score} 分，向外回覆 ${stats.echoStats.replies} 次，集中在 ${stats.echoStats.targets} 個特定同學身上`;
         else if (key === 'idea_lineage') specificData = `最佳初始想法衍生出 ${stats.lineageStats.count} 個後續觀點，最深向下紮根 ${stats.lineageStats.maxDepth + 1} 層`;
-        else if (key === 'eureka_arc') specificData = `經歷認知衝突(提問/反駁) ${stats.scaffoldCounts.question + stats.scaffoldCounts.counter} 次，最終達到昇華(Rise-above) ${stats.scaffoldCounts.riseabove} 次`;
+        else if (key === 'eureka_arc') specificData = `經歷認知衝突(提問/反例) ${stats.scaffoldCounts.question + stats.scaffoldCounts.counter} 次，最終達到昇華(Rise-above) ${stats.scaffoldCounts.riseabove} 次`;
         else if (key === 'diversity') specificData = `參與了 ${stats.uniqueTopicsCount} 個不同的討論主題`;
         else if (key === 'path_length') specificData = `平均討論深度：${stats.avgDepth.toFixed(1)} 層`;
         else if (key === 'lexical') specificData = `語義階段：${stats.lexicalStats.level} (${stats.lexicalStats.title})，包含學術詞彙 ${stats.lexicalStats.acCount} 次，邏輯詞彙 ${stats.lexicalStats.lgCount} 次`;
@@ -1143,7 +1144,7 @@ async function initApiKey() {
         const initiator = cap((stats.initiateCount / n) / 0.35 * 100);
         // 連結力:回應「別人」想法的貼文占比(90% 為滿分)
         const builder = cap((stats.crossCount / n) / 0.9 * 100);
-        // 整合力:整合(昇華)貼文占比(12% 為滿分,占 60%)+ 改進/反駁貼文占比(45% 為滿分,占 40%)
+        // 整合力:整合(昇華)貼文占比(12% 為滿分,占 60%)+ 改進/反例貼文占比(45% 為滿分,占 40%)
         const raShare = stats.scaffoldCounts.riseabove / n;
         const impShare = (stats.scaffoldCounts.improve + stats.scaffoldCounts.counter) / n;
         const synthesizer = cap(Math.min(1, raShare / 0.12) * 60 + Math.min(1, impShare / 0.45) * 40);
@@ -1408,6 +1409,35 @@ async function initApiKey() {
     function attachStudentReplays(userId, finalStats) {
         const sdS = kbStepDays(globalData.nodes.map(n => n.date));
         const ident = window.__kbIdent || (window.__kbIdent = kbAiIdent(globalData.userList));
+        // ===== 歷程說明的「可能原因」(學生版:用「你」說明這一天你做了什麼、誰回應了你)=====
+        try {
+            const ul = globalData.userList || {};
+            KBWhy.setNamer(id => { const u = ul[id] || Object.values(ul).find(x => String(x.id) === String(id)); return (u && u.name) || '同學'; });
+            const allN = globalData.nodes || [], byIdW = {}; allN.forEach(n => { byIdW[n.id] = n; });
+            const mdOf = ts => { const d = new Date(ts); return (d.getMonth() + 1) + '/' + d.getDate(); };
+            const HINT = {
+                's-role': '四條能力棒是看你做了哪些事:提出新想法、回應同學、整理成結論、持續關心;這天做的事越多,對應的棒子就越長。',
+                's-cards': '這四個都是累積數字:你每發一篇、回應一次、同學回應你一次,對應的數字就加 1。',
+                's-radar': '五個角度都是比例,而且發文還少時分數會先打折(發滿 10 篇才算滿),所以你每多發一篇,圖形就長大一點。',
+                's-bars': '每種發言方式用了幾次:這天用了哪一種,那一根棒子就多一格。',
+                's-timeline': '每發一則貼文,就多一張卡片。',
+                's-diversity': '你參與的討論串越多,棒子越滿;這天如果加入了新的討論串,數字就會增加。',
+                's-path': '「想法接力」看你的發言接在第幾層:接在別人回應後面的次數越多,平均層數就越深。',
+                's-lexical': '你用了更多「因為…所以…」或學術用語,語義深度的等級才會往上。',
+                's-lineage': '同學回應你的想法、再被別人回應,這條想法的接力就越長。',
+                'ego-s': '你回應了誰、誰回應了你,就會長出和他們的連線;互動越多次,線越粗。'
+            };
+            window.kbWhyAuto = (id, labels) => {
+                if (HINT[id] === undefined || !labels) return null;
+                return (k, pj) => {
+                    const lb = String(labels[k]); if (/\(/.test(lb)) return ''; const day = n => mdOf(n.date) === lb;
+                    const added = allN.filter(n => String(n.author) === String(userId) && day(n));
+                    const inbound = allN.filter(n => { const p = n.parentId && byIdW[n.parentId]; return p && String(p.author) === String(userId) && String(n.author) !== String(userId) && day(n); });
+                    if (!added.length && !inbound.length) return '';
+                    return KBWhy.studentDay({ who: '你', added: added, inbound: inbound, byId: byIdW }) + ' ' + HINT[id];
+                };
+            };
+        } catch (e) { console.error(e); }
         const statsMemo = {}; const statsAt = step => statsMemo[step] || (statsMemo[step] = statsCalc(step)); const dayEnds = [...new Set(globalData.nodes.map(n => new Date(n.date).setHours(23, 59, 59, 999)))].sort((a, b) => a - b);
         const statsCalc = step => { const saved = globalData.nodes; globalData.nodes = saved.filter(n => sdS.idx(n.date) <= step); window.__kbReplaying = true; window.__kbReadCut = step >= dayEnds.length ? Infinity : (step <= 0 ? -1 : dayEnds[step - 1]); try { return analyzeStudentData(userId); } finally { globalData.nodes = saved; window.__kbReplaying = false; window.__kbReadCut = undefined; } };
         const nodesAt = step => globalData.nodes.filter(n => sdS.idx(n.date) <= step);
@@ -1446,8 +1476,8 @@ async function initApiKey() {
         }, st => { st = S(st); const m = st.roleMetrics; return '開創' + m.initiator + '、連結' + m.builder + '、整合' + m.synthesizer + '、維護' + m.sustainer + '、影響' + influenceScore(st) + (st.totalNotes > 0 && st.totalNotes < ROLE_MATURE_N ? '(才發 ' + st.totalNotes + ' 篇,分數先打折,發滿 ' + ROLE_MATURE_N + ' 篇才算滿)' : ''); });
         // 鷹架偏好
         const barsMax = Math.max(...Object.values(finalStats.scaffoldCounts), 1);
-        R('s-bars', document.getElementById('scaffold-bars').nextElementSibling, false, '我的鷹架偏好(提問、延伸、改進、反駁、整合各用了幾次)', st => renderScaffoldBars(S(st).scaffoldCounts, barsMax),
-            st => { const c = S(st).scaffoldCounts; return '提問' + c.question + '、延伸' + c.extend + '、改進' + c.improve + '、反駁' + c.counter + '、整合' + c.riseabove; });
+        R('s-bars', document.getElementById('scaffold-bars').nextElementSibling, false, '我的鷹架偏好(提問、延伸、改進、反例、整合各用了幾次)', st => renderScaffoldBars(S(st).scaffoldCounts, barsMax),
+            st => { const c = S(st).scaffoldCounts; return '提問' + c.question + '、延伸' + c.extend + '、改進' + c.improve + '、反例' + c.counter + '、整合' + c.riseabove; });
         // 思考演化軌跡(同時提供完整歷程故事)
         R('s-timeline', document.getElementById('evolution-timeline'), false, '我的思考演化軌跡', st => renderTimeline(S(st).recentNotes, globalData.nodes), st => '累計 ' + S(st).totalNotes + ' 篇貼文');
         const tl = document.querySelector('[data-kbnet="s-timeline"]');
@@ -1667,7 +1697,7 @@ async function initApiKey() {
             nodes.sort((a, b) => new Date(a.date) - new Date(b.date)); // 確保該階段內的時間序
 
             let stageTitle = depth === 1 ? "第 1 層：初步質疑與補充" :
-                             depth === 2 ? "第 2 層：深度延伸與反駁" :
+                             depth === 2 ? "第 2 層：深度延伸與反例" :
                              `第 ${depth} 層：觀點收斂與昇華`;
 
             let stageIcon = depth === 1 ? "fa-seedling text-green-500" :
@@ -1705,7 +1735,7 @@ async function initApiKey() {
                 if (desc.type === 'question') { badgeStyle = 'bg-blue-50 text-blue-600 border-blue-200'; icon = 'fa-question'; typeName = '提問'; }
                 if (desc.type === 'improve') { badgeStyle = 'bg-green-50 text-green-600 border-green-200'; icon = 'fa-arrow-up'; typeName = '改進'; }
                 if (desc.type === 'extend') { badgeStyle = 'bg-yellow-50 text-yellow-600 border-yellow-200'; icon = 'fa-plus'; typeName = '延伸'; }
-                if (desc.type === 'counter') { badgeStyle = 'bg-red-50 text-red-600 border-red-200'; icon = 'fa-bolt'; typeName = '反駁'; }
+                if (desc.type === 'counter') { badgeStyle = 'bg-red-50 text-red-600 border-red-200'; icon = 'fa-bolt'; typeName = '反例'; }
                 if (desc.type === 'riseabove') { badgeStyle = 'bg-purple-50 text-purple-600 border-purple-200'; icon = 'fa-layer-group'; typeName = '昇華'; }
 
                 const isSelf = desc.author === userId;
@@ -1779,7 +1809,7 @@ async function initApiKey() {
     function renderEurekaArc(userId, allNodes) {
         const myNotes = allNodes.filter(n => n.author === userId).sort((a,b) => new Date(a.date) - new Date(b.date));
         let acc = 0; const labels = [], data = [];
-        const TYPE = { question: ['提問', -0.5], counter: ['反駁', -0.5], improve: ['改進', 0.5], riseabove: ['昇華', 2], extend: ['延伸', 0] };
+        const TYPE = { question: ['提問', -0.5], counter: ['反例', -0.5], improve: ['改進', 0.5], riseabove: ['昇華', 2], extend: ['延伸', 0] };
         const isUp = n => n.type === 'riseabove' || n.type === 'improve';
         const fmtD = n => new Date(n.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
         const esc2 = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1842,7 +1872,7 @@ async function initApiKey() {
         // ---- 播放時的即時說明(停在畫面上,直到下一個點才換)+ 「想法進步的時刻」清單(只增加、不消失)----
         const SAY = {
             question: '你提出了一個問題。提問會讓想法暫時「卡住一下」(線稍微下沉),這很正常——代表你碰到了值得想的難題。',
-            counter: '你提出了不同的看法。反駁會讓想法先晃一下(線稍微下沉),但常常是下一次進步的起點。',
+            counter: '你提出了不同的看法。反例會讓想法先晃一下(線稍微下沉),但常常是下一次進步的起點。',
             improve: '你把想法改得更好了!這是一次小進步(多爬 0.5)。',
             riseabove: '你把零散的想法整合成更高一層的新觀點!這是一次大躍進(多爬 2)。',
             extend: '你延伸、補充了想法,穩穩地往上爬一格。'
@@ -2071,7 +2101,7 @@ async function initApiKey() {
         const facts = ident.scrub([
             '- 我的角色(系統用規則估計,只當參考):' + roleName,
             '- 我發了 ' + s.totalNotes + ' 篇貼文,回應別人 ' + s.linksCount + ' 次,別人回應我 ' + s.repliedCount + ' 次',
-            '- 我用過的鷹架:提問 ' + s.scaffoldCounts.question + '、延伸 ' + s.scaffoldCounts.extend + '、改進 ' + s.scaffoldCounts.improve + '、反駁 ' + (s.scaffoldCounts.counter || 0) + '、昇華 ' + s.scaffoldCounts.riseabove,
+            '- 我用過的鷹架:提問 ' + s.scaffoldCounts.question + '、延伸 ' + s.scaffoldCounts.extend + '、改進 ' + s.scaffoldCounts.improve + '、反例 ' + (s.scaffoldCounts.counter || 0) + '、昇華 ' + s.scaffoldCounts.riseabove,
             '- 我的互動圈有 ' + s.networkSize + ' 位同學;我參與的討論平均延伸 ' + s.avgDepth.toFixed(1) + ' 層;參與 ' + s.uniqueTopicsCount + ' 個主題'
         ].join('\n'));
         const NL2 = '\n';

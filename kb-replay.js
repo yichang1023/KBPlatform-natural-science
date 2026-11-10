@@ -44,7 +44,8 @@
       '.kbg-lw{margin:0 8px 8px}.kbg-lt{font-weight:800;font-size:11.5px;color:#4338ca;margin-bottom:4px}',
       '.kbg-log{max-height:150px;overflow:auto;resize:vertical;padding-right:4px}',
       '.kbg-e{display:block;width:100%;text-align:left;margin:0 0 4px;padding:4px 8px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;font-size:11.5px;line-height:1.6;color:#334155;cursor:pointer}',
-      '.kbg-e:hover{background:#f5f3ff;border-color:#a5b4fc}.kbg-e.on{background:#eef2ff;border-color:#6366f1;box-shadow:0 0 0 2px rgba(99,102,241,.15)}.kbg-e b{color:#3730a3}'
+      '.kbg-e:hover{background:#f5f3ff;border-color:#a5b4fc}.kbg-e.on{background:#eef2ff;border-color:#6366f1;box-shadow:0 0 0 2px rgba(99,102,241,.15)}.kbg-e b{color:#3730a3}',
+      '.kbg-why{display:block;margin-top:3px;padding:3px 8px;border-radius:8px;background:#faf5ff;border:1px dashed #d8b4fe;color:#6b21a8;font-weight:600;font-size:11.5px;line-height:1.6}'
     ].join('\n');
     doc.head.appendChild(s);
   }
@@ -86,9 +87,13 @@
     function isDay(k) { return cfg.isDay ? cfg.isDay(k) : true; }
     function st(k) { if (cache[k] === undefined) { var v = ''; try { v = cfg.state(k); } catch (e) { if (global.console) console.error(e); } cache[k] = v == null ? '' : String(v); } return cache[k]; }
     function prevDay(k) { var j = k - 1; while (j > 0 && !isDay(j)) j--; return Math.max(0, j); }
+    // cfg.why(k, prevK) → 「可能原因」的 HTML(這一步的數字為什麼會這樣變);有變化的那一行底下才會加上
     function lineOf(k, pj) {
-      if (cfg.say) { var s = null; try { s = cfg.say(k, pj); } catch (e) { if (global.console) console.error(e); } if (s) return s; if (cfg.say.only) return null; }
-      var d = diffHtml(st(k), st(pj)); return d.changed ? d.html : null;
+      var s = null;
+      if (cfg.say) { try { s = cfg.say(k, pj); } catch (e) { if (global.console) console.error(e); } if (!s && cfg.say.only) return null; }
+      if (!s) { var d = diffHtml(st(k), st(pj)); s = d.changed ? d.html : null; }
+      if (s && cfg.why) { var w = ''; try { w = cfg.why(k, pj); } catch (e) { if (global.console) console.error(e); } if (w) s += '<span class="kbg-why">💭 可能原因:' + w + '</span>'; }
+      return s;
     }
     function dayLine(k) { if (lines[k] === undefined) lines[k] = lineOf(k, prevDay(k)); return lines[k]; }
     function paintLog(k) {
@@ -128,7 +133,7 @@
     var isCount = false; try { isCount = counted(fr(N - 1)); } catch (e) {}
     function list(a, m) { var s = a.slice(0, m).map(gesc).join('、'); return s + (a.length > m ? ' 等 ' + a.length + ' 個' : ''); }
     return global.kbGuide(wrap, {
-      id: o.id, labels: o.labels, how: o.how, jump: o.jump, guide: o.guide,
+      id: o.id, labels: o.labels, how: o.how, jump: o.jump, guide: o.guide, why: o.why || (global.kbWhyAuto ? global.kbWhyAuto(o.id, o.labels) : null),
       isDay: function (k) { return k > 0 && !/\(/.test(String(o.labels[k])); },
       start: o.start || '🌰 <b>起點</b>:還沒有任何互動,畫面上只有最初的樣子。按 ▶ 看它一步一步長出來。',
       state: function (k) {
@@ -154,13 +159,13 @@
   };
 
   /* ---------- 每個項目的「怎麼看」(圖例說明) ---------- */
-  var C = { q: '<b style="color:#2563eb">藍=提問</b>', e: '<b style="color:#ca8a04">黃=延伸</b>', i: '<b style="color:#16a34a">綠=改進</b>', c: '<b style="color:#dc2626">紅=反駁</b>', r: '<b style="color:#9333ea">紫=整合</b>' };
+  var C = { q: '<b style="color:#2563eb">藍=提問</b>', e: '<b style="color:#ca8a04">黃=延伸</b>', i: '<b style="color:#16a34a">綠=改進</b>', c: '<b style="color:#dc2626">紅=反例</b>', r: '<b style="color:#9333ea">紫=整合</b>' };
   global.kbHow = {
     // ---- 學生分析 ----
     's-role': '下面四條能力棒:<b>開創力</b>(提出新問題、新想法)、<b>連結力</b>(回應並接上別人的想法)、<b>整合力</b>(把零散的想法合成新觀點)、<b>維護力</b>(持續關心、延續討論)。棒越長,代表你越常做這件事;最長的那一項,決定你的「知識角色」。<br><b>為什麼一開始很短?</b>發文還少的時候,只靠一兩篇看不出你的特色,所以分數會先打折;發滿 10 篇才算滿,棒子會隨著你發文慢慢長長。',
     's-cards': '四張數字卡都是「累積數字」,只會越來越多:<b>發文貢獻</b>=你寫了幾則;<b>閱讀他人</b>=你在論壇點開看過幾則別人的想法(真實紀錄,同一則只算一次);<b>觀點連結</b>=你回應別人幾次;<b>社群影響力</b>=別人回應你幾次。',
     's-radar': '五個角度的能力雷達:<b>開創力、連結力、整合力、維護力、影響力</b>。越往外圈代表越強,圖形越大、越圓,就是你的能力越突出、越均衡。<br><b>為什麼一開始很小?</b>發文還少的時候,分數會先打折(發滿 10 篇才算滿),所以圖形會從小小的一圈,隨著發文慢慢長大。',
-    's-bars': '五種發言方式(鷹架):提問、延伸、改進、反駁、整合。棒子越長,代表你用得越多。多用不同的方式,想法才會從「一個問題」慢慢長成「新的觀點」。',
+    's-bars': '五種發言方式(鷹架):提問、延伸、改進、反例、整合。棒子越長,代表你用得越多。多用不同的方式,想法才會從「一個問題」慢慢長成「新的觀點」。',
     's-timeline': '每一張卡片是你的<b>一則發言</b>,依時間排列;圖示和顏色代表發言的類型(提問、改進、整合…)。播放時,卡片會一則一則加進來,就是你的想法一步一步走過的路。',
     's-diversity': '「觀點多樣性」=你參與了<b>幾條不同的討論串</b>。條數越多,下面的棒子越滿,代表你接觸、貢獻的觀點越多元。',
     's-path': '「認知路徑長度」=你的發言平均在討論串的<b>第幾層</b>。第 1 層是直接回應主貼文,層數越大,代表你越常接著別人的回應繼續往下討論;下面連在一起的圓點,就是這條「想法接力」的長度。',
@@ -176,7 +181,7 @@
     'sna': '每個<b>圓點是一位同學</b>(顏色只是用來分辨人),<b>圓點越大</b>代表累計發文越多。<b>線</b>是「誰回應了誰」,<b>箭頭</b>從回應的人指向被回應的人,<b>線越粗</b>代表回應越多次。位在中間、連線很多的人,就是討論的中心。',
     'principles': '圓環圖是五種發言類型的比例:' + C.q + '、' + C.e + '、' + C.i + '、' + C.c + '、' + C.r + '。哪一種色塊越大,代表班上越常出現這種發言。',
     'kb12radar': '雷達圖有六個方向(KB 12 原則的重點):<b>觀點多樣性、集體責任、真實問題、權威資料、觀點改進、民主化</b>,依實際貼文換算成分數。越往外圈代表落實得越好,圖形越大越完整。<br><b>為什麼一開始很小?</b>討論才剛開始、貼文還少的時候,比例不準,所以分數會先打折(全班貼文累積到「人數×2」篇才算滿),圖形會隨討論變多慢慢長大。',
-    'lens': '四個圓代表四類想法:<b style="color:#64748b">灰=事實</b>、<b style="color:#2563eb">藍=理論</b>(延伸/改進)、<b style="color:#ca8a04">黃=挑戰</b>(反駁)、<b style="color:#16a34a">綠=整合</b>。<b>圓越大</b>代表這類貼文越多(括號裡是篇數);箭頭是對話常見的走向:事實 → 理論 → 挑戰 → 整合。',
+    'lens': '四個圓代表四類想法:<b style="color:#64748b">灰=事實</b>、<b style="color:#2563eb">藍=理論</b>(延伸/改進)、<b style="color:#ca8a04">黃=挑戰</b>(反例)、<b style="color:#16a34a">綠=整合</b>。<b>圓越大</b>代表這類貼文越多(括號裡是篇數);箭頭是對話常見的走向:事實 → 理論 → 挑戰 → 整合。',
     'concept': '每個圓點是一個<b>關鍵詞</b>,兩個詞常常<b>一起出現</b>就會連起來;連得越多的詞,越是討論的中心概念。紅色是熱點觀點。播放時,看詞怎麼一個一個長出來、連起來。',
     'lexical': '折線是班上「知識詞彙」的<b>累積量</b>:每多出現一個專業、知識用語就往上爬一點。線越陡,代表全班用詞進步得越快。',
     'promising': '每個點是<b>一則貼文</b>。越往右,代表被越多人回應(<b>關注度</b>越高);越往上,代表越是提問、整合、改進這類會帶來<b>認知落差</b>的想法。<b style="color:#dc2626">紅點是提問</b>,<b style="color:#2563eb">藍點是其他</b>。右上角的點,最有繼續討論的潛力。',
@@ -216,7 +221,7 @@
     Array.prototype.forEach.call(doc.querySelectorAll('[data-kbnet="' + o.id + '"]'), function (x) { x.remove(); });
     anchor.insertAdjacentElement('afterend', ui.wrap);
     if (o.explainTitle && global.kbAddExplain) global.kbAddExplain(ui.wrap, { title: o.explainTitle, table: function () { return global.kbSeriesTable(chart); } }, o.id);
-    var guide = (o.guide === false) ? null : global.kbGuide(ui.wrap, { id: o.id, how: o.how, labels: ['起點'].concat(labels.map(String)), jump: function (k) { render(k); },
+    var guide = (o.guide === false) ? null : global.kbGuide(ui.wrap, { id: o.id, how: o.how, labels: ['起點'].concat(labels.map(String)), why: o.why || (global.kbWhyAuto ? global.kbWhyAuto(o.id, ['起點'].concat(labels.map(String))) : null), jump: function (k) { render(k); },
       state: function (k) { if (k <= 0) return ''; var parts = []; chart.data.datasets.forEach(function (ds, di) { var f = full[di]; if (!f || ds.type === 'scatter') return; var v = f[k - 1]; if (v === null || v === undefined || typeof v === 'object') return; parts.push((ds.label || '數值') + ' ' + (Math.round(Number(v) * 100) / 100)); }); return parts.join('、'); } });
     var btn = ui.wrap.querySelector('[data-a=play]'), seek = ui.wrap.querySelector('[data-a=seek]'), label = ui.wrap.querySelector('[data-a=label]'), spSel = ui.wrap.querySelector('[data-a=speed]');
     function alive() { return !st.gone && chart.canvas && chart.canvas.isConnected !== false && chart.data; }
@@ -262,7 +267,7 @@
     Array.prototype.forEach.call(doc.querySelectorAll('[data-kbnet="' + o.id + '"]'), function (x) { x.remove(); });
     if (o.inside) o.anchor.appendChild(ui.wrap); else o.anchor.insertAdjacentElement('afterend', ui.wrap);
     if (o.explainTitle && global.kbAddExplain) global.kbAddExplain(ui.wrap, { title: o.explainTitle, table: function () { return o.labels.map(function (lb, i) { var v = ''; try { v = o.values ? o.values(i) : ''; } catch (e) {} return lb + ':' + v; }).join(String.fromCharCode(10)); } }, o.id);
-    var guide = (o.guide === false || !(o.values || o.say)) ? null : global.kbGuide(ui.wrap, { id: o.id, how: o.how, labels: o.labels, say: o.say, jump: function (k) { render(k); }, state: function (k) { return o.values ? o.values(k) : ''; } });
+    var guide = (o.guide === false || !(o.values || o.say)) ? null : global.kbGuide(ui.wrap, { id: o.id, how: o.how, labels: o.labels, say: o.say, why: o.why || (global.kbWhyAuto ? global.kbWhyAuto(o.id, o.labels) : null), jump: function (k) { render(k); }, state: function (k) { return o.values ? o.values(k) : ''; } });
     var btn = ui.wrap.querySelector('[data-a=play]'), seek = ui.wrap.querySelector('[data-a=seek]'), label = ui.wrap.querySelector('[data-a=label]'), spSel = ui.wrap.querySelector('[data-a=speed]');
     function alive() { return !st.gone && o.anchor.isConnected !== false; }
     // 先算歷程說明(算數字時有些項目會順便重畫畫面),最後才畫「目前這一步」,畫面才不會停在別天

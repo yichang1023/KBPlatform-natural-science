@@ -11,7 +11,7 @@
   'use strict';
   var doc = global.document, NS = 'http://www.w3.org/2000/svg';
   var W = 400, H = 470, BX = 200, BY = 444, TRUNK = 100, CX = 200, CY = BY - TRUNK, R = 172, SPREAD = 116 * Math.PI / 180, D0 = 9;
-  var TYPE_TXT = { question: '提問', extend: '延伸', improve: '改進', counter: '反駁', riseabove: '整合' };
+  var TYPE_TXT = { question: '提問', extend: '延伸', improve: '改進', counter: '反例', riseabove: '整合' };
   var PALETTE = {
     question: ['#f48fb1', '#f8a5c2', '#f06292'],
     extend: ['#f8bbd0', '#fbd0df', '#f6a9c3'],

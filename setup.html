@@ -88,7 +88,7 @@
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   var esc = KBUI.esc;
   var ROLE_TXT = { master: '管理者', teacher: '老師', student: '學生' };
-  var TYPE_TXT = { question: '提問', extend: '延伸', improve: '改進', counter: '反駁', riseabove: '整合' };
+  var TYPE_TXT = { question: '提問', extend: '延伸', improve: '改進', counter: '反例', riseabove: '整合' };
   var CATS = ['科學', 'STEAM', '專題課', '電機電子', 'AI', '語言學習', '文學', '社會議題', '物理', '動漫', '程式', '歷史', '哲學', '藝術', '其他'];
 
   /* ================= 共用工具 ================= */
@@ -439,13 +439,13 @@
     $('#content').innerHTML = card('認知能動性 (Epistemic Agency) 判定', 'fa-brain',
       '<p class="text-xs text-slate-500 mb-2">個人指數 = (主動發起 ÷ 目標 + 自我修正 ÷ 目標 + 提出解釋 ÷ 目標)÷ 3,各項最高算 1。指數達標,且「達標學生比例」夠高,才算落實。</p>' +
       setRow('「主動發起」滿分比例', '提問、開新話題或提出下一步的貼文占比,達到此值該項滿分。', num('init', a.agencyTargets.init, 0.01, 0.01, 1)) +
-      setRow('「自我修正」滿分比例', '修正、改進、反駁或回應自己的貼文占比。', num('mon', a.agencyTargets.mon, 0.01, 0.01, 1)) +
+      setRow('「自我修正」滿分比例', '修正、改進、反例或回應自己的貼文占比。', num('mon', a.agencyTargets.mon, 0.01, 0.01, 1)) +
       setRow('「提出解釋」滿分比例', '說明原因、機制、證據的貼文占比。', num('exp', a.agencyTargets.exp, 0.01, 0.01, 1)) +
       setRow('個人達標指數', '個人指數 ≥ 此值,該學生算達標(0~1)。', num('pass', a.agencyPass, 0.01, 0.1, 1)) +
       setRow('全班達標比例', '達標學生占比 ≥ 此值,Epistemic Agency 才打勾(0~1)。', num('rate', a.agencyRate, 0.01, 0.1, 1))) +
       card('KB 12 原則其他門檻', 'fa-list-check',
         setRow('Real Ideas:疑問型貼文占比', '貼文含問號或為提問類型的占比 ≥ 此值。', num('q', a.kbQuestion, 0.01, 0.01, 1)) +
-        setRow('Idea Diversity:對照性想法占比', '提問、改進、反駁等類型占比 ≥ 此值。', num('div', a.kbDiversityContrast, 0.01, 0.01, 1)) +
+        setRow('Idea Diversity:對照性想法占比', '提問、改進、反例等類型占比 ≥ 此值。', num('div', a.kbDiversityContrast, 0.01, 0.01, 1)) +
         setRow('Authoritative Sources:引用資料占比', '貼文含「文獻、研究、官方、網址、實測…」等線索的占比 ≥ 此值。', num('src', a.kbSources, 0.01, 0.01, 1))) +
       card('專業詞庫(詞彙指標)', 'fa-spell-check',
         '<p class="text-xs text-slate-500 mb-2">老師分析的「專業詞彙成長」與學生端的「專業詞」,會用內建的國小自然與社會議題詞庫(約 125 個詞)比對貼文。你的單元如果有別的專業詞,可以在這裡補充:用逗號或換行分開,每個詞 2~12 個字,單字詞不會被算入。</p>' +

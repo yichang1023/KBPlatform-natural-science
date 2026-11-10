@@ -208,6 +208,7 @@
 <script src="kb-asra.js"></script>
 <script src="kb-asra-teacher.js"></script>
 <script src="kb-replay.js"></script>
+<script src="kb-why.js"></script>
 <script src="kb-vocab.js"></script>
 <script src="kb-ai-story.js"></script>
 <script src="kb-forest.js"></script>
@@ -528,18 +529,29 @@
                     <div id="seq-controls" class="flex flex-wrap gap-2 mb-2" role="group" aria-label="選擇要看的階段"></div>
                     <div id="seq-insight" class="text-xs text-slate-700 leading-relaxed mb-2"></div>
                     <div id="seq-network" class="w-full"></div>
-                    <p class="text-[11px] text-slate-500 leading-relaxed mt-1"><b>怎麼看:</b>圓越大,表示這一類貼文越多。<b>箭頭 A → B</b> = 有人回應了一則 A 之後,常常接著寫 B;箭頭越粗,機率越高;繞著自己的圈圈 = 接著又寫同一類。只畫出機率 15% 以上的接續。(反駁併入「改進」)<br><b>想知道百分比怎麼來的?</b>把滑鼠移到線上的百分比(手機點一下),會說明「有幾則貼文在回應這一類、其中幾則是哪一類」和算式。</p>
+                    <p class="text-[11px] text-slate-500 leading-relaxed mt-1"><b>怎麼看:</b>圓越大,表示這一類貼文越多。<b>箭頭 A → B</b> = 有人回應了一則 A 之後,常常接著寫 B;箭頭越粗,機率越高;繞著自己的圈圈 = 接著又寫同一類。只畫出機率 15% 以上的接續。(反例併入「改進」)<br><b>想知道百分比怎麼來的?</b>把滑鼠移到線上的百分比(手機點一下),會說明「有幾則貼文在回應這一類、其中幾則是哪一類」和算式。</p>
                     <details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">看數字表格(每一列加起來是 100%)</summary>
                         <div class="overflow-x-auto mt-2"><div id="sequential-matrix-container" class="min-w-[300px]"></div></div>
                         <div class="mt-2 text-xs text-slate-400 italic text-right">* 數值代表轉移機率 (%)，顏色越深機率越高。把滑鼠移到數字上可以看它是怎麼算出來的。參考 Jeong (2003)。</div>
                     </details>
                 </div>
+                <div class="space-y-6 md:space-y-8 min-w-0">
                 <div class="card">
                     <div class="flex justify-between items-center mb-4">
                         <div><h3 class="font-bold text-slate-800"><i class="fas fa-users-cog text-teal-500 mr-2"></i>關鍵知識經紀人 (Knowledge Brokers)</h3><p class="text-xs text-slate-500">中介中心性 (Betweenness Centrality) 分析：誰是連結不同群體的橋樑？</p></div>
                         <button class="ref-btn" onclick="openRef('brokers')"><i class="fas fa-book"></i> Ref:</button>
                     </div>
                     <div id="brokers-list-container" class="space-y-3"><div class="text-center text-slate-400 text-sm py-4">分析中...</div></div>
+                </div>
+                <div class="card">
+                    <div>
+                        <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-compass text-indigo-500 mr-2"></i>鷹架分佈:前期 → 後期</h3><button class="ref-btn" onclick="openRef('principles')"><i class="fas fa-book"></i> Ref:</button></div>
+                        <p class="text-[11px] text-slate-500 mb-1 leading-relaxed">把全部貼文依時間分成前、中、後三段,看<b>各類型占的比例</b>怎麼變;最右邊的「綜合」是全部貼文合起來的比例。</p>
+                        <div id="phase-insight" class="text-xs text-slate-700 leading-relaxed mb-2"></div>
+                        <div class="h-[230px]"><canvas id="principlesChart" role="img" aria-label="前期、中期、後期的貼文類型比例堆疊柱狀圖">貼文類型比例</canvas></div>
+                        <div id="phase-legend" class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-600"></div>
+                    </div>
+                </div>
                 </div>
             </div>
 
@@ -548,15 +560,8 @@
                     <div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800"><i class="fas fa-share-alt text-blue-500 mr-2"></i>社群互動結構 (SNA)</h3><button class="ref-btn" onclick="openRef('sna')"><i class="fas fa-book"></i> Ref:</button></div>
                     <div id="overview-network-container" class="h-[250px] md:h-[300px] bg-slate-50 rounded border border-slate-100"></div>
                 </div>
-                <div class="card flex flex-col gap-6">
+                <div class="card">
                     <div>
-                        <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-compass text-indigo-500 mr-2"></i>鷹架分佈:前期 → 後期</h3><button class="ref-btn" onclick="openRef('principles')"><i class="fas fa-book"></i> Ref:</button></div>
-                        <p class="text-[11px] text-slate-500 mb-1 leading-relaxed">把全部貼文依時間分成前、中、後三段,看<b>各類型占的比例</b>怎麼變;最右邊的「綜合」是全部貼文合起來的比例。</p>
-                        <div id="phase-insight" class="text-xs text-slate-700 leading-relaxed mb-2"></div>
-                        <div class="h-[230px]"><canvas id="principlesChart" role="img" aria-label="前期、中期、後期的貼文類型比例堆疊柱狀圖">貼文類型比例</canvas></div>
-                        <div id="phase-legend" class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-600"></div>
-                    </div>
-                    <div class="border-t pt-4">
                         <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-star text-yellow-500 mr-2"></i>KB 12原則</h3><button class="ref-btn" onclick="openRef('kb12')"><i class="fas fa-book"></i> Ref:</button></div>
                         <div class="h-[180px]"><canvas id="kbPrinciplesChart"></canvas></div>
                     </div>
@@ -611,7 +616,7 @@
                                 <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6"></i>提問</span>
                                 <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#eab308"></i>延伸</span>
                                 <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#22c55e"></i>改進</span>
-                                <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#ef4444"></i>反駁</span>
+                                <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#ef4444"></i>反例</span>
                                 <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#a855f7"></i>整合</span>
                                 <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#d5dbe5"></i>他們彼此之間(灰線)</span>
                             </div>
@@ -1101,8 +1106,71 @@ async function geminiFetch(key, init) {
         function kbTypeMixText(notes) {
             const c = { question: 0, extend: 0, improve: 0, counter: 0, riseabove: 0 };
             notes.forEach(n => { if (c[n.type] !== undefined) c[n.type]++; });
-            return '累計貼文 ' + notes.length + ' 篇(提問' + c.question + '、延伸' + c.extend + '、改進' + c.improve + '、反駁' + c.counter + '、整合' + c.riseabove + ');' + new Set(notes.map(n => n.author)).size + ' 位同學發言;回應型貼文 ' + notes.filter(n => n.parentId).length + ' 篇';
+            return '累計貼文 ' + notes.length + ' 篇(提問' + c.question + '、延伸' + c.extend + '、改進' + c.improve + '、反例' + c.counter + '、整合' + c.riseabove + ');' + new Set(notes.map(n => n.author)).size + ' 位同學發言;回應型貼文 ' + notes.filter(n => n.parentId).length + ' 篇';
         }
+        // ===== 歷程說明的「可能原因」:每個項目怎麼說明這一步的數字為什麼會變(純函式在 kb-why.js)=====
+        const kbNm = id => { const ul = (globalRawDB && globalRawDB.userList) || {}, u = ul[id] || Object.values(ul).find(x => String(x.id) === String(id)); return (u && u.name) || String(id); };
+        const kbScopedIds = () => getScopedStudents(globalRawDB, globalRawDB.nodes || []).map(u => String(u.id));
+        const kbStudentSet = () => { const s = {}; Object.values((globalRawDB && globalRawDB.userList) || {}).filter(u => u.role !== 'teacher').forEach(u => { s[String(u.id)] = 1; }); return s; };
+        const kbEdgeSet = (nodes, students) => {
+            const ids = new Set(students.map(u => String(u.id))), byId = {}, e = {}; nodes.forEach(n => { byId[n.id] = n; });
+            nodes.forEach(n => { const p = n.parentId ? byId[n.parentId] : null; if (p && String(p.author) !== String(n.author) && ids.has(String(n.author)) && ids.has(String(p.author))) e[String(n.author) + '>' + String(p.author)] = 1; });
+            return e;
+        };
+        const kbMemo = fn => { let key, val; return c => { const k = c.id + ':' + c.k + ':' + c.pj; if (k !== key) { val = fn(c); key = k; } return val; }; };
+        const kbPhaseNote = '另外,前、中、後期是把到目前為止的貼文依時間「平分成三段」,每新增貼文,三段的切點都會往後移,所以前期的數字也可能跟著變。';
+        const kbTransSpec = () => { const f = kbMemo(c => KBWhy.trans(c.A, c.P, c.added)); return { say: c => (f(c) || {}).say || null, why: c => (f(c) || {}).why || '' }; };
+        const kbShareSpec = (who, extra) => { const f = kbMemo(c => KBWhy.shares(c.A, c.P, c.added, { who: who, authors: kbStudentSet() })); return { say: c => (f(c) || {}).say || null, why: c => ((f(c) || {}).why || '') + (extra ? (((f(c) || {}).why) ? '<br>' : '') + extra : '') }; };
+        const kbBrokerSpec = () => { const f = kbMemo(c => KBWhy.brokers(c.A, c.P, kbScopedIds())); return { say: c => (f(c) || {}).say || null, why: c => (f(c) || {}).why || '' }; };
+        const kbQuadSpec = () => { const f = kbMemo(c => KBWhy.quad(c.A, c.P, kbScopedIds())); return { say: c => (f(c) || {}).say || null, why: c => (f(c) || {}).why || '' }; };
+        const kbPromSpec = () => { const f = kbMemo(c => KBWhy.promising(c.A, c.P, c.added)); return { say: c => (f(c) || {}).say || null, why: c => (f(c) || {}).why || '' }; };
+        const kbEvoSpec = () => { const f = kbMemo(c => KBWhy.evolution(c.A, c.P, c.added)); return { say: c => (f(c) || {}).say || null, why: c => (f(c) || {}).why || '' }; };
+        window.KB_SPEC = {
+            seq: kbTransSpec(), 'scaffold-trans': kbTransSpec(),
+            kpi: { why: c => KBWhy.kpi(c.A, c.P, c.added, { calc: kbKpiCalc, edges: notes => kbEdgeSet(notes, getScopedStudents(globalRawDB, globalRawDB.nodes || [])) }) },
+            fingerprint: kbShareSpec('全班平均'), principles: { why: c => { const s = KBWhy.shares(c.A, c.P, c.added, { who: '全班' }); return (s ? s.why + '<br>' : '') + kbPhaseNote; } },
+            brokers: kbBrokerSpec(), impact: kbQuadSpec(), promising: kbPromSpec(), evotimeline: kbEvoSpec(),
+            kb12radar: { why: c => KBWhy.drivers(c.A, c.P, c.added) }, kb12check: { why: c => KBWhy.drivers(c.A, c.P, c.added) }
+        };
+        // 只有「班級層級、依發文日累積」的項目,用日期對到貼文,產生通用的原因(不碰個別學生頁)
+        const KB_WHY_HINT = {
+            traj: '「提出的問題」「發展出的理論」都是累積量,每新增相關貼文就會往上爬。', trajlad: '每個提問底下接著的回應越多、越深,這個問題就被想到更高的一層。',
+            stream: '河的厚度就是這一天各類發言的數量,新增得多的類型那一層就變厚。', lexical: '曲線是班上用過的「不重複」專業詞彙累積量,貼文裡出現新的詞,曲線才會往上。',
+            lexgrow: '兩條線是邏輯詞與口語詞的累積使用量;貼文寫得越完整、越常用「因為…所以…」,邏輯詞就爬得越快。', emotion: '情緒比例是依貼文語氣的關鍵詞判斷的,這天貼文的語氣組成不同,比例就跟著變。',
+            sna: '有人回應了別人就會長出新的連線;同一對同學多次互動,線就變粗。', lens: '四類圓球的大小是各類貼文累計的篇數,新增得多的類型,圓就變大。', concept: '詞彙是從貼文內容抽出來的;這天貼文提到新的詞,或讓兩個詞常一起出現,圖上就長出新點或新連線。'
+        };
+        window.kbWhyAuto = (id, labels) => {
+            const spec = (window.KB_SPEC || {})[id], hint = KB_WHY_HINT[id];
+            if (!spec && !hint) return null;
+            const base = (globalAllNotes || []).slice(); if (!base.length || !labels) return null;
+            const sd = kbStepDays(base.map(n => n.dateTime));
+            return (k, pj) => {
+                const lb = String(labels[k]); if (/\(/.test(lb)) return '';
+                const step = sd.labels.indexOf(lb); if (step < 1) return '';
+                const A = base.filter(n => sd.idx(n.dateTime) <= step), P = base.filter(n => sd.idx(n.dateTime) <= step - 1);
+                const c = { id: id, k: step, pj: step - 1, A: A, P: P, added: KBWhy.minus(A, P) };
+                try {
+                    const w = spec && spec.why ? spec.why(c) : '';
+                    if (w) return w;
+                    const sm = KBWhy.addedSummary(c.added); return sm ? sm + (hint ? ' ' + hint : '') : '';
+                } catch (e) { console.error(e); return ''; }
+            };
+        };
+        // 個別學生:這一天他做了什麼、誰回應了他(label = 日期 M/D);extra(k, prevK, 他這天的貼文) 可補充各項目自己的說明
+        const kbStuWhy = (userId, who, labels, extra, hint) => {
+            const all = globalAllNotes.slice(), byId = {}; all.forEach(n => { byId[n.id] = n; });
+            return (k, pj) => {
+                const lb = String(labels[k]); if (/\(/.test(lb)) return '';
+                const day = n => trajMD(trajTs(n)) === lb;
+                const added = all.filter(n => String(n.author) === String(userId) && day(n));
+                const inbound = all.filter(n => { const p = n.parentId && byId[n.parentId]; return p && String(p.author) === String(userId) && String(n.author) !== String(userId) && day(n); });
+                if (!added.length && !inbound.length) return '';
+                let s = ''; try { s = KBWhy.studentDay({ who: who, added: added, inbound: inbound, byId: byId }); } catch (e) { console.error(e); }
+                let ex = ''; try { ex = extra ? extra(k, pj, added) : ''; } catch (e) { console.error(e); }
+                return [s, ex, hint].filter(Boolean).join(' ');
+            };
+        };
+        try { KBWhy.setNamer(kbNm); } catch (e) {}
         function kbRep(o) {
             if (window.__kbReplaying || !o.anchor || !globalAllNotes.length) return null;
             const base = globalAllNotes, sd = kbStepDays(base.map(n => n.dateTime));
@@ -1111,9 +1179,14 @@ async function geminiFetch(key, init) {
                 globalAllNotes = base.filter(n => sd.idx(n.dateTime) <= step); window.__kbReplaying = true;
                 try { return fn(); } finally { globalAllNotes = keep; window.__kbReplaying = false; try { Chart.defaults.animation = anim; } catch (e) {} }
             };
+            const stepCache = {}, notesAt = step => stepCache[step] || (stepCache[step] = base.filter(n => sd.idx(n.dateTime) <= step));
+            const ctxAt = (k, pj) => { const A = notesAt(k), P = notesAt(pj); return { id: o.id, k: k, pj: pj, A: A, P: P, added: KBWhy.minus(A, P) }; };
+            const spec = (window.KB_SPEC || {})[o.id] || {};
             return kbAttachReplay({ id: o.id, anchor: o.anchor, inside: o.inside, labels: sd.labels, explainTitle: o.title,
                 render: step => withStep(step, () => o.render(step)),
-                values: step => withStep(step, () => (o.values ? o.values(step) : kbTypeMixText(globalAllNotes))) });
+                values: step => withStep(step, () => (o.values ? o.values(step) : kbTypeMixText(globalAllNotes))),
+                say: spec.say ? Object.assign((k, pj) => { try { return spec.say(ctxAt(k, pj)); } catch (e) { console.error(e); return null; } }, { only: true }) : undefined,
+                why: (k, pj) => { try { const c = ctxAt(k, pj), w = spec.why ? spec.why(c) : ''; return w || KBWhy.addedSummary(c.added); } catch (e) { console.error(e); return ''; } } });
         }
         function kbKpiCalc(notes) {
             const students = getScopedStudents(globalRawDB, globalRawDB.nodes || []);
@@ -1308,7 +1381,7 @@ async function geminiFetch(key, init) {
         // ===== 知識推進軌跡:問題長大階梯 =====
         // 每一則「提問」貼文是一個「問題」(包含它底下接著回應的貼文,遇到下一個提問就停)。看這些回應裡出現過的最高一類貼文,決定它走到第幾層:
         //   🌱 第 1 層 提問(只有主貼文)  🌿 第 2 層 有人接著想(延伸或其他回應)
-        //   🔧 第 3 層 改進或不同看法(改進、反駁)  🌸 第 4 層 整理成結論(整合/昇華)
+        //   🔧 第 3 層 改進或不同看法(改進、反例)  🌸 第 4 層 整理成結論(整合/昇華)
         // 層數是依學生發文時自己選的貼文類型判斷,不判斷內容好壞。
         const TRAJ_STAGES = [
             { k: 1, icon: '🌱', name: '提問', color: '#3b82f6', tip: '有人提出了問題或想法' },
@@ -1405,7 +1478,7 @@ async function geminiFetch(key, init) {
         const DEPTH_POINTS = [
             { label: ['① 起步', '持續參與'], cap: 20, idx: 4, name: '① 起步:持續參與', what: '有沒有常常來發言、想法有沒有被同學回應(持續探究分數)' },
             { label: ['② 主動', '自己發起'], cap: 40, idx: 0, name: '② 主動:自己發起', what: '會不會自己提問、設定方向、提出解釋(主體性分數)' },
-            { label: ['③ 深化', '改進想法'], cap: 60, idx: 2, name: '③ 深化:改進想法', what: '有沒有改進或質疑想法(改進、反駁貼文的比例,觀點改進分數)' },
+            { label: ['③ 深化', '改進想法'], cap: 60, idx: 2, name: '③ 深化:改進想法', what: '有沒有改進或質疑想法(改進、反例貼文的比例,觀點改進分數)' },
             { label: ['④ 整合', '昇華成結論'], cap: 80, idx: 3, name: '④ 整合:昇華成結論', what: '會不會把大家的想法整理成更高層次的結論(昇華整合分數)' },
             { label: ['⑤ 整體', '持續探究'], cap: 100, idx: 4, name: '⑤ 整體:一路持續探究', what: '一路下來持續探究的程度(持續探究分數)' }
         ];
@@ -1430,7 +1503,7 @@ async function geminiFetch(key, init) {
             { k: 'question', name: '提問', color: '#3b82f6', sym: '？' },
             { k: 'extend', name: '延伸', color: '#eab308', sym: '＋' },
             { k: 'improve', name: '改進', color: '#22c55e', sym: '↑' },
-            { k: 'counter', name: '反駁', color: '#ef4444', sym: '≠' },
+            { k: 'counter', name: '反例', color: '#ef4444', sym: '≠' },
             { k: 'riseabove', name: '整合', color: '#a855f7', sym: '★' }
         ];
         const PH_NAMES = ['前期', '中期', '後期', '綜合'];   // 最後一根「綜合」= 全部貼文合起來
@@ -1526,7 +1599,7 @@ async function geminiFetch(key, init) {
         }
 
         // ===== 言談序列轉移:轉移網絡圖 =====
-        // 節點 = 貼文類型(反駁併入改進);箭頭 A→B = 回應一則 A 之後接著寫 B 的機率(每一列加起來 100%)。
+        // 節點 = 貼文類型(反例併入改進);箭頭 A→B = 回應一則 A 之後接著寫 B 的機率(每一列加起來 100%)。
         // 前/中/後期:把目前看得到的貼文依時間平分成三段,「回應」算在它自己所在的那一段。
         const SEQ_TYPES = [
             { k: 'question', name: '提問', color: '#3b82f6', x: 70, y: 150 },
@@ -1566,7 +1639,7 @@ async function geminiFetch(key, init) {
                 parts.push('同一列(接在「' + an + '」後面)的百分比加起來是 100%。');
                 if (tot < 10) parts.push('⚠ 只有 ' + tot + ' 則,樣本很少,僅供參考。');
             }
-            if (an === '改進' || bn === '改進') parts.push('「反駁」併在「改進」裡一起算。');
+            if (an === '改進' || bn === '改進') parts.push('「反例」併在「改進」裡一起算。');
             return seqEsc(parts.join('||'));
         }
         function seqChgTip(x) {
@@ -1612,12 +1685,21 @@ async function geminiFetch(key, init) {
             const out = []; SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => { const tot = seqRowTotal(m, a.k); if (tot && m[a.k][b.k]) out.push({ a: a, b: b, c: m[a.k][b.k], p: m[a.k][b.k] / tot * 100, tot: tot }); }));
             return out.sort((x, y) => y.c - x.c);
         }
+        // 立體球:放射狀漸層(左上亮、右下暗)+ 高光 + 底下的陰影
+        function seqShade(hex, f) {
+            const n = parseInt(String(hex).slice(1), 16), c = [(n >> 16) & 255, (n >> 8) & 255, n & 255], t = f >= 0 ? 255 : 0, a = Math.abs(f);
+            return 'rgb(' + c.map(v => Math.round(v + (t - v) * a)).join(',') + ')';
+        }
+        function seqBallDefs() {
+            return SEQ_TYPES.map(t => '<radialGradient id="seq-ball-' + t.k + '" cx="38%" cy="30%" r="80%" fx="32%" fy="24%"><stop offset="0" stop-color="' + seqShade(t.color, 0.66) + '"/><stop offset=".34" stop-color="' + seqShade(t.color, 0.14) + '"/><stop offset=".7" stop-color="' + t.color + '"/><stop offset="1" stop-color="' + seqShade(t.color, -0.4) + '"/></radialGradient>').join('')
+                + '<filter id="seq-sh" x="-35%" y="-30%" width="170%" height="185%"><feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#0f172a" flood-opacity=".32"/></filter>';
+        }
         function seqInner(m) {
             const node = {}; SEQ_TYPES.forEach(t => { node[t.k] = t; });
             const mxs = SEQ_TYPES.reduce((s0, t) => s0 + t.x, 0) / SEQ_TYPES.length, mys = SEQ_TYPES.reduce((s0, t) => s0 + t.y, 0) / SEQ_TYPES.length;
             const colTot = {}; let grand = 0; SEQ_TYPES.forEach(b => { colTot[b.k] = SEQ_TYPES.reduce((s, a) => s + m[a.k][b.k], 0); grand += colTot[b.k]; });
             SEQ_TYPES.forEach(t => { t.r = 26 + 22 * Math.sqrt(grand ? colTot[t.k] / grand : 0); });
-            let defs = '<defs>' + SEQ_TYPES.map(t => '<marker id="seq-arr-' + t.k + '" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L9 5L1 9z" fill="' + t.color + '"/></marker>').join('') + '</defs>';
+            let defs = '<defs>' + SEQ_TYPES.map(t => '<marker id="seq-arr-' + t.k + '" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L9 5L1 9z" fill="' + t.color + '"/></marker>').join('') + seqBallDefs() + '</defs>';
             let edges = '', labels = '';
             SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => {
                 const tot = seqRowTotal(m, a.k), c = m[a.k][b.k]; if (!tot || !c) return;
@@ -1637,11 +1719,11 @@ async function geminiFetch(key, init) {
                     labels += '<text' + tipA + ' x="' + mx.toFixed(1) + '" y="' + (my + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
                 }
             }));
-            const nodes = SEQ_TYPES.map(t => '<g data-seqn="' + t.k + '" style="cursor:grab"><title>' + t.name + ':被回應 ' + seqRowTotal(m, t.k) + ' 次;被當作回應 ' + colTot[t.k] + ' 次</title><circle cx="' + t.x.toFixed(1) + '" cy="' + t.y.toFixed(1) + '" r="' + t.r.toFixed(1) + '" fill="' + t.color + '" stroke="#fff" stroke-width="3"/><text x="' + t.x.toFixed(1) + '" y="' + (t.y + 5).toFixed(1) + '" text-anchor="middle" class="seq-nm">' + t.name + '</text></g>').join('');
+            const nodes = SEQ_TYPES.map(t => '<g data-seqn="' + t.k + '" style="cursor:grab"><title>' + t.name + ':被回應 ' + seqRowTotal(m, t.k) + ' 次;被當作回應 ' + colTot[t.k] + ' 次</title><circle cx="' + t.x.toFixed(1) + '" cy="' + t.y.toFixed(1) + '" r="' + t.r.toFixed(1) + '" fill="url(#seq-ball-' + t.k + ')" stroke="#fff" stroke-opacity=".9" stroke-width="2.5" filter="url(#seq-sh)"/><ellipse cx="' + (t.x - t.r * 0.27).toFixed(1) + '" cy="' + (t.y - t.r * 0.47).toFixed(1) + '" rx="' + (t.r * 0.5).toFixed(1) + '" ry="' + (t.r * 0.25).toFixed(1) + '" fill="#fff" opacity=".45" pointer-events="none" transform="rotate(-20 ' + (t.x - t.r * 0.27).toFixed(1) + ' ' + (t.y - t.r * 0.47).toFixed(1) + ')"/><ellipse cx="' + (t.x + t.r * 0.22).toFixed(1) + '" cy="' + (t.y + t.r * 0.62).toFixed(1) + '" rx="' + (t.r * 0.42).toFixed(1) + '" ry="' + (t.r * 0.13).toFixed(1) + '" fill="#fff" opacity=".16" pointer-events="none"/><text x="' + t.x.toFixed(1) + '" y="' + (t.y + 5).toFixed(1) + '" text-anchor="middle" class="seq-nm">' + t.name + '</text></g>').join('');
             return defs + edges + nodes + labels;
         }
         function seqSvg(m) {
-            return '<svg viewBox="0 0 ' + SEQ_W + ' ' + SEQ_H + '" width="100%" role="img" aria-label="言談序列轉移網絡圖" style="background:#f8fafc;border-radius:14px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab"><style>.seq-lb{cursor:help;font:bold 12px sans-serif;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:3.5px;stroke-linejoin:round}.seq-nm{font:bold 14px sans-serif;fill:#fff;pointer-events:none}</style><g id="seq-vp" transform="translate(' + seqUI.px.toFixed(1) + ' ' + seqUI.py.toFixed(1) + ') scale(' + seqUI.z.toFixed(3) + ')">' + seqInner(m) + '</g></svg>';
+            return '<svg viewBox="0 0 ' + SEQ_W + ' ' + SEQ_H + '" width="100%" role="img" aria-label="言談序列轉移網絡圖" style="background:#f8fafc;border-radius:14px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab"><style>.seq-lb{cursor:help;font:bold 12px sans-serif;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:3.5px;stroke-linejoin:round}.seq-nm{font:bold 14px sans-serif;fill:#fff;pointer-events:none;paint-order:stroke;stroke:rgba(15,23,42,.38);stroke-width:2.6px;stroke-linejoin:round}</style><g id="seq-vp" transform="translate(' + seqUI.px.toFixed(1) + ' ' + seqUI.py.toFixed(1) + ') scale(' + seqUI.z.toFixed(3) + ')">' + seqInner(m) + '</g></svg>';
         }
         // 互動:拖圓球(其他球慢慢跟過來)、滾輪縮放、拖背景移動、還原
         function seqBind(box) {
@@ -2043,7 +2125,7 @@ async function geminiFetch(key, init) {
             try {
                 renderScaffoldPhases(stats.nodes, null);
                 const sdP = kbStepDays(stats.nodes.map(n => trajTs(n)));
-                kbAttachReplay({ id: 'principles', anchor: document.getElementById('principlesChart').parentElement.nextElementSibling, labels: sdP.labels, explainTitle: '全班鷹架類型(提問/延伸/改進/反駁/整合)在前、中、後期的比例變化',
+                kbAttachReplay({ id: 'principles', anchor: document.getElementById('principlesChart').parentElement.nextElementSibling, labels: sdP.labels, explainTitle: '全班鷹架類型(提問/延伸/改進/反例/整合)在前、中、後期的比例變化',
                     render: step => renderScaffoldPhases(stats.nodes.filter(n => sdP.idx(trajTs(n)) <= step), step),
                     values: step => { const v = stats.nodes.filter(n => sdP.idx(trajTs(n)) <= step), P = scaffoldPhaseData(v); return P ? '貼文 ' + v.length + ' 則;前期 ' + P.txt[0] + ';後期 ' + P.txt[2] : (v.length ? '貼文 ' + v.length + ' 則(還太少,不分段)' : '尚無貼文'); } });
             } catch (e) { console.error(e); }
@@ -2072,7 +2154,7 @@ async function geminiFetch(key, init) {
             };
             const qCount = getCount(['question', '問題', '提問', '疑問']);
             const eCount = getCount(['extend', '補充', '資料', '權威', 'reference', '知識']);
-            const iCount = getCount(['improve', 'counter', 'riseabove', '反駁', '反對', '改進', '總結', '整合', '提升', '不同意']);
+            const iCount = getCount(['improve', 'counter', 'riseabove', '反駁', '反例', '反對', '改進', '總結', '整合', '提升', '不同意']);
 
             // ==========================================
             // ⭐ 核心修正區：動態切割全班與小組的基準數據
@@ -2104,7 +2186,7 @@ async function geminiFetch(key, init) {
             // ==========================================
 
             // 2. 觀點多樣性 (Idea Diversity) - 使用修正後的分母 (小組人數)
-            // 觀點多樣性 = 參與者覆蓋率(50%) + 對照性想法占比(提問/反駁/改進,達 40% 為滿分)(50%)
+            // 觀點多樣性 = 參與者覆蓋率(50%) + 對照性想法占比(提問/反例/改進,達 40% 為滿分)(50%)
             const contrastShare = tCount > 0 ? ((typeCounts.question || 0) + (typeCounts.counter || 0) + (typeCounts.improve || 0)) / tCount : 0;
             const coverage = Math.min(1, activeAuthors.size / Math.max(1, targetStudentCount));
             const diversityScore = stats.totalNotes > 0 ? Math.min(100, Math.round((coverage * 0.5 + Math.min(1, contrastShare / 0.4) * 0.5) * 100)) : 0;
@@ -2644,7 +2726,7 @@ async function geminiFetch(key, init) {
         // ⭐ Epistemic Agency(認知能動性)綜合判定
         // 不再只看「提問比例」。依三個面向判斷學生是否「自己負責推進知識」:
         //   1. 主動發起:提問、開新話題,或提出下一步/假設/計畫
-        //   2. 自我修正:修正、改寫、回頭檢討自己或他人的想法,或改進/反駁/回應自己先前的發言
+        //   2. 自我修正:修正、改寫、回頭檢討自己或他人的想法,或改進/反例/回應自己先前的發言
         //   3. 提出解釋:說明原因、機制、證據,而不只是附和
         // 三項各自換算成 0~1(達到目標比例即滿分),取平均為個人指數;指數 >= 0.7 視為達標,全班達標者 >= 60% 才算落實。
         // 註:文字面向以關鍵字判斷,屬輔助性的啟發式指標,建議搭配實際發言內容判讀。
@@ -2762,7 +2844,7 @@ async function geminiFetch(key, init) {
             const bothCount = users.filter(u => gave.has(String(u.id)) && got.has(String(u.id))).length;
             const crossRate = kbCrossAuthorRate(notes);
             const qishCount = notes.filter(n => n.type === 'question' || /[?？]/.test((n.title || '') + (n.content || ''))).length;
-            const contrastCount = totalScaffolds.question + totalScaffolds.improve; // 改進類已含反駁
+            const contrastCount = totalScaffolds.question + totalScaffolds.improve; // 改進類已含反例
             const srcCount = notes.filter(n => KB_SRC_RE.test((n.title || '') + ' ' + (n.content || ''))).length;
             const raAuthors = users.filter(u => userStats[u.id].scaffolds.riseabove > 0).length;
             const giniVal = parseFloat(globalClassStats.gini) || 0;
@@ -2774,7 +2856,7 @@ async function geminiFetch(key, init) {
                   val: `疑問型貼文 ${pct(qishCount / nz)}(${qishCount} 篇);人均 ${perStudent.toFixed(1)} 篇`,
                   meaning: '知識建構從學生「真的想知道」的問題開始。疑問型貼文太少,代表討論可能只是在完成任務,而不是在解決自己想搞懂的問題。老師可以鼓勵學生把卡住的地方直接寫成問題。' },
                 { key: 'kb12_diversity', title: 'Idea Diversity', pass: users.length > 0 && (activeStudents / users.length) >= 0.8 && (contrastCount / nz) >= AN.kbDiversityContrast,
-                  desc: '是否有多元觀點(參與率 ≥ 80%,且提問/改進/反駁等對照性想法 ≥ 30%)',
+                  desc: '是否有多元觀點(參與率 ≥ 80%,且提問/改進/反例等對照性想法 ≥ 30%)',
                   val: `${activeStudents}/${users.length} 人參與;對照性想法 ${pct(contrastCount / nz)}`,
                   meaning: '多元觀點不是人多就好,還要有不同想法互相碰撞。如果大家都在附和延伸,看起來很和諧,但想法其實沒有被挑戰。老師可以請學生針對同學的說法提出「如果不是這樣呢?」。' },
                 { key: 'kb12_agency', title: 'Epistemic Agency', pass: ea.total > 0 && ea.rate >= AN.agencyRate,
@@ -2786,9 +2868,9 @@ async function geminiFetch(key, init) {
                   val: `跨作者回應 ${pct(crossRate)};${bothCount}/${users.length} 人有來有往`,
                   meaning: '集體責任是每個人都對全班的知識進展負責。如果跨作者回應率低,代表大家各說各話;如果有人只回應別人卻沒人理他,或只發文卻不回應,就是社群裡的斷點。' },
                 { key: 'kb12_improve', title: 'Improvable Ideas', pass: (totalScaffolds.improve / nz) > 0.15,
-                  desc: '想法是否持續被改進(改進/反駁類貼文 > 15%)',
+                  desc: '想法是否持續被改進(改進/反例類貼文 > 15%)',
                   val: `${(totalScaffolds.improve / nz * 100).toFixed(1)}%`,
-                  meaning: '知識建構把所有想法都視為「還可以更好」。改進與反駁類貼文占比高,代表大家願意修正別人和自己的想法,而不是一次定案。' },
+                  meaning: '知識建構把所有想法都視為「還可以更好」。改進與反例類貼文占比高,代表大家願意修正別人和自己的想法,而不是一次定案。' },
                 { key: 'kb12_riseabove', title: 'Rise Above', pass: (totalScaffolds.riseabove / nz * 100) >= 5 && (raAuthors / uCnt) >= 0.3,
                   desc: '是否把分散想法整合成更高層次的結論(昇華率 ≥ 5%,且 ≥ 30% 學生寫過整合)',
                   val: `昇華率 ${(totalScaffolds.riseabove / nz * 100).toFixed(1)}%;${raAuthors}/${users.length} 人寫過整合`,
@@ -2914,9 +2996,9 @@ async function geminiFetch(key, init) {
             const mates = new Set(globalAllNotes.filter(n => myTopics.has(n.topicId)).map(n => String(n.author)).filter(a => a !== uIdStr)); // 同一討論區的其他成員
             const crossOut = myNodes.filter(n => { const p = n.parentId ? globalAllNotes.find(x => x.id === n.parentId) : null; return p && String(p.author) !== uIdStr; }).length;
             const communityScore = noteCount > 0 ? cap100(Math.min(1, (egoNodes.size - 1) / Math.max(1, mates.size)) * 50 + Math.min(1, (crossOut / nN) / 0.9) * 50) : 0;
-            // 觀點改進:改進/反駁貼文占比(45% 為滿分)
+            // 觀點改進:改進/反例貼文占比(45% 為滿分)
             const ideaImpScore = noteCount > 0 ? cap100(((scaffoldCounts.improve + scaffoldCounts.counter) / nN) / 0.45 * 100) : 0;
-            // 昇華整合:整合貼文占比(12% 為滿分,60%)+ 改進/反駁占比(45% 為滿分,40%)
+            // 昇華整合:整合貼文占比(12% 為滿分,60%)+ 改進/反例占比(45% 為滿分,40%)
             const synthesisScore = noteCount > 0 ? cap100(Math.min(1, (scaffoldCounts.riseabove / nN) / 0.12) * 60 + Math.min(1, ((scaffoldCounts.improve + scaffoldCounts.counter) / nN) / 0.45) * 40) : 0;
             // 持續探究:有發文的日期占全部發文日(50%)+ 被他人回覆的比例(80% 為滿分,50%)
             const allDays = new Set(globalAllNotes.map(n => dayKeyOf(n.dateTime)));
@@ -2999,13 +3081,13 @@ async function geminiFetch(key, init) {
             Object.keys(byTopic).forEach(tid => {
                 const list = byTopic[tid]; const L = list.length || 1;
                 const q = list.filter(n => n.type === 'question').length, im = list.filter(n => n.type === 'improve' || n.type === 'counter').length, ra = list.filter(n => n.type === 'riseabove').length;
-                grpLines.push('- ' + (topicName[tid] || tid) + ':貼文' + list.length + '篇;提問' + pct(q / L) + '、改進/反駁' + pct(im / L) + '、整合' + pct(ra / L) + ';回應他人' + pct(kbCrossAuthorRate(list)));
+                grpLines.push('- ' + (topicName[tid] || tid) + ':貼文' + list.length + '篇;提問' + pct(q / L) + '、改進/反例' + pct(im / L) + '、整合' + pct(ra / L) + ';回應他人' + pct(kbCrossAuthorRate(list)));
             });
 
             // 前後期趨勢(依發文日期對半分)
             const days = [...new Set(notes.map(n => dayKeyOf(n.dateTime)))];
             const half = Math.ceil(days.length / 2); const early = new Set(days.slice(0, half));
-            const part = f => { const a = notes.filter(n => f(early.has(dayKeyOf(n.dateTime)))); const A = a.length || 1; return '貼文' + a.length + '篇;提問' + pct(a.filter(n => n.type === 'question').length / A) + '、改進/反駁' + pct(a.filter(n => n.type === 'improve' || n.type === 'counter').length / A) + '、整合' + pct(a.filter(n => n.type === 'riseabove').length / A); };
+            const part = f => { const a = notes.filter(n => f(early.has(dayKeyOf(n.dateTime)))); const A = a.length || 1; return '貼文' + a.length + '篇;提問' + pct(a.filter(n => n.type === 'question').length / A) + '、改進/反例' + pct(a.filter(n => n.type === 'improve' || n.type === 'counter').length / A) + '、整合' + pct(a.filter(n => n.type === 'riseabove').length / A); };
             const trend = '前半段(' + half + ' 個發文日):' + part(x => x) + '\n- 後半段(' + (days.length - half) + ' 個發文日):' + part(x => !x);
 
             // 抽樣貼文(最多 12 篇,每篇截 80 字,作者以代號表示)
@@ -3021,7 +3103,7 @@ async function geminiFetch(key, init) {
                 '【重要規則】只能根據我提供的數據下結論,引用具體數字;不要編造沒有的資料;學生一律用代號(如 S01)稱呼;語氣專業但白話。\n' +
                 '【分析範圍】' + scope + '\n' +
                 '【總體數據】貼文' + notes.length + '篇、學生' + users.length + '人、網絡密度' + s.density + '、發言吉尼係數' + s.gini + '(越小越平均)、昇華率' + s.raRate + '%、風險人數' + s.riskCount + '\n' +
-                '【貼文類型】提問' + cnt.question + '(' + pct(cnt.question / N) + ')、延伸' + cnt.extend + '(' + pct(cnt.extend / N) + ')、改進' + cnt.improve + '(' + pct(cnt.improve / N) + ')、反駁' + cnt.counter + '(' + pct(cnt.counter / N) + ')、整合' + cnt.riseabove + '(' + pct(cnt.riseabove / N) + ')\n' +
+                '【貼文類型】提問' + cnt.question + '(' + pct(cnt.question / N) + ')、延伸' + cnt.extend + '(' + pct(cnt.extend / N) + ')、改進' + cnt.improve + '(' + pct(cnt.improve / N) + ')、反例' + cnt.counter + '(' + pct(cnt.counter / N) + ')、整合' + cnt.riseabove + '(' + pct(cnt.riseabove / N) + ')\n' +
                 '【KB 12 原則檢核(程式依固定規則計算,文字類指標為關鍵字估計)】\n' + kbLines.join('\n') + '\n' +
                 '【各討論區比較】\n' + grpLines.join('\n') + '\n' +
                 '【前後期趨勢】\n- ' + trend + '\n' +
@@ -3159,7 +3241,7 @@ async function geminiFetch(key, init) {
             const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
             egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics); kbLively(egoNetworkInstance);
             setTimeout(stopEgoPhysics, 2500);
-            kbAttachPlayer({ explainTitle: '這位學生的自我互動圈(他和誰互動)的形成過程', id: 'ego-t', container: container, anchor: container.parentElement, network: egoNetworkInstance, nodesDS: egoNodesDS, edgesDS: egoEdgesDS, labels: egoDays.stepLabels, steps: egoDays.steps, build: egoBuild });
+            kbAttachPlayer({ explainTitle: '這位學生的自我互動圈(他和誰互動)的形成過程', id: 'ego-t', container: container, anchor: container.parentElement, network: egoNetworkInstance, nodesDS: egoNodesDS, edgesDS: egoEdgesDS, labels: egoDays.stepLabels, steps: egoDays.steps, build: egoBuild, why: kbStuWhy(userId, displayName, egoDays.stepLabels, null, '有人回應了別人就會長出新的連線;同一對同學多次互動,線就變粗。') });
             const ctxB = document.getElementById('balanceChart').getContext('2d'); if(balanceChartInstance) balanceChartInstance.destroy();
             const totalBal = data.balanceData[0] + data.balanceData[1];
             document.getElementById('bal-init').innerText = totalBal > 0 ? Math.round(data.balanceData[0]/totalBal*100) + '%' : '0%';
@@ -3174,10 +3256,28 @@ async function geminiFetch(key, init) {
                 // 只在計算時暫時換成「到該日為止」的貼文,算完立刻還原,不會影響頁面其他項目
                 const metricsAt = step => { const full = globalAllNotes; globalAllNotes = full.filter(n => sdT.idx(n.dateTime) <= step); window.__kbReplaying = true; try { return calculateStudentMetrics(db, userId); } finally { globalAllNotes = full; window.__kbReplaying = false; } };
                 const AX = ['主體性', '社群互動', '觀點改進', '昇華整合', '持續探究'];
-                kbAttachReplay({ id: 'stu-radar', anchor: document.getElementById('radarChart').parentElement, labels: sdT.labels, explainTitle: who + ' 的核心能力雷達(主體性、社群互動、觀點改進、昇華整合、持續探究)',
+                const AXR = ['自己發起、提問、提出解釋', '回應同學與被同學回應', '改進、反例貼文的占比', '整合貼文的占比', '持續發文與被回應'];
+                const stuRadarWhy = kbStuWhy(userId, who, sdT.labels, (k, pj) => {
+                    const a = metricsAt(k), p = metricsAt(pj); if (!a) return '';
+                    const ch = []; AX.forEach((nm2, i) => { const x = a.radarData[i], y = p ? p.radarData[i] : 0; if (x !== y) ch.push(nm2 + ' ' + y + ' → ' + x + '(看' + AXR[i] + ')'); });
+                    let s = ch.length ? '分數變動:' + ch.join(';') + '。' : '';
+                    if (a.noteCount < STU_MATURE_N) s += (s ? ' ' : '') + '目前累計 ' + a.noteCount + ' 篇,還沒滿 ' + STU_MATURE_N + ' 篇,分數會先打折,每多發一篇折扣就少一點。';
+                    return s;
+                });
+                const stuBalWhy = kbStuWhy(userId, who, sdT.labels, (k, pj, added) => { if (!added.length) return ''; const o2 = added.filter(n => !n.parentId).length; return '新增的 ' + added.length + ' 則裡,' + o2 + ' 則是自己開的新主題、' + (added.length - o2) + ' 則是接在別的貼文後面,所以「自己發起」和「協作回應」的比例跟著變。'; });
+                const stuDepthWhy = kbStuWhy(userId, who, sdT.labels, (k, pj) => {
+                    const a = metricsAt(k), p = metricsAt(pj); if (!a || !a.depthTrend) return '';
+                    const ch = []; a.depthTrend.forEach((v, i) => { const y = p && p.depthTrend ? p.depthTrend[i] : 0; if (Math.round(v) !== Math.round(y) && DEPTH_POINTS[i]) ch.push('「' + DEPTH_POINTS[i].name + '」' + Math.round(y) + ' → ' + Math.round(v) + '(看:' + DEPTH_POINTS[i].what + ')'); });
+                    return ch.length ? '變動:' + ch.slice(0, 3).join(';') + '。' : '';
+                });
+                const stuKwWhy = kbStuWhy(userId, who, sdT.labels, (k, pj) => {
+                    const a = metricsAt(k), p = metricsAt(pj); if (!a) return ''; const old = new Set(p ? p.topKeywords : []), nw = (a.topKeywords || []).filter(w => !old.has(w));
+                    return nw.length ? '這天的貼文讓「' + nw.slice(0, 4).join('、') + '」進入了常用詞(出現次數夠多)。' : '';
+                });
+                kbAttachReplay({ id: 'stu-radar', why: stuRadarWhy, anchor: document.getElementById('radarChart').parentElement, labels: sdT.labels, explainTitle: who + ' 的核心能力雷達(主體性、社群互動、觀點改進、昇華整合、持續探究)',
                     render: step => { const m = metricsAt(step); radarChartInstance.data.datasets[0].data = m ? m.radarData : [0, 0, 0, 0, 0]; radarChartInstance.update('none'); },
                     values: step => { const m = metricsAt(step); return m ? m.radarData.map((v, i) => AX[i] + v).join('、') + ';角色:' + m.role + ';貼文 ' + m.noteCount + ' 篇' + (m.noteCount < STU_MATURE_N ? '(發文還少,分數先打折,發滿 ' + STU_MATURE_N + ' 篇才算滿)' : '') : '尚無貼文'; } });
-                kbAttachReplay({ id: 'stu-balance', anchor: document.getElementById('balanceChart').parentElement.parentElement, labels: sdT.labels, explainTitle: who + ' 的社群認知平衡(自己發起 vs 協作回應)',
+                kbAttachReplay({ id: 'stu-balance', why: stuBalWhy, anchor: document.getElementById('balanceChart').parentElement.parentElement, labels: sdT.labels, explainTitle: who + ' 的社群認知平衡(自己發起 vs 協作回應)',
                     render: step => {
                         const m = metricsAt(step), b = m ? m.balanceData : [0, 0], tb = b[0] + b[1];
                         balanceChartInstance.data.datasets[0].data = b; balanceChartInstance.update('none');
@@ -3185,12 +3285,12 @@ async function geminiFetch(key, init) {
                         document.getElementById('bal-build').innerText = tb > 0 ? Math.round(b[1] / tb * 100) + '%' : '0%';
                     },
                     values: step => { const m = metricsAt(step); return m ? '自己發起 ' + m.balanceData[0] + ' 篇、協作回應 ' + m.balanceData[1] + ' 篇' : '尚無貼文'; } });
-                kbAttachReplay({ id: 'stu-depth', anchor: document.getElementById('studentDepthChart').parentElement, labels: sdT.labels, explainTitle: who + ' 的認知深度演化(五個階段的深度發展)',
+                kbAttachReplay({ id: 'stu-depth', why: stuDepthWhy, anchor: document.getElementById('studentDepthChart').parentElement, labels: sdT.labels, explainTitle: who + ' 的認知深度演化(五個階段的深度發展)',
                     render: step => { const m = metricsAt(step); window.__depthRaw = m ? m.radarData : []; studentDepthChartInstance.data.datasets[0].data = m ? m.depthTrend : [0, 0, 0, 0, 0]; studentDepthChartInstance.update('none'); },
                     values: step => { const m = metricsAt(step); return m ? '深度發展 ' + m.depthTrend.map(v => Math.round(v)).join('→') : '尚無貼文'; } });
                 const dpWrap = document.querySelector('[data-kbnet="stu-depth"]');
                 if (dpWrap) kbAddExplain(dpWrap, { title: who + ' 的完整知識建構歷程(從最初到最後)', label: '📖 AI 歷程故事', table: () => kbStoryText(userId) }, 'stu-story');
-                kbAttachReplay({ id: 'stu-keywords', anchor: document.getElementById('student-keywords-container'), labels: sdT.labels, explainTitle: who + ' 的詞彙貢獻指紋(常用概念詞彙)的累積',
+                kbAttachReplay({ id: 'stu-keywords', why: stuKwWhy, anchor: document.getElementById('student-keywords-container'), labels: sdT.labels, explainTitle: who + ' 的詞彙貢獻指紋(常用概念詞彙)的累積',
                     render: step => { const m = metricsAt(step); try { renderStudentVocab(m ? m.vocabTerms : []); } catch (e) {} document.getElementById('student-keywords-container').innerHTML = (m && m.topKeywords.length > 0) ? m.topKeywords.map(k => '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded text-xs">' + k + '</span>').join('') : '<span class="text-xs text-slate-400 italic">尚無內容</span>'; },
                     values: step => { const m = metricsAt(step); return m && m.topKeywords.length ? '常用詞:' + ident.scrub(m.topKeywords.slice(0, 6).join('、')) : '尚無內容'; } });
             } catch (e) { console.error(e); }
@@ -3388,7 +3488,7 @@ function buildRefContext(key, studentId) {
             const m = map[k]; m.total++;
             if (n.type === 'question') m.q++; else if (n.type === 'extend') m.e++; else if (n.type === 'riseabove') m.r++; else m.i++;
         });
-        return ['各發文日貼文數(日期:總數|提問/延伸/改進反駁/整合):'].concat(days.map(m => '- ' + m.label + ':' + m.total + '|' + m.q + '/' + m.e + '/' + m.i + '/' + m.r));
+        return ['各發文日貼文數(日期:總數|提問/延伸/改進反例/整合):'].concat(days.map(m => '- ' + m.label + ':' + m.total + '|' + m.q + '/' + m.e + '/' + m.i + '/' + m.r));
     };
     const perStudent = () => {
         const recv = {}, gave = {}, own = {};
@@ -3409,7 +3509,7 @@ function buildRefContext(key, studentId) {
         return ['平均對話深度 ' + s.threadDepth + ' 層;最長討論串 ' + max + ' 層;討論串根(開頭貼文)' + roots + ' 個;回應自己的貼文 ' + selfReply + ' 篇(' + pct(selfReply / N) + ')。註:貼文多為一條接一條的連鎖,深度數字會偏大。'];
     };
     const transition = () => {
-        const lab = { question: '提問', extend: '延伸', improve: '改進', counter: '反駁', riseabove: '整合' };
+        const lab = { question: '提問', extend: '延伸', improve: '改進', counter: '反例', riseabove: '整合' };
         const m = {}; notes.forEach(n => { const p = n.parentId ? byId[n.parentId] : null; if (p) { const k = (lab[p.type] || p.type) + '→' + (lab[n.type] || n.type); m[k] = (m[k] || 0) + 1; } });
         return ['貼文類型接續(上層→回應)次數前 8 名:' + (Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(x => x[0] + ' ' + x[1]).join('、') || '無')];
     };
@@ -3443,7 +3543,7 @@ function buildRefContext(key, studentId) {
         const top = notes.slice().sort((a, b) => (rc[b.id] || 0) - (rc[a.id] || 0)).slice(0, 5).map(n => '[' + (kbTypeMap[n.type] || n.type) + '|' + code(n.author) + '] ' + scrub(n.title) + '(被回應 ' + (rc[n.id] || 0) + ' 次)');
         return ['被回應最多的貼文:'].concat(top.map(x => '- ' + x));
     };
-    const typeDist = () => ['貼文類型:提問 ' + cnt.question + '、延伸 ' + cnt.extend + '、改進 ' + cnt.improve + '、反駁 ' + cnt.counter + '、整合 ' + cnt.riseabove];
+    const typeDist = () => ['貼文類型:提問 ' + cnt.question + '、延伸 ' + cnt.extend + '、改進 ' + cnt.improve + '、反例 ' + cnt.counter + '、整合 ' + cnt.riseabove];
     const agencyDetail = () => {
         const ea = computeEpistemicAgency(notes, users);
         return ['認知能動性各學生(代號:主動發起/自我修正/提出解釋/指數):'].concat(ea.per.map(p => '- ' + code(p.id) + ':' + pct(p.ri) + '/' + pct(p.rm) + '/' + pct(p.re) + '/' + p.score.toFixed(2)));
@@ -3453,7 +3553,7 @@ function buildRefContext(key, studentId) {
         if (!m || !m.noteCount) return ['此學生在目前範圍內沒有貼文。'];
         const r = m.radarData;
         return ['學生 ' + code(sid) + ':貼文 ' + m.noteCount + ' 篇;角色=' + m.role + ';主體性 ' + r[0] + '、社群互動 ' + r[1] + '、觀點改進 ' + r[2] + '、昇華整合 ' + r[3] + '、持續探究 ' + r[4],
-            '貼文類型:提問 ' + m.scaffoldCounts.question + '、延伸 ' + m.scaffoldCounts.extend + '、改進 ' + m.scaffoldCounts.improve + '、反駁 ' + m.scaffoldCounts.counter + '、整合 ' + m.scaffoldCounts.riseabove,
+            '貼文類型:提問 ' + m.scaffoldCounts.question + '、延伸 ' + m.scaffoldCounts.extend + '、改進 ' + m.scaffoldCounts.improve + '、反例 ' + m.scaffoldCounts.counter + '、整合 ' + m.scaffoldCounts.riseabove,
             '自己發起 ' + m.balanceData[0] + ' 篇、回應別人 ' + m.balanceData[1] + ' 篇;收到回應 ' + m.inDegree + ' 次、給出回應 ' + m.outDegree + ' 次',
             '常用詞彙:' + scrub((m.topKeywords || []).join('、'))];
     };
@@ -3598,7 +3698,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: "知識推進軌跡:問題長大階梯",
                 theory: "看每一個問題被大家「想到第幾層」:提問 → 有人接著想 → 改進或不同看法 → 整理成結論。層數越高,代表這個問題被想得越遠,是「知識往前推進」最直接的樣子。",
                 source: "Scardamalia, M., & Bereiter, C. (2014). Knowledge building and knowledge creation: Theory, pedagogy, and technology. In R. K. Sawyer (Ed.), <i>The Cambridge Handbook of the Learning Sciences</i> (2nd ed., pp. 397–417). Cambridge University Press. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1017/CBO9781139519526.025\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Zhang, J., Tao, D., Chen, M.-H., Sun, Y., Judson, D., & Naqvi, S. (2018). Co-organizing the collective journey of inquiry with Idea Thread Mapper. <i>Journal of the Learning Sciences, 27</i>(3), 390–430. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508406.2018.1444992\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "把每一則「提問」貼文當成一個問題(包含它底下接著回應的貼文,遇到下一個提問就停,那是另一個問題)。看這些回應裡出現過的最高一類貼文:只有提問 = 第 1 層;有延伸或其他回應 = 第 2 層;有改進或反駁 = 第 3 層;有整合(昇華) = 第 4 層。每一格標出「第一次走到那一層」的日期;橘框代表最近 7 天剛走到;▲ 代表這一週往前走了一步。「還沒人回應」是提出超過 3 天都沒有任何回應。播放鈕可以看全班的問題一格一格長高。",
+                how: "把每一則「提問」貼文當成一個問題(包含它底下接著回應的貼文,遇到下一個提問就停,那是另一個問題)。看這些回應裡出現過的最高一類貼文:只有提問 = 第 1 層;有延伸或其他回應 = 第 2 層;有改進或反例 = 第 3 層;有整合(昇華) = 第 4 層。每一格標出「第一次走到那一層」的日期;橘框代表最近 7 天剛走到;▲ 代表這一週往前走了一步。「還沒人回應」是提出超過 3 天都沒有任何回應。播放鈕可以看全班的問題一格一格長高。",
                 diff: "層數是依學生發文時自己選的貼文類型判斷,不判斷內容好壞,也不保證想法正確。只要這個問題底下出現過某一類貼文就算走到那一層,不看是不是同一位同學。整個討論串很大時,每個小問題各自計算,不會被整串的結果蓋住。原本的兩條累積線仍保留在卡片下方「看數字趨勢」裡。",
                 ai_prompt: '如何引導學生把問題轉化為理論？'
             },
@@ -3606,7 +3706,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: "言談序列轉移",
                 theory: "序列分析:看「回應某一類貼文時,同學接著常用哪一類」,找出對話的慣性。畫成網絡後,可以一眼看出哪些接續最常發生,以及前期、中期、後期的對話習慣有沒有改變。",
                 source: "Jeong, A. C. (2003). The sequential analysis of group interaction and critical thinking in online threaded discussions. <i>American Journal of Distance Education, 17</i>(1), 25–43. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1207/s15389286ajde1701_3\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Jeong, A. C. (2005). A guide to analyzing message–response sequences and group interaction patterns in computer-mediated communication. <i>Distance Education, 26</i>(3), 367–383. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/01587910500291470\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Allison, P. D., & Liker, J. K. (1982). Analyzing sequential categorical data on dyadic interaction: A comment on Gottman. <i>Psychological Bulletin, 91</i>(2), 393–403. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1037/0033-2909.91.2.393\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "節點是貼文類型(提問、延伸、改進、整合;反駁併入改進)。每一則回應和它回應的那則貼文配成一對「被回應的類型 → 回應的類型」,統計每一列的百分比(每一列加起來 100%)。箭頭越粗,機率越高;繞著自己的圈圈是「接著又寫同一類」;只畫 15% 以上的接續,樣本少於 10 次的箭頭用虛線。前、中、後期是把目前看得到的貼文依時間平分成三段,回應算在它自己所在的那一段。表格仍收在「看數字表格」。",
+                how: "節點是貼文類型(提問、延伸、改進、整合;反例併入改進)。每一則回應和它回應的那則貼文配成一對「被回應的類型 → 回應的類型」,統計每一列的百分比(每一列加起來 100%)。箭頭越粗,機率越高;繞著自己的圈圈是「接著又寫同一類」;只畫 15% 以上的接續,樣本少於 10 次的箭頭用虛線。前、中、後期是把目前看得到的貼文依時間平分成三段,回應算在它自己所在的那一段。表格仍收在「看數字表格」。",
                 diff: "Jeong 的序列分析會用統計檢定(如 z 值)判斷哪些接續比隨機更常發生;這裡只呈現百分比,所以只能說「常見」,不能說「顯著」。類型是學生自己選的,不是人工編碼。階段是依貼文數平分,不一定對應真正的教學單元。",
                 ai_prompt: '如何打破無效的討論循環？'
             },
@@ -3628,7 +3728,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
             },
             'principles': {
                 title: "鷹架分佈:前期 → 後期",
-                theory: "看全班把想法「用什麼動作」說出來(提問、延伸、改進、反駁、整合),以及這些動作的比例從學期前期到後期怎麼變。如果提問變少、改進與整合變多,代表討論從「問問題」走向「把想法變好」。",
+                theory: "看全班把想法「用什麼動作」說出來(提問、延伸、改進、反例、整合),以及這些動作的比例從學期前期到後期怎麼變。如果提問變少、改進與整合變多,代表討論從「問問題」走向「把想法變好」。",
                 source: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
                 how: "把目前看得到的全部貼文依時間平分成前期、中期、後期三段(每段貼文數一樣多),計算各類型在每一段占的百分比,堆成 100% 的柱子。最右邊多一根「綜合」,是全部貼文合起來的比例,可以當作整體的基準來對照。圖上方一句話指出前期到後期變化最大的類型。播放時看的是「截至那一天為止」的三段。貼文少於 9 則時不分段。",
                 diff: "類型是學生發文時自己選的,不是人工編碼,所以只是「大致的討論動作」。三段是依貼文數平分,不一定對應真正的教學單元。某一類變多或變少本身不代表好壞,請回到原貼文看內容。",
@@ -3654,7 +3754,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: 'Idea Diversity',
                 theory: '觀點多樣性:要真正理解一個想法,必須接觸與它不同、甚至對立的想法;多樣性是想法進步的動力。',
                 source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
-                how: "參與率 ≥ 80%,且提問/改進/反駁類貼文占比 ≥ 30%。",
+                how: "參與率 ≥ 80%,且提問/改進/反例類貼文占比 ≥ 30%。",
                 diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '如何讓班上出現更多不同的觀點而不只是互相附和?'
             },
@@ -3678,7 +3778,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: 'Improvable Ideas',
                 theory: '可改進的想法:所有想法都是「還可以更好」的,社群持續檢驗、修正與改良,才會產生進步。',
                 source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
-                how: "改進與反駁類貼文占比 > 15%。",
+                how: "改進與反例類貼文占比 > 15%。",
                 diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
                 ai_prompt: '如何引導學生更多地改進與挑戰彼此的想法?'
             },
@@ -3748,9 +3848,9 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
             },
             'lens': {
                 title: '深度對話透視',
-                theory: "把全班的貼文依類型分成四群:提問/其他、延伸/改進、反駁、整合,看想法如何從簡單走向整合。",
+                theory: "把全班的貼文依類型分成四群:提問/其他、延伸/改進、反例、整合,看想法如何從簡單走向整合。",
                 source: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
-                how: "依貼文類型歸入「事實(提問與其他)」「理論(延伸與改進)」「挑戰(反駁)」「整合(昇華)」。",
+                how: "依貼文類型歸入「事實(提問與其他)」「理論(延伸與改進)」「挑戰(反例)」「整合(昇華)」。",
                 diff: "「事實」「理論」是平台對貼文類型的重新命名,並非分析內容真偽。例如提問會被歸在「事實」。先前引用的 Bloom 分類學是教學目標分類,與這個分法不同,已移除。",
                 ai_prompt: '如何引導學生從描述事實轉向解釋理論？'
             },
@@ -3790,7 +3890,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: "KB 五力雷達圖",
                 theory: "把五個面向(主動性、社群互動、觀點改進、昇華整合、持續探究)各換算成 0–100 分,幫助看到一位同學的整體樣貌。",
                 source: "Scardamalia, M., Bransford, J., Kozma, B., & Quellmalz, E. (2012). New assessments and environments for knowledge building. In P. Griffin, B. McGaw, & E. Care (Eds.), <i>Assessment and teaching of 21st century skills</i> (pp. 231–300). Springer. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1007/978-94-007-2324-5_5\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Damşa, C. I., Kirschner, P. A., Andriessen, J. E. B., Erkens, G., & Sins, P. H. M. (2010). Shared epistemic agency: An empirical study of an emergent construct. <i>Journal of the Learning Sciences, 19</i>(2), 143–186. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10508401003708381\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "五項都用「比例」計算並設定目標比例(例如改進/反駁占 45%、整合占 12% 為滿分),再乘上發文累積程度(發文滿 10 篇才算滿分)。",
+                how: "五項都用「比例」計算並設定目標比例(例如改進/反例占 45%、整合占 12% 為滿分),再乘上發文累積程度(發文滿 10 篇才算滿分)。",
                 diff: "五個面向的選擇與目標比例是平台自訂的設計,不是文獻給定的量表。引用的文章是「知識建構的評量與環境」,支持的是評量的方向,不是這五項公式。",
                 ai_prompt: '如何幫助學生補足雷達圖上的弱項？'
             },
@@ -3914,7 +4014,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
             else if (key === 'principles') {
                 dynamicVal = '學生最愛用哪種發言？';
                 dynamicStatus = '認知投入層次';
-                meaningText = '如果「延伸（黃色）」佔了一大半，代表大家都很客氣只會補充。要讓討論升級，老師可以規定：「今天的任務，每人一定要用一次『改進』或『反駁』的標籤！」';
+                meaningText = '如果「延伸（黃色）」佔了一大半，代表大家都很客氣只會補充。要讓討論升級，老師可以規定：「今天的任務，每人一定要用一次『改進』或『反例』的標籤！」';
             }
             else if (key === 'kb12') {
                 dynamicVal = '用專家標準來打分數';

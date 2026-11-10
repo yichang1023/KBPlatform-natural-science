@@ -306,7 +306,7 @@
   /* ---------- 唯讀的「看原文」視窗:不離開目前頁面,只能看、不能編輯 ----------
    *  KBUI.postViewer.open(貼文編號, { nodes, topics, nameOf(學生編號) })  三個選項都可省略(預設讀 KB 資料)
    *  視窗內可以點上一層(這則回應的對象)或下面的回應,在視窗裡一則一則看;「在論壇開啟」才會另開分頁。 */
-  var PV_TYPE = { question: ['提問', '#3b82f6'], extend: ['延伸', '#eab308'], improve: ['改進', '#10b981'], counter: ['反駁', '#ef4444'], riseabove: ['整合', '#8b5cf6'] };
+  var PV_TYPE = { question: ['提問', '#3b82f6'], extend: ['延伸', '#eab308'], improve: ['改進', '#10b981'], counter: ['反例', '#ef4444'], riseabove: ['整合', '#8b5cf6'] };
   function pvFmt(ts) { var d = new Date(ts); return isNaN(d) ? '' : d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(); }
   function pvCss() {
     if (doc.getElementById('kbui-pv-css')) return;
