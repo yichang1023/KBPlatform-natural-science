@@ -19,7 +19,15 @@
 (function (global) {
   'use strict';
   var PREFIX = 'kb_asra_v1_';
-  var KINDS = { note: '一句話', refl: '反思', plan: '計畫', reeval: '再評估', concept: '概念追問' };
+  var KINDS = { note: '一句話', refl: '反思', plan: '計畫', reeval: '再評估', concept: '概念追問', idea: '我的想法' };
+  var SRC_NAME = { forum: '論壇', ws: '學習單', manual: '自己新增' };
+  // 反思/計畫是從哪一種想法、用哪一種時間方式寫的(研究時要分得清「當時」與「現在重新看」)
+  function srcInfo(e) {
+    var K = global.KBSrc, vt = '';
+    if (e.timeMode && K && K.viewText) vt = K.viewText({ mode: e.timeMode, asOf: e.asOf, a: e.cmpA, b: e.cmpB });
+    return { src: SRC_NAME[e.srcType] || '', view: vt, unit: e.unit || '' };
+  }
+  function pickSrc(e) { return { srcType: e.srcType, srcRef: e.srcRef, timeMode: e.timeMode, asOf: e.asOf, cmpA: e.cmpA, cmpB: e.cmpB, unit: e.unit }; }
   var ROLE_NAME = { core: '核心概念', edge: '邊緣概念' };
   var CHOICE_NAME = { ignored: '被忽略了', undeveloped: '還沒發展', weak: '關係不大', unsure: '還不確定' };
   var ACT_NAME = { evidence: '補證據', revise: '改想法', team: '找夥伴' };
@@ -102,15 +110,33 @@
   function seenSet(uid, i) { var rec = loadLocal(uid); if (rec.seen[i]) return; rec.seen[i] = 1; saveLocal(uid, rec); }
 
   /* ---------- 整理成畫面用的資料 ---------- */
+  /* ---------- 自動存下:同一則的多個版本合成一筆 ----------
+   * 學生一邊寫、系統一邊自動存下(每個版本都是新的一筆紀錄,舊版本不會被改掉,保留「怎麼一步步寫出來」)。
+   * 同一則的版本用 draftId 串起來(draftId = 第一個版本的編號);畫面與統計只算「最新的版本」,版本數另外記錄。
+   * final:true 表示學生按了「寫完了」;沒有 final 的是還在寫(open)。沒有 draftId 的舊紀錄照舊,一筆就是一則。 */
+  var DRAFT_KINDS = { refl: 1, plan: 1, idea: 1 };
+  function collapse(list) {
+    var first = {}, count = {}, last = {}, out = [];
+    list.forEach(function (e) { var g = e.draftId; if (!g || !DRAFT_KINDS[e.kind]) return; if (!first[g]) first[g] = e; count[g] = (count[g] || 0) + 1; last[g] = e; });
+    list.forEach(function (e) {
+      var g = e.draftId;
+      if (!g || !DRAFT_KINDS[e.kind]) { out.push(e); return; }
+      if (last[g] !== e) return;
+      var c = Object.assign({}, e); c.id = g; c._versions = count[g]; c._firstTs = first[g].ts; c._first = first[g]; c._open = !e.final; out.push(c);
+    });
+    return out;
+  }
+  function entriesCollapsed(uid) { return collapse(entries(uid)); }
   function derive(uid) {
-    var list = entries(uid), S = { notes: {}, refl: [], plans: [], concepts: [], seen: seenGet(uid) }, byPlan = {};
+    var list = collapse(entries(uid)), S = { notes: {}, refl: [], plans: [], concepts: [], ideas: [], seen: seenGet(uid) }, byPlan = {};
     list.forEach(function (e) {
       if (e.kind === 'note') S.notes[e.ref || 'mon'] = e.text;
-      else if (e.kind === 'refl') S.refl.push({ id: e.id, postId: e.postId, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle, q3: e.q3 || '', q4: e.q4 || '' });
+      else if (e.kind === 'idea') S.ideas.push({ id: e.id, title: e.title || '', text: e.text || '', srcFrom: e.srcFrom || 'other', stageKey: e.stageKey || '', ts: e.ts, open: !!e._open, versions: e._versions || 1 });
+      else if (e.kind === 'refl') S.refl.push(Object.assign({ id: e.id, postId: e.postId, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle, q3: e.q3 || '', q4: e.q4 || '', open: !!e._open, versions: e._versions || 1, firstTs: e._firstTs || e.ts }, pickSrc(e)));
       else if (e.kind === 'concept') S.concepts.push({ id: e.id, term: e.term, role: e.role, choice: e.choice || '', text: e.text || '', ts: e.ts });
-      else if (e.kind === 'plan') { var p = { id: e.id, postId: e.postId, act: e.act, text: e.text, q5: e.q5 || '', ts: e.ts, ideaTitle: e.ideaTitle, reeval: [] }; S.plans.push(p); byPlan[e.id] = p; }
+      else if (e.kind === 'plan') { var p = Object.assign({ id: e.id, postId: e.postId, act: e.act, text: e.text, q5: e.q5 || '', ts: e._firstTs || e.ts, updTs: e.ts, open: !!e._open, versions: e._versions || 1, ideaTitle: e.ideaTitle, ideaStatus: (e._first || e).ideaStatus, reeval: [] }, pickSrc(e)); S.plans.push(p); byPlan[e.id] = p; }
     });
-    list.forEach(function (e) { if (e.kind === 'reeval' && byPlan[e.planId]) byPlan[e.planId].reeval.push({ result: e.result, ts: e.ts, follow: e.follow }); });
+    list.forEach(function (e) { if (e.kind === 'reeval' && byPlan[e.planId]) byPlan[e.planId].reeval.push({ result: e.result, ts: e.ts, follow: e.follow, note: e.note || '' }); });
     return S;
   }
   // 一筆紀錄的文字說明(畫面與匯出共用)
@@ -119,7 +145,9 @@
     if (e.kind === 'note' && QS[NOTE_Q[e.ref || 'mon']]) { var qq = QS[NOTE_Q[e.ref || 'mon']]; base.label = '第' + qq.no + '題:' + qq.short; }
     if (e.kind === 'plan') { base.act = ACT_NAME[e.act] || e.act || ''; }
     if (e.kind === 'concept') { base.idea = e.term || ''; base.act = (ROLE_NAME[e.role] || '') + (e.choice ? '・' + (CHOICE_NAME[e.choice] || e.choice) : ''); if (!base.text && e.choice) base.text = '選了「' + (CHOICE_NAME[e.choice] || e.choice) + '」'; }
-    if (e.kind === 'reeval') { base.result = e.result === 'better' ? '變好了' : '還要再努力'; base.text = base.result; }
+    if (e.kind === 'reeval') { base.result = e.result === 'better' ? '變好了' : '還要再努力'; base.text = base.result + (e.note ? ':' + e.note : ''); }
+    if (e.kind === 'idea') { base.idea = e.title || ''; base.act = (global.KBSrc && KBSrc.FROM[e.srcFrom]) || ''; }
+    var si = srcInfo(e); base.src = si.src; base.view = si.view; base.unit = si.unit;
     return base;
   }
 
@@ -155,13 +183,13 @@
   // opts.info(uid) → { name, className };opts.uids 指定哪些學生
   function toCSV(opts) {
     opts = opts || {};
-    var head = ['日期時間', '學號', '姓名', '班級', '類型', '想法標題', '討論區', '做法', '內容', '再評估結果', '計畫後新貼文數', '計畫後新回應數', '計畫後有證據的貼文數', '第3題:想法有越想越深入嗎?為什麼', '第4題:哪些該再想深卻討論很少', '第5題:想深化哪一部分?為什麼'];
+    var head = ['日期時間', '學號', '姓名', '班級', '類型', '想法標題', '討論區', '做法', '內容', '再評估結果', '計畫後新貼文數', '計畫後新回應數', '計畫後有證據的貼文數', '第3題:想法有越想越深入嗎?為什麼', '第4題:哪些該再想深卻討論很少', '第5題:想深化哪一部分?為什麼', '想法來源', '時間方式', '想法單位', '版本數', '狀態'];
     var rows = [head], list = opts.uids || uids();
     list.forEach(function (u) {
       var info = (opts.info && opts.info(u)) || {};
-      entries(u).forEach(function (e) {
+      collapse(entries(u)).forEach(function (e) {
         var d = describe(e);
-        rows.push([d.time, u, info.name || '', info.className || '', d.label, d.idea, d.topic, d.act, e.kind === 'reeval' ? '' : d.text, d.result, d.follow ? d.follow.mine : '', d.follow ? d.follow.replies : '', d.follow ? d.follow.evid : '', d.q3, d.q4, d.q5]);
+        rows.push([d.time, u, info.name || '', info.className || '', d.label, d.idea, d.topic, d.act, e.kind === 'reeval' ? '' : d.text, d.result, d.follow ? d.follow.mine : '', d.follow ? d.follow.replies : '', d.follow ? d.follow.evid : '', d.q3, d.q4, d.q5, d.src, d.view, d.unit, e._versions || 1, e._open ? '草稿(還沒按存下)' : (e._versions ? '已存下' : '')]);
       });
     });
     return '﻿' + rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
@@ -169,7 +197,7 @@
 
   global.KBAsra = {
     KINDS: KINDS, ACT_NAME: ACT_NAME, QS: QS, PHASE: PHASE, ROLE_NAME: ROLE_NAME, CHOICE_NAME: CHOICE_NAME,
-    append: append, entries: entries, uids: uids, derive: derive, describe: describe, pending: pending,
+    append: append, newId: rid, entries: entries, entriesCollapsed: entriesCollapsed, uids: uids, derive: derive, describe: describe, pending: pending,
     seenGet: seenGet, seenSet: seenSet, fmtTime: fmtTime, fmtDate: fmtDate, toCSV: toCSV,
     onChange: function (f) { if (typeof f === 'function') listeners.push(f); },
     _remote: _remote, _sync: function () { var me = curUid(); if (me) sync(me); },

@@ -8,7 +8,7 @@
  * ===================================================================== */
 (function (global) {
   'use strict';
-  var UI = { tab: 'class', stu: 'all', kind: 'all', limit: 40, sort: 'name', ctx: null, root: null };
+  var UI = { tab: 'class', stu: 'all', kind: 'all', limit: 40, sort: 'name', dir: 'asc', eff: 'all', ctx: null, root: null };
   var DAY = 86400000;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -23,13 +23,15 @@
     var now = Date.now();
     var T = { students: list.length, posts: 0, given: 0, received: 0, refl: 0, plans: 0, reeval: 0, better: 0, users: 0, usersRefl: 0, usersPlan: 0, usersRe: 0, usersBetter: 0, usersPost: 0, planActed: 0, planOld: 0 };
     var types = {}, status = { wait: 0, check: 0, ok: 0, grow: 0 }, ideas = 0, ideasEvid = 0;
+    var eff = { acted_adv: 0, acted_same: 0, idle_adv: 0, idle_same: 0, unknown: 0, offforum: 0 }, plansAll = [];
     ASRA.TYPES.forEach(function (t) { types[t] = 0; });
     var rows = list.map(function (u) {
-      var A = ASRA.analyze(nodes, u.id, topics), E = KBAsra.entries(u.id), S = KBAsra.derive(u.id);
+      var A = ASRA.analyze(nodes, u.id, topics), E = KBAsra.entriesCollapsed(u.id), S = KBAsra.derive(u.id);   // 自動存下的多個版本只算一則(看最新版)
       var c = { note: 0, refl: 0, plan: 0, reeval: 0 }; E.forEach(function (e) { if (c[e.kind] !== undefined) c[e.kind]++; });
       var better = 0, more = 0, acted = 0, planOld = 0, lastRe = null;
       S.plans.forEach(function (p) {
         var f = ASRA.followUp(nodes, u.id, p); p._f = f;
+        p._e = ASRA.effect(nodes, u.id, p); eff[p._e.outcome]++; plansAll.push({ u: u, p: p, e: p._e });
         if (f.acted) acted++; else if (now - p.ts >= 3 * DAY) planOld++;
         (p.reeval || []).forEach(function (r) { if (r.result === 'better') better++; else more++; if (!lastRe || r.ts > lastRe.ts) lastRe = r; });
       });
@@ -39,7 +41,8 @@
       var improveShare = A.posts ? pct((A.byType.improve || 0) + (A.byType.riseabove || 0), A.posts) : 0;
       var r = { u: u, A: A, S: S, E: E, c: c, plans: S.plans.length, better: better, more: more, acted: acted, planOld: planOld, lastRe: lastRe, lastPost: lastPost, lastAsra: lastAsra, improveShare: improveShare, noEvid: A.ideas.filter(function (i) { return !i.ownEvid; }).length, reasons: [] };
       // 需要關心的原因
-      if (!A.posts) r.reasons.push('還沒發過貼文');
+      var hasWs = !!(global.KBSrc && KBSrc.has(u.id));      // 有匯入學習單資料的學生:沒有論壇貼文是正常的
+      if (!A.posts) { if (!hasWs) r.reasons.push('還沒發過貼文'); }
       else if (refNow - lastPost >= 7 * DAY) r.reasons.push('已 ' + Math.floor((refNow - lastPost) / DAY) + ' 天沒有發言');
       if (A.posts >= 3 && A.given === 0) r.reasons.push('只發表、沒有回應過同學');
       if (A.posts >= 3 && A.received === 0) r.reasons.push('同學都還沒回應過他');
@@ -64,14 +67,14 @@
     if (T.plans && pct(T.planActed, T.plans) < 50) tips.push('訂了計畫的學生裡,只有 ' + pct(T.planActed, T.plans) + '% 的計畫後來看得到新的貼文或回應。可以在課堂上提醒「去論壇做做看」。');
     var iso = rows.filter(function (r) { return r.A.posts >= 3 && r.A.received === 0; }).length;
     if (iso) tips.push('有 ' + iso + ' 位學生發了 3 則以上貼文卻沒人回應。可以請同學去回應他們,避免被冷落。');
-    return { rows: rows, T: T, types: types, status: status, ideas: ideas, ideasEvid: ideasEvid, improve: improve, attention: attention, tips: tips, refNow: refNow };
+    return { eff: eff, plansAll: plansAll, rows: rows, T: T, types: types, status: status, ideas: ideas, ideasEvid: ideasEvid, improve: improve, attention: attention, tips: tips, refNow: refNow };
   }
 
   /* ---------- 小元件 ---------- */
   function tile(n, label, sub, tone) { return '<div class="rounded-xl border p-3 ' + (tone || 'bg-white border-slate-200') + '"><div class="text-2xl font-black text-slate-800">' + n + '</div><div class="text-xs font-bold text-slate-600">' + label + '</div>' + (sub ? '<div class="text-[11px] text-slate-400 mt-0.5">' + sub + '</div>' : '') + '</div>'; }
   function bar(label, n, max, color, extra) { return '<div class="flex items-center gap-2 mb-1.5"><span class="w-14 text-sm font-bold text-slate-700 shrink-0">' + label + '</span><div class="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden"><i class="block h-full rounded-full" style="width:' + Math.round(n / Math.max(max, 1) * 100) + '%;background:' + color + '"></i></div><span class="w-20 text-right text-sm font-black text-slate-700 shrink-0">' + n + (extra || '') + '</span></div>'; }
   function pill(t, cls) { return '<span class="inline-block text-[11px] font-black px-2 py-0.5 rounded-full ' + cls + '">' + t + '</span>'; }
-  var KCOL = { note: 'bg-slate-100 text-slate-600', refl: 'bg-indigo-100 text-indigo-700', plan: 'bg-emerald-100 text-emerald-700', reeval: 'bg-amber-100 text-amber-700', concept: 'bg-sky-100 text-sky-700' };
+  var KCOL = { note: 'bg-slate-100 text-slate-600', refl: 'bg-indigo-100 text-indigo-700', plan: 'bg-emerald-100 text-emerald-700', reeval: 'bg-amber-100 text-amber-700', concept: 'bg-sky-100 text-sky-700', idea: 'bg-violet-100 text-violet-700' };
   var SNAME = { wait: '等同學回應', check: '待查證', ok: '有證據', grow: '在發展' };
   var SCOL = { wait: '#94a3b8', check: '#f59e0b', ok: '#10b981', grow: '#8b5cf6' };
   function asraHref(id) { return 'ASRA.html?student=' + encodeURIComponent(id); }
@@ -109,12 +112,69 @@
       '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">這週建議多關心<span class="ml-2 text-xs font-bold text-slate-400">規則見「指標說明」</span></h4>' + att + '<div data-ai="attention" class="mt-3"></div></section>';
   }
 
+  /* ---------- 分頁:計畫 → 行動 → 想法前進 ---------- */
+  var EFF_ORDER = ['idle_same', 'acted_same', 'idle_adv', 'acted_adv', 'offforum', 'unknown'];
+  function tabEffect(D) {
+    var E = D.eff, all = D.plansAll, N = all.length, OUT = ASRA.OUT, now = Date.now();
+    if (!N) return '<section class="rounded-xl bg-white border border-slate-200 p-5"><h4 class="font-black text-slate-800 mb-1">計畫 → 行動 → 想法前進</h4><p class="text-sm text-slate-500">還沒有學生訂過計畫。學生在 ASRA 第 4 步訂下計畫後,這裡會看到:他有沒有去行動、原本的想法有沒有往前走。</p></section>';
+    var tileKeys = ['acted_adv', 'acted_same', 'idle_adv', 'idle_same'].concat(E.offforum ? ['offforum'] : []);
+    var tiles = tileKeys.map(function (k) { return tile(E[k], OUT[k].name, pct(E[k], N) + '% 的計畫', OUT[k].tone); }).join('');
+    var rows = all.filter(function (x) { return UI.eff === 'all' || x.e.outcome === UI.eff; }).sort(function (a, b) { return (EFF_ORDER.indexOf(a.e.outcome) - EFF_ORDER.indexOf(b.e.outcome)) || (a.p.ts - b.p.ts); });
+    var sel = '<select data-act="eff" class="border border-slate-300 rounded-lg px-2 py-1 text-sm"><option value="all"' + (UI.eff === 'all' ? ' selected' : '') + '>全部 ' + N + ' 個計畫</option>' + EFF_ORDER.filter(function (k) { return E[k]; }).map(function (k) { return '<option value="' + k + '"' + (UI.eff === k ? ' selected' : '') + '>' + OUT[k].name + '(' + E[k] + ')</option>'; }).join('') + '</select>';
+    var list = rows.map(function (x) {
+      var p = x.p, e = x.e, o = OUT[e.outcome], idea = (p.ideaTitle || '(想法)'), old = !e.acted && (now - p.ts) >= 3 * DAY;
+      var st = e.before || e.now ? '想法狀態:<b>' + (SNAME[e.before] || '?') + '</b> → <b>' + (SNAME[e.now] || '?') + '</b>' + (e.advanced ? ' <span class="text-emerald-600 font-bold">▲ 前進了</span>' : (e.before === e.now ? ' <span class="text-slate-400">(沒變)</span>' : '')) : '';
+      var off = e.outcome === 'offforum';
+      var did = off ? '這個想法來自' + esc((KBAsra.describe(p).src) || '論壇外') + ',系統看不到後續的討論;請看學生的「再評估」,或直接問他做了什麼。' : '計畫之後:他在這個討論區新發 <b>' + e.follow.mine + '</b> 則;這則想法底下多了 <b>' + e.events.length + '</b> 則貼文' + (e.events.length ? '(同學 ' + e.byOthers + '、他自己 ' + e.bySelf + (e.typeText ? ';類型:' + e.typeText : '') + ')' : '');
+      return '<div class="flex flex-wrap items-start gap-3 py-3 border-t border-slate-100"><div class="w-36 shrink-0 font-bold text-slate-800">' + nameOf({ u: x.u }) + '</div><div class="flex-1 min-w-[15rem]">' +
+        '<div class="text-sm">' + (off ? '<span class="font-bold text-indigo-700">想法:' + esc(cut(idea, 26)) + '</span>' : '<button type="button" data-act="view" data-id="' + esc(p.postId) + '" class="font-bold text-indigo-700 underline text-left">想法:' + esc(cut(idea, 26)) + '</button>') + ' <span class="text-xs text-slate-400">' + KBAsra.fmtDate(p.ts) + ' 訂計畫</span></div>' +
+        '<div class="text-sm text-slate-700 mt-0.5">' + pill(esc(KBAsra.ACT_NAME[p.act] || p.act || ''), 'bg-emerald-50 text-emerald-700') + (p.open ? ' ' + pill('草稿(還沒按「訂好」)', 'bg-amber-50 text-amber-700') : '') + ' ' + esc(cut(p.text, 70)) + '</div>' +
+        '<div class="text-xs text-slate-600 mt-1">' + st + '</div><div class="text-xs text-slate-600">' + did + '</div></div>' +
+        '<div class="w-44 shrink-0">' + pill(o.name, o.pill) + (old ? '<div class="text-[11px] text-rose-600 font-bold mt-1">已超過 3 天</div>' : '') + '</div></div>';
+    }).join('');
+    return '<div class="grid grid-cols-2 ' + (E.offforum ? 'md:grid-cols-5' : 'md:grid-cols-4') + ' gap-3">' + tiles + '</div>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">計畫 → 行動 → 想法前進<span class="ml-2 text-xs font-bold text-slate-400">看見知識有沒有被改進</span></h4>' +
+      '<p class="text-xs text-slate-500 mt-1 mb-2">比較「訂計畫當時」和「現在」想法的狀態(等同學回應 → 待查證 → 有證據 → 在發展),並看計畫之後,學生有沒有去行動、這則想法底下多了哪些貼文。<b>這是從資料推出來的可能關係</b>:想法前進不一定是這個計畫造成的,也可能是同學自己回應的。</p>' +
+      '<div class="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600 mb-3"><b>怎麼讀這四種結果:</b>' + ['acted_same', 'idle_adv', 'idle_same'].map(function (k) { return '<div class="mt-1"><b>' + OUT[k].name + '</b>:' + OUT[k].hint + '</div>'; }).join('') + '</div>' +
+      '<div class="flex flex-wrap items-center gap-2 mb-1"><label class="text-sm font-bold text-slate-600">看哪一種</label>' + sel + '<span class="text-xs text-slate-400">先列最需要老師看一眼的</span></div>' + list + '</section>';
+  }
+
   /* ---------- 分頁 2:學生一覽 ---------- */
+  // 「學生一覽」的欄位排序:點標題 = 多到少,再點 = 少到多(姓名則是前到後 / 後到前);「從來沒用過 ASRA」的永遠排在最後
+  var SORT_COLS = [
+    { k: 'name', l: '學生', v: function (r) { return String(r.u.name || r.u.id); }, d0: 'asc', str: true },
+    { k: 'posts', l: '貼文', v: function (r) { return r.A.posts; } },
+    { k: 'given', l: '回應別人', v: function (r) { return r.A.given; } },
+    { k: 'received', l: '被回應', v: function (r) { return r.A.received; } },
+    { k: 'partners', l: '夥伴', v: function (r) { return r.A.partners; } },
+    { k: 'evid', l: '想法有證據', v: function (r) { return r.A.hasEvid + (r.A.ideas.length ? r.A.hasEvid / r.A.ideas.length / 1000 : 0); } },
+    { k: 'improve', l: '改進+昇華', v: function (r) { return r.improveShare; } },
+    { k: 'refl', l: '反思', v: function (r) { return r.c.refl; } },
+    { k: 'plans', l: '計畫', v: function (r) { return r.plans; } },
+    { k: 'acted', l: '計畫後有行動', v: function (r) { return r.acted + (r.plans ? r.acted / r.plans / 1000 : 0); } },
+    { k: 'reeval', l: '再評估', v: function (r) { return r.c.reeval + r.better / 1000; } },
+    { k: 'last', l: '最近 ASRA', v: function (r) { return r.lastAsra; }, last0: true }
+  ];
+  var CARE_COL = { k: 'care', l: '需要關心的原因數', v: function (r) { return r.reasons.length; } };
+  function sortCol(k) { return SORT_COLS.filter(function (c) { return c.k === k; })[0] || (k === 'care' ? CARE_COL : SORT_COLS[0]); }
+  function sortRows(rows, key, dir) {
+    var col = sortCol(key), sign = dir === 'asc' ? 1 : -1;
+    rows.sort(function (a, b) {
+      var x = col.v(a), y = col.v(b);
+      if (col.last0) { var za = !x, zb = !y; if (za !== zb) return za ? 1 : -1; }
+      var c = col.str ? String(x).localeCompare(String(y), 'zh-Hant', { numeric: true }) : (x < y ? -1 : x > y ? 1 : 0);
+      if (c) return c * sign;
+      return String(a.u.name || a.u.id).localeCompare(String(b.u.name || b.u.id), 'zh-Hant', { numeric: true });
+    });
+    return rows;
+  }
+  function sortTh(c) {
+    var on = UI.sort === c.k, dir = UI.dir || c.d0 || 'desc', desc = dir === 'desc';
+    var tip = !on ? '點一下排序' : (c.str ? (desc ? '目前:後面的排前面(點一下改成前面的排前面)' : '目前:前面的排前面(點一下反過來)') : (desc ? '目前:多到少(點一下改成少到多)' : '目前:少到多(點一下改成多到少)'));
+    return '<th class="pb-2 font-bold ' + (c.k === 'name' ? 'text-left' : '') + '" aria-sort="' + (on ? (desc ? 'descending' : 'ascending') : 'none') + '"><button type="button" data-act="sortcol" data-key="' + c.k + '" title="' + tip + '" class="font-bold whitespace-nowrap hover:text-indigo-700 ' + (on ? 'text-indigo-700' : '') + '">' + c.l + ' <span class="' + (on ? '' : 'opacity-40') + '">' + (on ? (desc ? '▼' : '▲') : '⇅') + '</span></button></th>';
+  }
   function tabStudents(D) {
-    var rows = D.rows.slice();
-    var key = { name: function (r) { return r.u.name; }, posts: function (r) { return -r.A.posts; }, refl: function (r) { return -r.c.refl; }, last: function (r) { return -r.lastAsra; }, care: function (r) { return -r.reasons.length; } }[UI.sort] || function (r) { return r.u.name; };
-    rows.sort(function (a, b) { var x = key(a), y = key(b); return x < y ? -1 : x > y ? 1 : 0; });
-    var head = ['學生', '貼文', '回應別人', '被回應', '夥伴', '想法有證據', '改進+昇華', '反思', '計畫', '計畫後有行動', '再評估', '最近 ASRA', ''];
+    var rows = sortRows(D.rows.slice(), UI.sort, UI.dir);
     var body = rows.map(function (r) {
       var A = r.A, reTxt = r.c.reeval ? ('<span class="text-emerald-600 font-bold">' + r.better + ' 好</span> / <span class="text-amber-600 font-bold">' + r.more + ' 努力</span>') : '<span class="text-slate-300">-</span>';
       return '<tr class="border-t border-slate-100 hover:bg-slate-50"><td class="py-2 pr-3 text-left align-top"><div class="font-bold text-slate-800 whitespace-nowrap">' + nameOf(r) + (r.reasons.length ? ' <span title="' + esc(r.reasons.join('、')) + '" class="text-rose-500"><i class="fas fa-flag"></i></span>' : '') + '</div>' + (r.reasons.length ? '<div class="mt-1 flex flex-wrap gap-1" style="max-width:18rem" data-k="reasons">' + r.reasons.map(function (x) { return pill(esc(x), 'bg-rose-50 text-rose-700 border border-rose-100'); }).join('') + '</div>' : '') + '</td>' +
@@ -123,9 +183,9 @@
         '<td class="whitespace-nowrap text-xs text-slate-500">' + (r.lastAsra ? KBAsra.fmtDate(r.lastAsra) : '<span class="text-slate-300">尚未使用</span>') + '</td>' +
         '<td class="whitespace-nowrap text-xs"><a class="text-indigo-600 font-bold underline mr-2" href="#" data-act="log" data-id="' + esc(r.u.id) + '">看紀錄</a><a class="text-indigo-600 font-bold underline" href="' + esc(asraHref(r.u.id)) + '">ASRA 頁</a></td></tr>';
     }).join('') || '<tr><td colspan="13" class="py-4 text-center text-slate-400">沒有學生資料</td></tr>';
-    return '<div class="flex flex-wrap items-center gap-2 mb-3"><label class="text-sm font-bold text-slate-600">排序</label><select data-act="sort" class="border border-slate-300 rounded-lg px-2 py-1 text-sm">' +
-      [['name', '姓名'], ['care', '需要關心的原因數'], ['posts', '貼文數'], ['refl', '反思篇數'], ['last', '最近使用 ASRA']].map(function (o) { return '<option value="' + o[0] + '"' + (UI.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select><span class="text-xs text-slate-400"><i class="fas fa-flag text-rose-500"></i> = 有需要關心的原因,原因直接列在姓名下面(不是評價,只是提醒多看一眼)</span></div>' +
-      '<div class="overflow-x-auto rounded-xl bg-white border border-slate-200 p-3"><table class="w-full text-sm text-center"><thead><tr class="text-xs text-slate-500">' + head.map(function (h, i) { return '<th class="pb-2 font-bold ' + (i === 0 ? 'text-left' : '') + '">' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+    var selOpts = [['name', '姓名'], ['care', '需要關心的原因數']].concat(SORT_COLS.slice(1).map(function (c) { return [c.k, c.l]; })).map(function (o) { return '<option value="' + o[0] + '"' + (UI.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
+    return '<div class="flex flex-wrap items-center gap-2 mb-3"><label class="text-sm font-bold text-slate-600">排序</label><select data-act="sort" class="border border-slate-300 rounded-lg px-2 py-1 text-sm">' + selOpts + '</select><span class="text-xs text-slate-500">也可以直接點下面的欄位標題:第一次「多到少」,再點一次「少到多」。</span><span class="text-xs text-slate-400"><i class="fas fa-flag text-rose-500"></i> = 有需要關心的原因,原因直接列在姓名下面(不是評價,只是提醒多看一眼)</span></div>' +
+      '<div class="overflow-x-auto rounded-xl bg-white border border-slate-200 p-3"><table class="w-full text-sm text-center"><thead><tr class="text-xs text-slate-500">' + SORT_COLS.map(sortTh).join('') + '<th></th></tr></thead><tbody>' + body + '</tbody></table></div>';
   }
 
   /* ---------- 分頁 3:反思與計畫紀錄(質性資料) ---------- */
@@ -147,10 +207,10 @@
     if (e.kind === 'plan') {
       var p = r.S.plans.filter(function (q) { return q.id === e.id; })[0], f = p && p._f;
       extra = (f ? '<div class="text-xs text-slate-600 mt-1">計畫之後:<b>' + f.mine + '</b> 則新貼文、<b>' + f.replies + '</b> 則同學新回應、<b>' + f.evid + '</b> 則有寫證據 ' + (f.acted ? pill('有行動', 'bg-emerald-100 text-emerald-700') : pill('還沒看到行動', 'bg-slate-100 text-slate-500')) + '</div>' : '') +
-        (p && p.reeval.length ? '<div class="mt-1 space-y-0.5">' + p.reeval.map(function (q) { return '<div class="text-xs text-slate-600">↳ ' + KBAsra.fmtTime(q.ts) + ' 再評估:' + (q.result === 'better' ? pill('變好了', 'bg-emerald-100 text-emerald-700') : pill('還要再努力', 'bg-amber-100 text-amber-700')) + (q.follow ? ' <span class="text-slate-400">(當時新貼文 ' + q.follow.mine + '、新回應 ' + q.follow.replies + ')</span>' : '') + '</div>'; }).join('') + '</div>' : '');
+        (p && p.reeval.length ? '<div class="mt-1 space-y-0.5">' + p.reeval.map(function (q) { return '<div class="text-xs text-slate-600">↳ ' + KBAsra.fmtTime(q.ts) + ' 再評估:' + (q.result === 'better' ? pill('變好了', 'bg-emerald-100 text-emerald-700') : pill('還要再努力', 'bg-amber-100 text-amber-700')) + (q.follow ? ' <span class="text-slate-400">(當時新貼文 ' + q.follow.mine + '、新回應 ' + q.follow.replies + ')</span>' : '') + (q.note ? ' <span class="text-slate-700">「' + esc(cut(q.note, 80)) + '」</span>' : '') + '</div>'; }).join('') + '</div>' : '');
     }
     return '<div class="py-3 border-t border-slate-100 flex gap-3"><div class="w-32 shrink-0 text-xs text-slate-500"><div class="font-bold text-slate-700">' + d.time + '</div></div><div class="min-w-0 flex-1">' +
-      '<div class="flex flex-wrap items-center gap-2"><span class="font-bold text-slate-800">' + nameOf(r) + '</span>' + pill(d.label + (d.act ? ':' + d.act : ''), KCOL[e.kind] || '') + (e.ideaStatus ? pill('當時:' + (SNAME[e.ideaStatus] || e.ideaStatus), 'bg-slate-100 text-slate-500') : '') + '</div>' +
+      '<div class="flex flex-wrap items-center gap-2"><span class="font-bold text-slate-800">' + nameOf(r) + '</span>' + pill(d.label + (d.act ? ':' + d.act : ''), KCOL[e.kind] || '') + (e.ideaStatus ? pill('當時:' + (SNAME[e.ideaStatus] || e.ideaStatus), 'bg-slate-100 text-slate-500') : '') + (e._open ? pill('草稿(學生還沒按存下)', 'bg-amber-50 text-amber-700 border border-amber-100') : '') + (e._versions > 1 ? pill('共 ' + e._versions + ' 個版本', 'bg-slate-100 text-slate-500') : '') + (d.src ? pill('想法來源:' + esc(d.src), 'bg-violet-50 text-violet-700 border border-violet-100') : '') + (d.view ? pill('時間方式:' + esc(d.view), 'bg-sky-50 text-sky-700 border border-sky-100') : '') + '</div>' +
       (d.idea ? '<div class="text-xs text-slate-500 mt-0.5">想法:' + esc(cut(d.idea, 40)) + (d.topic ? ' · ' + esc(cut(d.topic, 16)) : '') + '</div>' : '') +
       '<div class="text-sm text-slate-800 whitespace-pre-wrap mt-1">' + esc(d.text) + '</div>' + (d.q5 ? '<div class="text-xs text-slate-600 mt-1">想深化(第 5 題):' + esc(d.q5) + '</div>' : '') + extra + '</div></div>';
   }
@@ -171,7 +231,7 @@
       ['想法狀態(有證據/待查證/在發展/等回應)', '有潛力的想法(promising ideas)、想法改進(idea improvement)。', '用關鍵字比對「實驗、觀察、資料…」判斷證據,是規則式近似,不是人工編碼,可能誤判。國際研究的「潛力想法」是由學生自己評選,平台目前沒有學生評選功能,所以這裡只是近似。'],
       ['反思文字(含日期時間)', '反思單與訪談的質性編碼:後設認知、調節、認知主體性。', '這裡提供原文與日期,編碼要由研究者人工做;可匯出 CSV。'],
       ['核心 / 邊緣概念追問', '概念網絡裡,中心的節點是討論的焦點,邊緣的節點可能是被忽略、還沒發展、或關係不大的方向(Yang 等人 2026 圖 7 教師引導全班這樣讀圖);學生要自己解釋為什麼。', '平台的核心/邊緣是簡單規則(連到的詞數前 25% 且至少 3 個為核心;只連 0~1 個為邊緣;雲裡要有 5 個以上的詞),詞是自動從貼文抓出來的,可能抓不準。「在中間」不代表比較重要或比較正確。這裡記下學生自己的解釋,沒有判斷對錯。'],
-      ['計畫 → 行動 → 再評估', '自我調整與持續改進:反思之後有沒有真的行動、結果有沒有變好。', '每次再評估會一併記下當時計畫後的新貼文與新回應數,可追蹤個人層級的前後變化。'],
+      ['計畫 → 行動 → 再評估', '自我調整與持續改進:反思之後有沒有真的行動、結果有沒有變好。', '每次再評估會一併記下當時計畫後的新貼文與新回應數,可追蹤個人層級的前後變化。「計畫→行動→想法前進」分頁再多比較「訂計畫當時」和「現在」想法的狀態,分成四種結果;但想法前進只是「可能」與計畫有關,也可能是同學自己回應的。'],
       ['尚未收集', '認知情緒問卷、領域前後測、認知主體性問卷。', '目前平台沒有這些資料;若要做研究,需另外施測再合併。']
     ];
     var aim = [
@@ -246,13 +306,130 @@
     });
   }
 
+  /* ---------- 分頁:學習單資料(多來源想法) ---------- */
+  function threadsToText(list) { return (list || []).map(function (t) { return (t.group || 'ALL') + '|' + t.title + '|' + (t.kw || []).join(','); }).join('\n'); }
+  function parseThreads(txt) {
+    var out = []; String(txt || '').split(/\r?\n/).forEach(function (ln, i) {
+      ln = ln.replace(/\uFF5C/g, '|').replace(/^[\s\-*>`\d.、)]+/, '').replace(/`/g, '').trim(); if (!ln) return; var p = ln.split('|'); if (p.length < 3) return;
+      var kw = p[2].split(/[,，、]/).map(function (x) { return x.trim(); }).filter(Boolean); if (!p[1].trim() || !kw.length) return;
+      out.push({ id: 't' + (i + 1), group: (p[0].trim() === '' || p[0].trim() === '全部') ? 'ALL' : p[0].trim().toUpperCase(), title: p[1].trim(), kw: kw });
+    });
+    return out;
+  }
+  // 關鍵想法線:老師可自己列;不列的話,學生端自動用「系統從回答裡找出的關鍵想法」
+  function threadsSection(K) {
+    var draft = UI.thrDraft != null ? UI.thrDraft : threadsToText(K.load().threads), mine = (K.load().threads || []).length;
+    var groups = K.groupsInPack(), prev = groups.map(function (g) {
+      var a = K.autoThreads(g, 5);
+      return '<div class="flex flex-wrap items-center gap-1.5 py-1 border-t border-slate-100"><span class="w-10 shrink-0 font-bold text-slate-700 text-sm">' + esc(g) + '</span>' + (a.length ? a.map(function (t) { return '<span class="text-xs px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-100" title="出現 ' + t.df + ' 次、跨 ' + t.stages + ' 個階段、' + t.students + ' 位同學">' + esc(t.title) + '</span>'; }).join('') : '<span class="text-xs text-slate-400">沒有找到</span>') + '</div>';
+    }).join('');
+    return '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">關鍵想法線<span class="ml-2 text-xs font-bold text-slate-400">想法卡的第 4 種單位</span></h4>' +
+      '<p class="text-xs text-slate-500 mt-1">把各階段提到同一個想法的回答串在一起,讓學生用「前後對照」看它怎麼長大。<b>你不用先列清單</b>:' + (mine ? '目前使用你建立的 ' + mine + ' 條。' : '你還沒建立時,學生端會自動使用下面「系統找到的」關鍵想法。') + '</p>' +
+      '<div class="mt-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2"><div class="text-xs font-bold text-slate-600 mb-1">系統從學習單回答裡找到的(每組前幾名;滑鼠移上去看出現次數)</div>' + (prev || '<span class="text-xs text-slate-400">資料包裡沒有學生。</span>') + '<p class="text-[11px] text-slate-400 mt-1">依「在多個階段、被多位同學提到、不是每組都在講」找出,不需要 AI。偶爾會夾雜一般用語,可以自己刪掉。</p></div>' +
+      '<div class="flex flex-wrap items-center gap-2 mt-3"><button type="button" data-act="src-suggest" class="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold"><i class="fas fa-wand-magic-sparkles mr-1"></i>讓系統建議(填進下面)</button><button type="button" data-act="src-ai" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold"><i class="fas fa-robot mr-1"></i>請 AI 整理</button><span class="text-xs ' + (UI.thrBad ? 'text-rose-600' : 'text-slate-500') + '">' + esc(UI.thrMsg || '') + '</span></div>' +
+      '<p class="text-[11px] text-slate-400 mt-1">「請 AI 整理」只會把<b>詞和出現次數</b>送給 AI(請它挑選、合併相近的詞),不會送學生的原話或姓名。</p>' +
+      '<p class="text-xs text-slate-500 mt-3 mb-1">想自己列或修改:每行一個 <code>組別|想法名稱|關鍵字,關鍵字</code>(組別寫 G1~G5,全部組別寫「全部」)。按「儲存想法線」後,學生端就改用你列的。</p>' +
+      '<textarea data-k="threads" rows="5" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="例如:G3|多模態整合|多模態,整合,熱顯影">' + esc(draft) + '</textarea><div class="mt-2 flex flex-wrap gap-2"><button type="button" data-act="src-threads" class="px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-sm font-bold">儲存想法線</button>' + (mine ? '<button type="button" data-act="src-threads-clear" class="px-4 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-600 text-sm font-bold border border-slate-300">不用我的,改用系統自動找的</button>' : '') + '</div></section>';
+  }
+  function tabSrc(D) {
+    var K = global.KBSrc; if (!K) return '<p class="text-sm text-slate-500">學習單資料模組沒有載入。</p>';
+    var S = K.summary(), msg = UI.srcMsg ? '<span class="text-xs font-bold ' + (UI.srcMsgBad ? 'text-rose-600' : 'text-emerald-700') + '">' + esc(UI.srcMsg) + '</span>' : '';
+    var intro = '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">學習單資料(讓沒有論壇的班級也能用 ASRA)<span class="ml-2 text-xs font-bold text-slate-400">多來源想法</span></h4>' +
+      '<p class="text-sm text-slate-600 mt-1">ASRA 不一定要先有論壇貼文。只要有「一個可以被反思的想法」就能進行五個步驟。想法可以來自<b>論壇</b>、<b>學習單</b>(在這裡匯入),或由<b>學生自己新增</b>。</p>' +
+      '<ul class="text-xs text-slate-500 mt-2 list-disc pl-5 space-y-0.5"><li>資料包只存在<b>這台電腦的瀏覽器</b>,不會上傳到雲端或任何網站。學生要在自己的電腦用,請匯出「個別學生資料包」,再讓學生在 ASRA 頁自己匯入。</li><li>資料包由 <code>build_asra_pack.py</code> 從研究資料 Excel 轉出,內容只有:學生原話、題目、各階段自評平均、各循環前後測平均。<b>不含</b>質性主題編碼、教師觀察與反思。</li><li>歷史原話只當「反思的材料」給學生看,不會自動變成學生現在的答案;學生寫下的反思會另外存成新的紀錄,並標明用的是哪一種時間方式。</li></ul>' +
+      '<div class="flex flex-wrap items-center gap-3 mt-3"><label class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold cursor-pointer"><i class="fas fa-file-import mr-1"></i>匯入資料包(.json,可一次選好幾個)<input type="file" accept=".json,application/json" multiple data-act="src-file" class="hidden"></label>' + msg + '</div></section>';
+    if (!S) return intro;
+    var cmax = Math.max.apply(null, K.CAT_ORDER.map(function (k) { return S.cat[k] || 0; }).concat([1]));
+    var cats = K.CAT_ORDER.map(function (k) { return bar(K.CATS[k].name.replace(/^Q\d /, ''), S.cat[k] || 0, cmax, K.CATS[k].color, ' 筆'); }).join('');
+    var users = D.rows.map(function (r) { return r.u; });
+    var mapRev = {}, mp = K.mapGet(); Object.keys(mp).forEach(function (uid) { mapRev[mp[uid]] = uid; });
+    var rowsH = S.codes.map(function (c) {
+      var P = K.load().students[c], cur = mapRev[c] || '', auto = users.filter(function (u) { return String(u.id).toUpperCase() === c.toUpperCase(); })[0];
+      var opts = '<option value=""' + (!cur ? ' selected' : '') + '>' + (auto ? '自動:' + esc(auto.name) : '(未對應)') + '</option>' + users.map(function (u) { return '<option value="' + esc(u.id) + '"' + (cur === String(u.id) ? ' selected' : '') + '>' + esc(u.name) + '</option>'; }).join('');
+      var hasScale = K.load().scale && K.load().scale[c] && Object.keys(K.load().scale[c]).length;
+      return '<tr class="border-t border-slate-100"><td class="py-1.5 font-bold text-slate-800">' + esc(c) + '</td><td>' + esc(P.g) + '</td><td>' + P.r.length + '</td><td class="text-xs text-slate-500">' + esc(cut(K.listPacks().filter(function (pk) { return pk.codes.indexOf(c) >= 0; }).map(function (pk) { return pk.name; }).join('、'), 24)) + '</td><td>' + (hasScale ? '有' : '<span class="text-slate-300">-</span>') + '</td><td><select data-act="src-map" data-code="' + esc(c) + '" class="border border-slate-300 rounded-lg px-2 py-0.5 text-xs">' + opts + '</select></td><td class="text-xs"><button type="button" data-act="src-export" data-code="' + esc(c) + '" class="text-indigo-600 font-bold underline">匯出此學生資料包</button></td></tr>';
+    }).join('');
+    var unm = S.codes.filter(function (c) { return !(mapRev[c] || users.some(function (u) { return String(u.id).toUpperCase() === c.toUpperCase(); })); }).length;
+    return intro + packsSection(K) +
+      '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">' + tile(S.students, '學生', unm ? unm + ' 位還沒對應到平台帳號' : '都已對應到帳號', unm ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200') + tile(S.records, '學生回答', '平均 ' + Math.round(S.records / Math.max(1, S.students)) + ' 則/人') + tile(S.questions, '題目種類', '已先對到 Q3~Q6') + tile(S.threads, '關鍵想法線', '在下方建立') + '</div>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">題目對到 ASRA 的哪一題<span class="ml-2 text-xs font-bold text-slate-400">依「你確認過的對照表」</span></h4><p class="text-xs text-slate-500 mb-2">學生反思時,系統會把對應的回答放在對應題目旁邊當參考。「其他」是和反思沒有直接關係的題目(例如問 AI 幫了什麼)。要改對照,請修改 Excel 對照表後重新執行 build_asra_pack.py。</p>' + cats + '</section>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">學生與平台帳號對應</h4><p class="text-xs text-slate-500 mb-2">資料包的學生代碼(如 S01)預設會對到「帳號相同」的學生。帳號不同時,在這裡手動選。</p><div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead><tr class="text-xs text-slate-500"><th class="pb-1">代碼</th><th>小組</th><th>回答數</th><th>來自資料包</th><th>自評</th><th>平台帳號</th><th></th></tr></thead><tbody>' + rowsH + '</tbody></table></div></section>' +
+      threadsSection(K) +
+      '<section class="rounded-xl bg-white border border-rose-200 p-4 mt-4"><button type="button" data-act="src-clear" class="px-4 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-bold border border-rose-200"><i class="fas fa-trash mr-1"></i>從這台電腦清除「所有」資料包</button><span class="text-xs text-slate-500 ml-2">只想刪其中一個,請用上面「已匯入的資料包」每一列的刪除鈕。學生寫過的反思與計畫都會留著。</span></section>';
+  }
+  // 請 AI 從「詞 + 出現次數」挑選、合併成關鍵想法線(不送原話、不送姓名)
+  function aiThreads() {
+    var K = global.KBSrc, ask = global.kbAiAsk;
+    if (typeof ask !== 'function') { UI.thrMsg = '這個頁面還沒有接上 AI。'; UI.thrBad = true; draw(); return; }
+    var groups = K.groupsInPack(), data = groups.map(function (g) { return g + ':' + K.autoThreads(g, 10).map(function (t) { return t.title + '(' + t.df + '次/' + t.stages + '階段/' + t.students + '人)'; }).join('、'); }).join('\n');
+    if (!groups.length) { UI.thrMsg = '還沒有資料包。'; UI.thrBad = true; draw(); return; }
+    var prompt = '你是教育研究助理。下面是各小組在三個循環學習單裡「反覆出現」的詞,括號是「出現次數/跨幾個階段/幾位同學」。請替每一組挑 3 到 5 個最能代表該組專題「關鍵想法」的詞(要是專題主題的名詞,不要選「然後、慢慢、得太」這類一般用語或不完整的字串),並把意思相近的詞合併成同一條。\n' +
+      '只輸出下面格式,每行一條,不要加任何說明、標題或符號:\n組別|想法名稱|關鍵字,關鍵字\n例如:G1|濾網效果|濾網,過濾\n\n資料:\n' + data;
+    UI.thrMsg = 'AI 整理中…'; UI.thrBad = false; draw();
+    Promise.resolve().then(function () { return ask(prompt); }).then(function (txt) {
+      txt = String(txt || ''); if (/^\s*⚠️/.test(txt)) { UI.thrMsg = txt.replace(/^\s*⚠️\s*/, ''); UI.thrBad = true; draw(); return; }
+      var list = parseThreads(txt);
+      if (!list.length) { UI.thrMsg = 'AI 的回覆我看不懂,請再試一次,或用「讓系統建議」。'; UI.thrBad = true; draw(); return; }
+      UI.thrDraft = threadsToText(list); UI.thrMsg = 'AI 整理出 ' + list.length + ' 條,已填進下面。請檢查後按「儲存想法線」。'; UI.thrBad = false; draw();
+    }).catch(function (e) { UI.thrMsg = 'AI 暫時無法使用:' + String(e && e.message || e).slice(0, 80); UI.thrBad = true; draw(); });
+  }
+  function download(name, text) {
+    try { var blob = new Blob([text], { type: 'application/json;charset=utf-8' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { try { URL.revokeObjectURL(a.href); document.body.removeChild(a); } catch (e) {} }, 500); } catch (e) {}
+  }
+  function srcAction(el, a) {
+    var K = global.KBSrc;
+    if (a === 'src-export') { var sub = K.exportStudent(el.getAttribute('data-code')); if (sub) { UI.lastPack = JSON.stringify(sub); download('ASRA資料包_' + el.getAttribute('data-code') + '.json', UI.lastPack); } }
+    else if (a === 'src-del') {
+      var pid = el.getAttribute('data-id'), pk = K.listPacks().filter(function (p) { return p.id === pid; })[0]; if (!pk) return;
+      if (global.confirm && !global.confirm('刪除資料包「' + pk.name + '」(' + pk.students + ' 位學生、' + pk.records + ' 則回答)?\n其他資料包不受影響;學生寫過的反思與計畫不會被刪除。')) return;
+      var rr = K.removePack(pid); UI.srcMsg = rr.ok ? '已刪除資料包「' + rr.name + '」。' : rr.error; UI.srcMsgBad = !rr.ok; draw();
+    }
+    else if (a === 'src-clear') { if (global.confirm && !global.confirm('確定要從這台電腦清除學習單資料包嗎?(學生寫過的反思與計畫不會被刪除)')) return; K.clear(); UI.srcMsg = '已清除資料包。'; UI.srcMsgBad = false; draw(); }
+    else if (a === 'src-threads') { var ta = UI.root.querySelector('[data-k="threads"]'), list = parseThreads(ta ? ta.value : ''); K.setThreads(list); UI.thrDraft = null; UI.thrMsg = list.length ? '已儲存 ' + list.length + ' 條想法線,學生端改用你列的。' : '已清空,學生端改用系統自動找的。'; UI.thrBad = false; draw(); }
+    else if (a === 'src-threads-clear') { K.setThreads([]); UI.thrDraft = null; UI.thrMsg = '已改用系統自動找的。'; UI.thrBad = false; draw(); }
+    else if (a === 'src-suggest') { var lines = []; K.groupsInPack().forEach(function (g) { K.autoThreads(g, 4).forEach(function (t) { lines.push(g + '|' + t.title + '|' + t.kw.join(',')); }); }); UI.thrDraft = lines.join('\n'); UI.thrMsg = lines.length ? '已把 ' + lines.length + ' 條建議填進下面,請檢查、修改後按「儲存想法線」。' : '資料不夠,系統沒有找到建議。'; UI.thrBad = !lines.length; draw(); }
+    else if (a === 'src-ai') { aiThreads(); }
+  }
+  function fmtDT(ts) { var d = new Date(ts || 0); return d.getFullYear() + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + ('0' + d.getDate()).slice(-2) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  // 已匯入的資料包:系統把它們「合在一起」使用;刪除時可以自己選要刪哪一個
+  function packsSection(K) {
+    var list = K.listPacks(); if (!list.length) return '';
+    return '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">已匯入的資料包<span class="ml-2 text-xs font-bold text-slate-400">共 ' + list.length + ' 個,系統會合在一起使用</span></h4>' +
+      '<p class="text-xs text-slate-500 mt-1 mb-2">同一位學生出現在好幾個資料包時,回答會合併(來源碼相同的,以較晚匯入的為準)。刪除其中一個,只會移除那個資料包提供的資料,其他資料包不受影響。重新匯入同名的檔案,會更新那個資料包。</p>' +
+      '<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead><tr class="text-xs text-slate-500"><th class="pb-1">資料包</th><th>學生</th><th>回答</th><th>匯入時間</th><th></th></tr></thead><tbody>' +
+      list.map(function (p) { return '<tr class="border-t border-slate-100"><td class="py-1.5 font-bold text-slate-800">' + esc(p.name) + '</td><td>' + p.students + ' 位</td><td>' + p.records + ' 則</td><td class="text-xs text-slate-500">' + fmtDT(p.added) + '</td><td class="text-xs"><button type="button" data-act="src-del" data-id="' + esc(p.id) + '" class="text-rose-600 font-bold underline">刪除這個資料包</button></td></tr>'; }).join('') + '</tbody></table></div></section>';
+  }
+  // 一次可以選好幾個檔案;每個檔案是一個資料包(檔名當名稱)
+  function srcFile(el) {
+    var files = Array.prototype.slice.call(el.files || []); if (!files.length) return;
+    var readOne = function (f) {
+      return new Promise(function (resolve) {
+        var rd = new FileReader();
+        rd.onload = function () {
+          var obj = null; try { obj = JSON.parse(String(rd.result)); } catch (e) { resolve({ name: f.name, ok: false, error: '不是正確的 .json' }); return; }
+          var r = global.KBSrc.importPack(obj, { name: f.name }); r.fileName = f.name; resolve(r);
+        };
+        rd.onerror = function () { resolve({ name: f.name, ok: false, error: '讀不到這個檔案' }); };
+        rd.readAsText(f, 'utf-8');
+      });
+    };
+    var results = [];
+    files.reduce(function (p, f) { return p.then(function () { return readOne(f).then(function (r) { results.push(r); }); }); }, Promise.resolve()).then(function () {
+      var good = results.filter(function (r) { return r.ok; }), bad = results.filter(function (r) { return !r.ok; });
+      UI.srcMsgBad = !good.length;
+      UI.srcMsg = (good.length ? '匯入完成:' + good.length + ' 個資料包 — ' + good.map(function (r) { return r.name + (r.replaced ? '(更新)' : '') + ':' + r.students + ' 位、' + r.records + ' 則'; }).join(';') : '') + (bad.length ? (good.length ? '。' : '') + '沒有匯入:' + bad.map(function (r) { return (r.fileName || r.name) + '(' + r.error + ')'; }).join(';') : '');
+      try { el.value = ''; } catch (e) {}
+      draw();
+    });
+  }
+
   /* ---------- 組合 ---------- */
-  var TABS = [['class', '全班總覽', 'fa-chart-pie'], ['students', '學生一覽', 'fa-users'], ['log', '反思與計畫紀錄', 'fa-book-open'], ['method', '指標說明與匯出', 'fa-circle-info']];
+  var TABS = [['class', '全班總覽', 'fa-chart-pie'], ['students', '學生一覽', 'fa-users'], ['effect', '計畫→行動→想法前進', 'fa-route'], ['src', '學習單資料', 'fa-file-lines'], ['log', '反思與計畫紀錄', 'fa-book-open'], ['method', '指標說明與匯出', 'fa-circle-info']];
   function draw() {
     if (!UI.root || !UI.ctx) return;
     var D = UI.D = compute(UI.ctx);
     var tabs = '<div class="flex flex-wrap gap-2 mb-4" role="tablist">' + TABS.map(function (t) { return '<button type="button" role="tab" data-act="tab" data-tab="' + t[0] + '" aria-selected="' + (UI.tab === t[0]) + '" class="px-4 py-2 rounded-full text-sm font-bold border ' + (UI.tab === t[0] ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50') + '"><i class="fas ' + t[2] + ' mr-1"></i>' + t[1] + '</button>'; }).join('') + '</div>';
-    var body = UI.tab === 'students' ? tabStudents(D) : UI.tab === 'log' ? tabLog(D) : UI.tab === 'method' ? tabMethod(D) : tabClass(D);
+    var body = UI.tab === 'effect' ? tabEffect(D) : UI.tab === 'src' ? tabSrc(D) : UI.tab === 'students' ? tabStudents(D) : UI.tab === 'log' ? tabLog(D) : UI.tab === 'method' ? tabMethod(D) : tabClass(D);
     UI.root.innerHTML = '<header class="mb-3"><h2 class="text-xl md:text-2xl font-bold text-slate-800">ASRA 反思歷程 <span class="text-sm font-bold text-slate-400">Analytics-Supported Reflective Assessment</span></h2><p class="text-sm text-slate-500">看全班與每位學生:走過的路 → 想法走多遠 → 用證據反思 → 決定下一步 → 回頭再檢查</p></header>' +
       '<div class="mb-3">' + cloudBanner() + '</div>' + tabs + '<div id="asra-t-body">' + body + '</div>';
     try { wireAi(D); } catch (e) { if (global.console) console.error(e); }
@@ -263,11 +440,19 @@
     if (a === 'tab') { UI.tab = el.getAttribute('data-tab'); draw(); }
     else if (a === 'log') { ev.preventDefault(); UI.stu = el.getAttribute('data-id'); UI.kind = 'all'; UI.limit = 40; UI.tab = 'log'; draw(); }
     else if (a === 'more') { UI.limit += 40; draw(); }
+    else if (a === 'view') {
+      ev.preventDefault(); var cx = UI.ctx || {};
+      if (global.KBUI && global.KBUI.postViewer) global.KBUI.postViewer.open(el.getAttribute('data-id'), { nodes: cx.nodes || [], topics: cx.topics || [], nameOf: function (u) { var x = (cx.userList || {})[u]; return (x && x.name) || '同學'; } });
+    }
+    else if (a === 'sortcol') { var sk = el.getAttribute('data-key'); if (UI.sort === sk) UI.dir = UI.dir === 'asc' ? 'desc' : 'asc'; else { UI.sort = sk; UI.dir = sortCol(sk).d0 || 'desc'; } draw(); }
     else if (a === 'csv') { exportCSV(); }
+    else if (a === 'src-export' || a === 'src-del' || a === 'src-clear' || a === 'src-threads' || a === 'src-threads-clear' || a === 'src-suggest' || a === 'src-ai') { ev.preventDefault(); srcAction(el, a); }
   }
   function onChange(ev) {
     var el = ev.target, a = el.getAttribute && el.getAttribute('data-act'); if (!a) return;
-    if (a === 'stu') { UI.stu = el.value; UI.limit = 40; draw(); } else if (a === 'kind') { UI.kind = el.value; UI.limit = 40; draw(); } else if (a === 'sort') { UI.sort = el.value; draw(); }
+    if (a === 'src-file') { srcFile(el); return; }
+    if (a === 'src-map') { var K = global.KBSrc, code = el.getAttribute('data-code'), mp = K.mapGet(); Object.keys(mp).forEach(function (u) { if (mp[u] === code) K.mapSet(u, null); }); if (el.value) K.mapSet(el.value, code); draw(); return; }
+    if (a === 'stu') { UI.stu = el.value; UI.limit = 40; draw(); } else if (a === 'kind') { UI.kind = el.value; UI.limit = 40; draw(); } else if (a === 'sort') { UI.sort = el.value; UI.dir = sortCol(el.value).d0 || 'desc'; draw(); } else if (a === 'eff') { UI.eff = el.value; draw(); }
   }
   function exportCSV() {
     var D = UI.D || compute(UI.ctx), ids = D.rows.filter(function (r) { return UI.stu === 'all' || r.u.id === UI.stu; }).map(function (r) { return r.u.id; });

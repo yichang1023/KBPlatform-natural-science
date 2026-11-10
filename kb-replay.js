@@ -298,4 +298,110 @@
     var d = global.kbMakeDays(timestamps);
     return { labels: ['起點'].concat(d.labels), idx: function (ts) { return d.index(ts) + 1; } };
   };
+  /* ---------- 互動圈:在圓球或連線上「點兩下」就跳出說明(老師、學生分析共用) ---------- */
+  // o = { me, nodes:[{id,author,parentId,title,content,date,type}], userList:{...}, typeLabel(type), meSummary?(html), student?:true(學生看自己,用「你」) }
+  function egoEsc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function egoDialog(title, sub, html) {
+    var old = doc.getElementById('kb-ego-dialog'); if (old) old.remove();
+    var ov = doc.createElement('div'); ov.id = 'kb-ego-dialog'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.3);width:100%;max-width:560px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden">' +
+      '<div style="padding:14px 16px 10px;border-bottom:1px solid #e2e8f0;display:flex;gap:10px;align-items:flex-start;background:#f8fafc">' +
+      '<div style="flex:1;min-width:0"><div style="font-weight:800;color:#1e293b;font-size:15px;line-height:1.5">' + title + '</div>' + (sub ? '<div style="color:#64748b;font-size:12px;margin-top:2px">' + sub + '</div>' : '') + '</div>' +
+      '<button type="button" data-a="x" aria-label="關閉" style="border:0;background:#e2e8f0;border-radius:8px;width:30px;height:30px;font-size:16px;cursor:pointer;color:#334155;flex:none">✕</button></div>' +
+      '<div style="padding:12px 16px 16px;overflow:auto;font-size:13px;line-height:1.75;color:#334155">' + html + '</div></div>';
+    function close() { ov.remove(); doc.removeEventListener('keydown', onKey, true); }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    ov.querySelector('[data-a=x]').onclick = close;
+    doc.addEventListener('keydown', onKey, true);
+    doc.body.appendChild(ov); try { ov.querySelector('[data-a=x]').focus(); } catch (e) {}
+    return ov;
+  }
+  global.kbEgoDialog = egoDialog;
+  function egoInfo(o) {
+    var me = String(o.me), nodes = o.nodes || [], by = {}; nodes.forEach(function (n) { by[n.id] = n; });
+    var users = Object.keys(o.userList || {}).map(function (k) { return o.userList[k]; });
+    function nameOf(id) { var u = users.filter(function (x) { return String(x.id) === String(id); })[0]; return (u && (u.name || u.realName)) || String(id); }
+    function label(id) { return String(id) === me && o.student ? '你' : nameOf(id); }
+    function tl(t) { try { return (o.typeLabel && o.typeLabel(t)) || ''; } catch (e) { return ''; } }
+    function when(d) { var x = new Date(d); return isNaN(x) ? '' : (x.getMonth() + 1) + '/' + x.getDate() + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); }
+    function repliesOf(from, to) {   // from 回應 to 的貼文
+      return nodes.filter(function (n) { var p = n.parentId ? by[n.parentId] : null; return p && String(n.author) === String(from) && String(p.author) === String(to) && String(from) !== String(to); })
+        .sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+    }
+    function cut(t, n) { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n) + '…' : t; }
+    function nodeInfo(id) {
+      id = String(id); var mine = nodes.filter(function (n) { return String(n.author) === id; });
+      var parts = [];
+      var cnt = {}; mine.forEach(function (n) { var k = tl(n.type) || '一般'; cnt[k] = (cnt[k] || 0) + 1; });
+      var kinds = Object.keys(cnt).map(function (k) { return k + ' ' + cnt[k] + ' 篇'; }).join('、');
+      if (id === me) {
+        var out = {}, inn = {}, oc = 0, ic = 0;
+        nodes.forEach(function (n) { var p = n.parentId ? by[n.parentId] : null; if (!p) return; var a = String(n.author), b = String(p.author); if (a === b) return; if (a === me) { out[b] = (out[b] || 0) + 1; oc++; } if (b === me) { inn[a] = (inn[a] || 0) + 1; ic++; } });
+        var tot = {}; Object.keys(out).forEach(function (k) { tot[k] = (tot[k] || 0) + out[k]; }); Object.keys(inn).forEach(function (k) { tot[k] = (tot[k] || 0) + inn[k]; });
+        var top = Object.keys(tot).sort(function (a, b) { return tot[b] - tot[a]; }).slice(0, 3);
+        var who = o.student ? '你' : egoEsc(nameOf(me));
+        parts.push('<p>' + who + (o.student ? '總共' : '共')  + '發了 <b>' + mine.length + '</b> 篇貼文' + (kinds ? '(' + egoEsc(kinds) + ')' : '') + '。</p>');
+        parts.push('<p>' + who + '回應過 <b>' + Object.keys(out).length + '</b> 位同學(共 ' + oc + ' 次),也被 <b>' + Object.keys(inn).length + '</b> 位同學回應(共 ' + ic + ' 次)。' +
+          (top.length ? '來往最多的是 ' + top.map(function (k) { return '<b>' + egoEsc(nameOf(k)) + '</b>(' + tot[k] + ' 次)'; }).join('、') + '。' : '還沒有跟同學互動。') + '</p>');
+        if (!o.noCenter) parts.push('<p style="color:#64748b">圖上的藍線是' + who + '回應別人,綠線是別人回應' + who + ',越粗代表次數越多。</p>');
+        if (o.meSummary) parts.push(o.meSummary);
+        return { title: o.student ? '這是你自己' : '🧑‍🎓 ' + egoEsc(nameOf(me)), sub: o.noCenter ? '這位學生' : '互動圈的中心', html: parts.join('') };
+      }
+      var toMe = repliesOf(id, me), fromMe = repliesOf(me, id), A = egoEsc(nameOf(id)), M = egoEsc(label(me));
+      parts.push('<p><b>' + A + '</b> 在論壇共發了 <b>' + mine.length + '</b> 篇貼文' + (kinds ? '(' + egoEsc(kinds) + ')' : '') + '。</p>');
+      parts.push('<p>' + A + ' 和' + M + '的互動:' + A + ' 回應過' + M + ' <b>' + toMe.length + '</b> 次;' + M + '回應過 ' + A + ' <b>' + fromMe.length + '</b> 次。' +
+        (toMe.length + fromMe.length === 0 ? '(他們之間沒有直接對話,是透過其他同學連在一起的。)' : '') + '</p>');
+      var recent = mine.slice().sort(function (a, b) { return new Date(b.date) - new Date(a.date); }).slice(0, 3);
+      if (recent.length) parts.push('<p style="margin-bottom:2px"><b>最近的貼文:</b></p><ul style="margin:0 0 0 1.2em;list-style:disc">' + recent.map(function (n) { return '<li>' + egoEsc(cut(n.title, 30)) + '<span style="color:#94a3b8">(' + egoEsc(when(n.date)) + ')</span></li>'; }).join('') + '</ul>');
+      parts.push('<p style="color:#64748b;margin-top:8px">想看他們互動的內容,請在兩人之間的「連線」上點兩下。</p>');
+      return { title: '🧑‍🎓 ' + A, sub: '互動對象', html: parts.join('') };
+    }
+    // 從原始發言裡找「線索」(不是判定):改進/整合、不同看法、有引用資料
+    var SRC = /(文獻|研究顯示|研究指出|根據|資料顯示|資料指出|論文|報告|官方|教授|查到|查了|網站|來源|https?:|實測|測量|紀錄)/;
+    function cues(n) {
+      var c = [], txt = (n.title || '') + ' ' + (n.content || '');
+      if (n.type === 'improve' || n.type === 'riseabove') c.push('提出改進/整合');
+      if (n.type === 'counter') c.push('提出不同看法');
+      if (SRC.test(txt)) c.push('有引用資料的線索');
+      return c.map(function (x) { return ' <span style="background:#ecfdf5;color:#047857;border-radius:999px;padding:0 7px">' + x + '</span>'; }).join('');
+    }
+    function edgeInfo(from, to) {
+      var list = repliesOf(from, to), A = egoEsc(label(from)), B = egoEsc(label(to));
+      var head = '<span style="color:#4f46e5">' + A + '</span> <span style="color:#64748b">回應了</span> <span style="color:#0f766e">' + B + '</span>';
+      if (!list.length) return { title: head, sub: '', html: '<p>找不到這條線的回應內容。</p>' };
+      var html = '<p style="margin-top:0"><b>' + A + '</b> 回給 <b>' + B + '</b> 的貼文,共 <b>' + list.length + '</b> 則(由早到晚):</p>' + list.map(function (n) {
+        var p = by[n.parentId];
+        return '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;margin:8px 0;background:#fff">' +
+          '<div style="font-size:11px;color:#64748b;margin-bottom:3px">' + egoEsc(when(n.date)) + (tl(n.type) ? ' · <span style="background:#eef2ff;color:#4338ca;border-radius:999px;padding:0 7px">' + egoEsc(tl(n.type)) + '</span>' : '') + cues(n) + '</div>' +
+          '<div style="font-weight:700;color:#1e293b">' + egoEsc(n.title) + '</div>' +
+          '<div style="white-space:pre-wrap;word-break:break-word">' + egoEsc(cut(n.content, 360)) + '</div>' +
+          (p ? '<div style="margin-top:6px;padding:5px 8px;border-left:3px solid #99f6e4;background:#f0fdfa;border-radius:0 6px 6px 0;font-size:12px;color:#475569"><b>' + B + ' 原本說:</b>「' + egoEsc(cut(p.title, 24)) + '」 ' + egoEsc(cut(p.content, 90)) + '</div>' : '') + '</div>';
+      }).join('');
+      html += '<p style="color:#94a3b8;font-size:11px;margin:8px 0 0">綠色標籤只是從發言類型與用字找到的<b>線索</b>,不是判定;想法有沒有真的被改進、被證據檢驗或被採用,要讀內容才能確認。</p>';
+      return { title: head, sub: '共 ' + list.length + ' 次回應', html: html };
+    }
+    return { nodeInfo: nodeInfo, edgeInfo: edgeInfo };
+  }
+  global.kbEgoInfo = egoInfo;   // 網絡實驗室等不是 vis 圖的畫面也用得到:{nodeInfo(id), edgeInfo(from,to)} → {title, sub, html}
+  global.kbEgoTalk = function (net, o) {
+    if (!net || !o || net.__egoTalk) return;
+    net.__egoTalk = true;
+    var I = egoInfo(o), nodeInfo = I.nodeInfo, edgeInfo = I.edgeInfo;
+    net.on('doubleClick', function (p) {
+      try {
+        if (o.edgesOnly && p && p.nodes && p.nodes.length) return;   // 全班互動網絡:只有連線可以點兩下
+        if (p && p.nodes && p.nodes.length) { var r = nodeInfo(p.nodes[0]); egoDialog(r.title, r.sub, r.html); }
+        else if (p && p.edges && p.edges.length) {
+          var id = String(p.edges[0]), i = id.indexOf('>'); if (i < 0) return;
+          var r2 = edgeInfo(id.slice(0, i), id.slice(i + 1)); egoDialog(r2.title, r2.sub, r2.html);
+        }
+      } catch (e) { if (global.console) console.error(e); }
+    });
+    try {   // 提示列補上「點兩下」
+      var c = net.body && net.body.container, sp = c && c.querySelector('.kb-lively-hint span');
+      if (sp && sp.textContent.indexOf('點兩下') < 0) sp.textContent += o.edgesOnly ? '・在連線上點兩下,看誰回給誰' : '・點兩下圓球或連線看說明';
+    } catch (e) {}
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

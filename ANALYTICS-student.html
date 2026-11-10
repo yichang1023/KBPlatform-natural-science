@@ -94,6 +94,7 @@
     return { get: function () { return mode; }, set: set, ctl: ctl, on: function (f) { subs.push({ f: f }); } };
   })();
   // 讓網絡圖「好玩」:拖一顆球(浮動:其他球跟著跑;固定:只有它動);滾輪放大縮小;拖背景移動畫面
+  function global_getPos(el) { return (window.getComputedStyle ? window.getComputedStyle(el).position : (el.style && el.style.position) || 'static'); }
   window.kbLively = function (net) {
     if (!net || net.__lively) return net; net.__lively = true;
     var t = null;
@@ -117,8 +118,26 @@
         var h = document.createElement('div'); h.className = 'kb-lively-hint';
         h.style.cssText = 'position:absolute;left:6px;bottom:6px;right:6px;font-size:10px;color:#64748b;pointer-events:none;background:rgba(255,255,255,.88);padding:2px 8px;border-radius:10px;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px';
         var tx = document.createElement('span'); tx.textContent = '👆 拖拖看圓球・滾輪放大縮小'; h.appendChild(tx); h.appendChild(window.kbMove.ctl());
-        if (c.style && !c.style.position) c.style.position = 'relative'; c.appendChild(h);
+        try { if (global_getPos(c) === 'static') c.style.position = 'relative'; } catch (e) {} c.appendChild(h);
       }
+    } catch (e) {}
+    // 容器大小變了(切換分頁、收合側欄、視窗縮放、從隱藏變成顯示)就重新量尺寸並置中,圖才不會只剩一半
+    try {
+      var c2 = net.body && net.body.container, lastW = 0, lastH = 0, tmr = null;
+      var refit = function () {
+        try {
+          if (!c2 || !c2.clientWidth || !c2.clientHeight) return;      // 還在隱藏中,等它出現再處理
+          if (c2.clientWidth === lastW && c2.clientHeight === lastH) return;
+          lastW = c2.clientWidth; lastH = c2.clientHeight;
+          net.setSize('100%', '100%'); net.redraw(); net.fit({ animation: false });
+          var s = net.getScale(), hh = c2.querySelector('.kb-lively-hint'), clear = hh ? hh.offsetHeight + 8 : 0;
+          net.moveTo({ scale: s * 0.9, position: (function () { var p = net.getViewPosition(); return { x: p.x, y: p.y + clear / 2 / (s * 0.9) }; })(), animation: false });
+        } catch (e) {}
+      };
+      net.__kbRefit = refit;
+      if (window.ResizeObserver && c2) new ResizeObserver(function () { clearTimeout(tmr); tmr = setTimeout(refit, 120); }).observe(c2);
+      net.once('stabilized', function () { lastW = 0; setTimeout(refit, 60); });
+      setTimeout(function () { lastW = 0; refit(); }, 1800);
     } catch (e) {}
     return net;
   };
@@ -201,6 +220,7 @@
 <script src="kb-core.js"></script>
 <script src="kb-cloud.js"></script>
     <script src="kb-ui.js"></script>
+    <script src="kb-ai.js"></script>
 <script src="kb-replay.js"></script>
 <script src="kb-why.js"></script>
 <script src="kb-vocab.js"></script>
@@ -561,10 +581,10 @@
                         <span class="text-xs text-slate-500 mb-1">層討論深度</span>
                     </div>
                     <!-- 🔥 3. 替換為圖像化的深度視覺 -->
-                    <div id="path-length-visual" class="flex items-center justify-center h-4 mt-3 mb-2">
+                    <div id="path-length-visual" class="flex items-center justify-center h-5 mt-3 mb-1">
                         <!-- 動態生成節點圖像 -->
                     </div>
-                    <p class="text-[10px] text-slate-400 mt-2 text-center">衡量討論串延續與深掘的程度</p>
+                    <p class="text-[10px] text-slate-400 mt-1 text-center">衡量討論串延續與深掘的程度</p>
                 </div>
 
                 <!-- 3. 語義與詞彙深度 (獨立狀態卡) -->
@@ -797,6 +817,7 @@ async function geminiPickModels(key) {
     return list;
 }
 async function geminiFetch(key, init) {
+    if (window.KBAI && key === KBAI.SENT) return KBAI.proxyFetch(init);   // 本機沒有金鑰、但老師已把金鑰存到雲端:改由伺服器代為呼叫
     let stored = ''; try { stored = localStorage.getItem('kb_ai_model') || ''; } catch (e) {}
     const discovered = await geminiPickModels(key);
     // 優先使用查詢到的最新模型;上次成功的模型與固定備援排在後面
@@ -825,7 +846,9 @@ async function initApiKey() {
         apiKey = localKey;
         console.log("[AI System] 已從 LocalStorage 載入 API Key");
     } else {
-        console.warn("[AI System] 尚未設定 API Key,AI 導師將無法運作(請老師在首頁或設定中心輸入金鑰)");
+        // 這台電腦沒有金鑰:看老師有沒有把金鑰存到雲端(學生在家也能用)
+        try { const st = window.KBAI ? await KBAI.status() : null; if (st && st.configured) { apiKey = KBAI.SENT; console.log("[AI System] 使用雲端金鑰(由伺服器代為呼叫)"); return true; } } catch (e) {}
+        console.warn("[AI System] 尚未設定 API Key,AI 導師將無法運作(請老師在首頁或設定中心輸入金鑰,並按「儲存到雲端」)");
     }
 
     // 動態組合模型 API URL (為了穩定性，這裡統一對齊 index.html 使用 gemini-2.5-flash)
@@ -884,12 +907,7 @@ async function initApiKey() {
         }
 
         // 1. 顯示載入動畫，讓使用者知道 AI 正在運算
-        document.getElementById('modalInsight').innerHTML = `
-            <div class="flex flex-col items-center justify-center py-8">
-                <i class="fas fa-circle-notch fa-spin text-indigo-500 text-3xl mb-4 shadow-sm rounded-full"></i>
-                <span class="text-xs text-indigo-600 font-bold tracking-wide animate-pulse">AI 導師正在為您提煉專屬洞察...</span>
-            </div>
-        `;
+        kbAiBusy.show(document.getElementById('modalInsight'), 'AI 導師正在為你提煉專屬洞察…', { expect: 12 });
         modal.style.display = "flex";
 
         // 2. 觸發 AI 演算
@@ -1094,7 +1112,9 @@ async function initApiKey() {
             classSel.innerHTML = '';
             const all = optStyle(document.createElement('option')); all.value = 'all'; all.text = '全部班級(' + students.length + ' 人)'; classSel.appendChild(all);
             clsKeys.sort((a, b) => groups[a].name.localeCompare(groups[b].name, 'zh-Hant')).forEach(k => { const o = optStyle(document.createElement('option')); o.value = k; o.text = groups[k].name + '(' + groups[k].n + ' 人)'; classSel.appendChild(o); });
-            classSel.value = clsFilter; container.appendChild(classSel);
+            classSel.value = clsFilter;
+            const lab1 = document.createElement('span'); lab1.textContent = '① 先選班級'; lab1.className = 'text-white/90 text-xs font-bold mr-1 whitespace-nowrap hidden md:inline'; container.appendChild(lab1);
+            container.appendChild(classSel);
         }
         const inScope = u => clsFilter === 'all' || clsOf(u) === clsFilter;
         function fillStudents() {
@@ -1110,6 +1130,7 @@ async function initApiKey() {
             clsFilter = this.value; try { localStorage.setItem('kb_class_filter', clsFilter); } catch (e) {}
             const list = fillStudents(); if (list.length) { select.value = list[0].id; switchUser(list[0].id); }
         };
+        if (showClass) { const lab2 = document.createElement('span'); lab2.textContent = '② 再選學生'; lab2.className = 'text-white/90 text-xs font-bold mr-1 whitespace-nowrap hidden md:inline'; container.appendChild(lab2); }
         container.appendChild(select);
 
         let targetId = students.filter(inScope).length > 0 ? students.filter(inScope)[0].id : null;
@@ -1117,6 +1138,47 @@ async function initApiKey() {
         if (wantUser) targetId = wantUser.id;
         if (targetId) { select.value = targetId; switchUser(targetId); }
     }
+
+    // 認知路徑長度:五顆圓點 = 討論的第 1~5 層。滑鼠停在圓點上(手機:點一下)會跳出這一層的說明
+    const PATH_MEANING = [
+        '開場:你自己開了一個新話題,或直接回應主題。',
+        '回應別人的開場貼文:你接著別人的想法說話。',
+        '回應「別人的回應」:討論開始有來有往,不只是一問一答。',
+        '連續接話第 4 層:大家一句接一句,把想法越挖越深。',
+        '連續接話 5 層以上:很深入的討論,表示這個想法被大家反覆討論。'
+    ];
+    function pathTipEl() {
+        let t = document.getElementById('kb-path-tip');
+        if (!t) { t = document.createElement('div'); t.id = 'kb-path-tip'; t.setAttribute('role', 'tooltip'); t.style.cssText = 'position:fixed;z-index:10040;max-width:260px;background:#1e293b;color:#f1f5f9;font-size:12px;line-height:1.6;padding:8px 10px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.28);pointer-events:none;display:none'; document.body.appendChild(t); }
+        return t;
+    }
+    function pathTipHtml(i, st) {
+        const d = (st && st.depthDist) || {}, me = d[i], cur = Math.max(Math.round((st && st.avgDepth) || 0), 1), reached = i <= cur;
+        const esc2 = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        let h = '<b style="color:#c7d2fe">第 ' + i + (i === 5 ? ' 層以上' : ' 層') + '</b>　' + (reached ? '<span style="color:#86efac">✔ 你的平均已經到這一層</span>' : '<span style="color:#fca5a5">平均還沒到這一層</span>') + '<br>' + PATH_MEANING[i - 1];
+        h += '<br><span style="color:#cbd5e1">你在這一層寫了 <b>' + ((me && me.n) || 0) + '</b> 篇' + (me && me.ex && me.ex.length ? '(例如:' + me.ex.filter(Boolean).slice(0, 2).map(x => '「' + esc2(String(x).slice(0, 14)) + '」').join('、') + ')' : '') + '。</span>';
+        if (!reached && !(me && me.n)) h += '<br><span style="color:#fde68a">想走到這裡:去回應別人「對你的回應」,把話題再往下接一層。</span>';
+        return h;
+    }
+    window.kbPathDots = function (c, st) {
+        if (!c) return;
+        const cur = Math.max(Math.round((st && st.avgDepth) || 0), 1); let h = '';
+        for (let i = 1; i <= 5; i++) {
+            const col = i <= cur ? 'bg-indigo-500' : 'bg-slate-200';
+            if (i > 1) h += '<div class="h-1 w-6 ' + col + ' transition-colors duration-500"></div>';
+            h += '<button type="button" data-lv="' + i + '" aria-label="認知路徑第 ' + i + ' 層說明" class="rounded-full ' + col + ' shadow-sm transition-colors duration-500" style="width:14px;height:14px;padding:0;border:0;cursor:help;outline-offset:3px"></button>';
+        }
+        c.innerHTML = h; c.__st = st;
+        const tip = pathTipEl(), hide = () => { tip.style.display = 'none'; };
+        const show = b => { const r = b.getBoundingClientRect(); tip.innerHTML = pathTipHtml(Number(b.getAttribute('data-lv')), c.__st); tip.style.display = 'block'; const w = tip.offsetWidth, x = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)); tip.style.left = x + 'px'; tip.style.top = Math.max(8, r.top - tip.offsetHeight - 10) + 'px'; };
+        Array.prototype.forEach.call(c.querySelectorAll('button[data-lv]'), b => {
+            b.addEventListener('mouseenter', () => show(b)); b.addEventListener('focus', () => show(b));
+            b.addEventListener('mouseleave', hide); b.addEventListener('blur', hide);
+            b.addEventListener('click', e => { e.stopPropagation(); if (tip.style.display === 'block' && tip.__for === b) { hide(); tip.__for = null; } else { show(b); tip.__for = b; } });
+        });
+        const hint = c.parentElement && c.parentElement.querySelector('.kb-path-hint');
+        if (!hint && c.parentElement) { const p = document.createElement('p'); p.className = 'kb-path-hint text-[10px] text-slate-400 text-center'; p.textContent = '把滑鼠移到圓點上(手機:點一下圓點),看每一層代表什麼'; c.insertAdjacentElement('afterend', p); }
+    };
 
     function getRootAndDepth(nodeId, nodesMap) {
         let depth = 1; let current = nodesMap[nodeId]; let rootId = nodeId;
@@ -1167,11 +1229,12 @@ async function initApiKey() {
         myNotes.forEach(n => { if (scaffoldCounts[n.type] !== undefined) scaffoldCounts[n.type]++; });
 
         const linksCount = myNotes.filter(n => n.parentId).length;
-        const topicsSet = new Set(); let totalDepth = 0;
+        const topicsSet = new Set(); let totalDepth = 0; const depthDist = {};
 
         myNotes.forEach(n => {
             const info = getRootAndDepth(n.id, nodesMap);
             topicsSet.add(info.rootId); totalDepth += info.depth;
+            const dk = Math.min(5, info.depth); (depthDist[dk] = depthDist[dk] || { n: 0, ex: [] }).n++; if (depthDist[dk].ex.length < 2) depthDist[dk].ex.push(n.title || '');
         });
 
         const sortedNotes = myNotes.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1252,7 +1315,7 @@ async function initApiKey() {
             recentNotes: sortedNotes.slice(0, 20),
             roleMetrics: roleMetrics,
             uniqueTopicsCount: topicsSet.size,
-            avgDepth: avgDepth,
+            avgDepth: avgDepth, depthDist: depthDist,
             networkSize: interactants.size,
             lexicalStats: { acCount, lgCount, level: lexicalLevel, title: lexicalTitle, vocab: (function () { try { var ex = ''; try { ex = (KB.settings.get().analysis || {}).extraTerms || ''; } catch (e) {} return KBVocab.forStudent(myNotes.map(function (n) { return { title: n.title, content: n.content, dateTime: n.dateTime || Date.parse(n.date) || 0 }; }), KBVocab.matcher(ex)); } catch (e) { return []; } })() },
             echoStats: { targets: echoTargets.size, replies: outReplies, score: echoScore, mates: mates.size },
@@ -1313,17 +1376,7 @@ async function initApiKey() {
         document.getElementById('avg-depth-val').innerText = stats.avgDepth.toFixed(1);
 
         const depthContainer = document.getElementById('path-length-visual');
-        if (depthContainer) {
-            let visualHtml = '';
-            const maxNodes = 5;
-            const currentNodes = Math.max(Math.round(stats.avgDepth), 1);
-            for(let i=1; i<=maxNodes; i++) {
-               let color = i <= currentNodes ? 'bg-indigo-500' : 'bg-slate-200';
-               if(i>1) visualHtml += `<div class="h-1 w-6 ${color} transition-colors duration-500"></div>`;
-               visualHtml += `<div class="w-3 h-3 rounded-full ${color} shadow-sm transition-colors duration-500"></div>`;
-            }
-            depthContainer.innerHTML = visualHtml;
-        }
+        if (depthContainer) kbPathDots(depthContainer, stats);
 
         window.renderVocabBox = function (lv) {
             var b = document.getElementById('lexical-vocab-box'); if (!b) return;
@@ -1486,7 +1539,7 @@ async function initApiKey() {
         R('s-diversity', card('topic-count-val'), true, '我的觀點多樣性(參與了幾條不同的討論串)', st => { st = S(st); document.getElementById('topic-count-val').innerText = st.uniqueTopicsCount; const b = document.getElementById('topic-diversity-bar'); if (b) b.style.width = Math.min(st.uniqueTopicsCount * 10, 100) + '%'; }, st => '參與 ' + S(st).uniqueTopicsCount + ' 條討論串');
         R('s-path', card('avg-depth-val'), true, '我的認知路徑長度(討論一路往下延伸多深)', st => {
             st = S(st); document.getElementById('avg-depth-val').innerText = st.avgDepth.toFixed(1);
-            const c = document.getElementById('path-length-visual'); if (c) { let h = ''; const cur = Math.max(Math.round(st.avgDepth), 1); for (let i = 1; i <= 5; i++) { const col = i <= cur ? 'bg-indigo-500' : 'bg-slate-200'; if (i > 1) h += '<div class="h-1 w-6 ' + col + ' transition-colors duration-500"></div>'; h += '<div class="w-3 h-3 rounded-full ' + col + ' shadow-sm transition-colors duration-500"></div>'; } c.innerHTML = h; }
+            const c = document.getElementById('path-length-visual'); if (c) kbPathDots(c, st);
         }, st => '平均討論深度 ' + S(st).avgDepth.toFixed(1) + ' 層');
         R('s-lexical', card('lexical-level-badge'), true, '我的語義深度(從日常用語走向學術與邏輯用語)', st => {
             st = S(st); const lv = st.lexicalStats; let iW = '我覺得...', cW = '因為...', bc = 'bg-green-100 text-green-700 border-green-200';
@@ -1982,6 +2035,7 @@ async function initApiKey() {
             const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
             egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics); kbLively(egoNetworkInstance);
             setTimeout(stopEgoPhysics, 2500);
+            try { kbEgoTalk(egoNetworkInstance, { me: userId, student: true, nodes: nodes, userList: users, typeLabel: t => ({ question: '提問', extend: '延伸', improve: '改進', counter: '不同觀點', riseabove: '昇華' })[t] || '' }); } catch (e) { console.error(e); }
             kbAttachPlayer({ explainTitle: '我的互動圈(我和誰互動)的形成過程', id: 'ego-s', container: container, network: egoNetworkInstance, nodesDS: nodesDS, edgesDS: edgesDS, labels: days.stepLabels, steps: days.steps, build: build });
         }
     }
@@ -2072,7 +2126,7 @@ async function initApiKey() {
     window.kbAiAsk = async function (p) {
         try { if (!KB.settings.get().ai.enabled) return '⚠️ AI 功能目前已被關閉(請老師到設定中心開啟)。'; } catch (e) {}
         if (!apiKey) { try { await initApiKey(); } catch (e) {} }
-        if (!apiKey) return '⚠️ 尚未設定 Gemini 金鑰,請老師到首頁或設定中心輸入並儲存。';
+        if (!apiKey) return '⚠️ 尚未設定 Gemini 金鑰,請老師到首頁或設定中心輸入並儲存(要讓學生在家也能用,請按「儲存到雲端」)。';
         const r = await geminiFetch(apiKey, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: p }] }] }) });
         const j = await r.json();
         if (!r.ok) return '⚠️ AI 暫時無法使用(' + ((j.error && j.error.message) || r.status) + ')';

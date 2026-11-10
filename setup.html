@@ -16,6 +16,7 @@
 <script src="kb-core.js"></script>
 <script src="kb-cloud.js"></script>
 <script src="kb-ui.js"></script>
+<script src="kb-ai.js"></script>
 <script src="kb-xlsx.js"></script>
 <script src="kb-vocab.js"></script>
 <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Noto Sans TC', 'sans-serif'] } } } }</script>
@@ -201,7 +202,7 @@
     var tbl = '<div class="overflow-x-auto max-h-[60vh] border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th><input type="checkbox" data-act="u-all" ' + (allOn ? 'checked' : '') + '></th><th>學號 / 帳號</th><th>姓名</th><th>角色</th><th>班級</th><th>組別</th><th>狀態</th><th>密碼 <button class="btn btn-g btn-sm" data-act="pw-eye" title="顯示或隱藏初始密碼" style="padding:1px 6px"><i class="fa-solid ' + (pwHidden() ? 'fa-eye-slash' : 'fa-eye') + '"></i></button></th><th>最後登入</th><th>操作</th></tr></thead><tbody>' +
       (rows.length ? rows.map(function (u) {
         var locked = u.lockUntil && Date.now() < u.lockUntil;
-        return '<tr><td><input type="checkbox" data-sel="' + esc(u.id) + '" ' + (U.sel[u.id] ? 'checked' : '') + '></td><td class="font-mono font-bold">' + compassLink(u, esc(u.id)) + '</td><td>' + compassLink(u, esc(u.realName || '—')) + '</td><td><span class="chip ' + u.role + '">' + ROLE_TXT[u.role] + '</span></td><td>' + esc(clsName(u.classId) || '—') + '</td><td>' + esc(grpName(u.groupId) || '—') + '</td><td>' + (u.placeholder ? '<span class="chip warn" title="預建學生,匯入名單後會自動換成真實學號並啟用">待匯入名單</span>' : (u.status === 'active' ? '<span class="chip ok">啟用</span>' : '<span class="chip bad">停用</span>')) + (locked ? ' <span class="chip warn">鎖定中</span>' : '') + '</td><td>' + (u.pwDefault ? '<span class="chip warn" title="學生還沒自己改過密碼,這是匯入名單時的初始密碼(沒指定就是學號)">初始密碼:<b class="font-mono">' + (pwHidden() ? '●●●●●' : esc(u.initialPw || u.id)) + '</b></span>' : '<span class="chip ok" title="學生已經自己改過密碼。系統只存加密後的密碼,看不到內容;忘記時請按鑰匙重設">已自己改過</span>') + '</td><td class="text-xs text-slate-500">' + fmt(u.lastLogin) + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="u-edit" data-id="' + esc(u.id) + '" title="編輯"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-g btn-sm" data-act="u-reset" data-id="' + esc(u.id) + '" title="重設密碼"><i class="fa-solid fa-key"></i></button> ' + (locked ? '<button class="btn btn-g btn-sm" data-act="u-unlock" data-id="' + esc(u.id) + '" title="解除鎖定"><i class="fa-solid fa-lock-open"></i></button> ' : '') + '<button class="btn btn-g btn-sm" data-act="u-toggle" data-id="' + esc(u.id) + '" title="' + (u.status === 'active' ? '停用' : '啟用') + '"><i class="fa-solid ' + (u.status === 'active' ? 'fa-user-slash' : 'fa-user-check') + '"></i></button> <button class="btn btn-d btn-sm" data-act="u-del" data-id="' + esc(u.id) + '" title="刪除"><i class="fa-solid fa-trash"></i></button></td></tr>';
+        return '<tr><td><input type="checkbox" data-sel="' + esc(u.id) + '" ' + (U.sel[u.id] ? 'checked' : '') + '></td><td class="font-mono font-bold">' + compassLink(u, esc(u.id)) + '</td><td>' + compassLink(u, esc(u.realName || '—')) + '</td><td><span class="chip ' + u.role + '">' + ROLE_TXT[u.role] + '</span></td><td>' + esc(clsName(u.classId) || '—') + '</td><td>' + groupCell(u) + '</td><td>' + (u.placeholder ? '<span class="chip warn" title="預建學生,匯入名單後會自動換成真實學號並啟用">待匯入名單</span>' : (u.status === 'active' ? '<span class="chip ok">啟用</span>' : '<span class="chip bad">停用</span>')) + (locked ? ' <span class="chip warn">鎖定中</span>' : '') + '</td><td>' + (u.pwDefault ? '<span class="chip warn" title="學生還沒自己改過密碼,這是匯入名單時的初始密碼(沒指定就是學號)">初始密碼:<b class="font-mono">' + (pwHidden() ? '●●●●●' : esc(u.initialPw || u.id)) + '</b></span>' : '<span class="chip ok" title="學生已經自己改過密碼。系統只存加密後的密碼,看不到內容;忘記時請按鑰匙重設">已自己改過</span>') + '</td><td class="text-xs text-slate-500">' + fmt(u.lastLogin) + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="u-edit" data-id="' + esc(u.id) + '" title="編輯"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-g btn-sm" data-act="u-reset" data-id="' + esc(u.id) + '" title="重設密碼"><i class="fa-solid fa-key"></i></button> ' + (locked ? '<button class="btn btn-g btn-sm" data-act="u-unlock" data-id="' + esc(u.id) + '" title="解除鎖定"><i class="fa-solid fa-lock-open"></i></button> ' : '') + '<button class="btn btn-g btn-sm" data-act="u-toggle" data-id="' + esc(u.id) + '" title="' + (u.status === 'active' ? '停用' : '啟用') + '"><i class="fa-solid ' + (u.status === 'active' ? 'fa-user-slash' : 'fa-user-check') + '"></i></button> <button class="btn btn-d btn-sm" data-act="u-del" data-id="' + esc(u.id) + '" title="刪除"><i class="fa-solid fa-trash"></i></button></td></tr>';
       }).join('') : '<tr><td colspan="10" class="text-center text-slate-400 py-10">沒有符合條件的使用者</td></tr>') + '</tbody></table></div>';
     var pager = '<div class="flex items-center justify-between mt-3 text-xs text-slate-500"><span>第 ' + U.page + ' / ' + pages + ' 頁</span><div class="flex gap-2"><button class="btn btn-g btn-sm" data-act="u-prev" ' + (U.page <= 1 ? 'disabled' : '') + '>上一頁</button><button class="btn btn-g btn-sm" data-act="u-next" ' + (U.page >= pages ? 'disabled' : '') + '>下一頁</button></div></div>';
     var head = '<button class="btn btn-p" data-act="u-new"><i class="fa-solid fa-user-plus"></i>新增使用者</button><button class="btn btn-s" data-act="u-import"><i class="fa-solid fa-file-import"></i>匯入名單</button><button class="btn btn-g" data-act="u-template"><i class="fa-solid fa-download"></i>下載範本</button><button class="btn btn-g" data-act="u-export"><i class="fa-solid fa-file-export"></i>匯出名單</button><button class="btn btn-g" data-act="u-print"><i class="fa-solid fa-print"></i>帳號通知單</button>';
@@ -209,7 +210,14 @@
       '' + placeholderNote() + '<div class="card text-xs text-slate-500 leading-relaxed"><b class="text-slate-700">說明</b>:學生帳號就是學號;初始密碼預設也是學號,匯入名單時若有填「初始密碼」就用你填的,學生還沒自己改過密碼之前,在下方「密碼」欄看得到(用眼睛按鈕可隱藏)。目前不強制學生改密碼。新增的帳號預設是學生;要設為老師或管理者,請按該列的「編輯」修改角色(兩者權限完全相同)。系統不允許刪除、停用或降級最後一個「管理者/老師」帳號,避免平台沒有人能登入。</div>';
     bindUsers();
   };
+  // 使用者清單的「組別」欄:學生有班級時,直接用選單改(選了立刻存下,畫面不重畫、捲動位置不變)
+  function groupCell(u) {
+    if (u.role !== 'student' || !u.classId) return esc(grpName(u.groupId) || '—');
+    var gs = KB.classes.groups(u.classId); if (!gs.length) return '<span class="text-slate-400" title="這個班級還沒有組別,到「班級與分組」建立">—</span>';
+    return '<select class="inp" style="padding:2px 6px;min-width:6.5rem" data-ugsel="' + esc(u.id) + '">' + opts(gs.map(function (g) { return { v: g.id, t: g.name }; }), u.groupId, '未分組') + '</select>';
+  }
   function bindUsers() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ugsel]'), function (sel) { sel.onchange = function () { var r = KB.users.update(sel.getAttribute('data-ugsel'), { groupId: sel.value }); if (r && r.ok === false) { KBUI.toast(r.error || '分組失敗', 'err'); return; } KBUI.toast(sel.value ? '已分到「' + sel.options[sel.selectedIndex].text + '」' : '已移出組別', 'ok'); }; });
     var q = $('#u-q'); if (!q) return;
     var t; q.oninput = function () { U.q = q.value; U.page = 1; clearTimeout(t); t = setTimeout(function () { var p = q.selectionStart; R.users(); var n = $('#u-q'); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} }, 250); };
     ['role', 'cls', 'status'].forEach(function (k) { $('#u-' + k).onchange = function () { U[k] = this.value; U.page = 1; R.users(); }; });
@@ -349,6 +357,12 @@
       var html = '新增 <b>' + rep.created.length + '</b>、更新 <b>' + rep.updated.length + '</b>、略過 <b>' + rep.skipped.length + '</b>、錯誤 <b>' + rep.errors.length + '</b>。';
       KBUI.confirm({ title: '匯入完成', html: html + (rep.errors.length ? '<br>是否下載「錯誤報告」?' : '<br>' + (rep.pwCustom ? '其中 <b>' + rep.pwCustom + '</b> 人使用檔案中的「初始密碼」,其餘用學號。初始密碼可在「使用者」清單的「密碼」欄看到(學生自己改過就不再顯示),也可用「帳號通知單」發給學生。' : '新建帳號的初始密碼就是學號,請用「帳號通知單」發給學生。')), okText: rep.errors.length ? '下載錯誤報告' : '好', cancelText: '關閉' }).then(function (y) {
         if (y && rep.errors.length) download('匯入錯誤報告_' + dateStr() + '.csv', KB.io.toCSV([['列', '學號', '原因']].concat(rep.errors.map(function (e) { return [e.row, e.id, e.msg]; }))), 'text/csv');
+      }).then(function () {
+        if (!(rep.created.length + rep.updated.length)) return;
+        var gi = {}; KB.classes.groups().forEach(function (g) { gi[g.id] = 1; });
+        var un = KB.users.list().filter(function (u) { return u.role === 'student' && u.status === 'active' && u.classId && !gi[u.groupId]; });
+        if (!un.length) return;
+        return KBUI.confirm({ title: '還有學生沒分組', html: '目前有 <b>' + un.length + '</b> 位學生還沒分組。要現在到「班級與分組」分組嗎?(也可以以後再分,隨時都能調整。)', okText: '現在去分組' }).then(function (y) { if (y) { CL.sel = un[0].classId; CL.f = 'none'; go('classes'); } });
       });
     };
   }
@@ -362,20 +376,66 @@
   }
 
   /* ================= 3 班級與分組 ================= */
-  var CL = { sel: '' };
+  var CL = { sel: '', f: 'all' };
+  // 重新畫「班級與分組」時,保留成員表的捲動位置與已勾選的學生(即時編輯時畫面不會跳掉)
+  function keepClassUI(fn) {
+    var box = document.getElementById('c-members'), st = box ? box.scrollTop : 0, chk = Array.prototype.map.call(document.querySelectorAll('[data-csel]:checked'), function (x) { return x.getAttribute('data-csel'); });
+    fn();
+    var nb = document.getElementById('c-members'); if (!nb) return;
+    nb.scrollTop = st; chk.forEach(function (id) { var x = nb.querySelector('[data-csel="' + id + '"]'); if (x) x.checked = true; });
+  }
+  function classStudents(classId) { return KB.users.list().filter(function (u) { return u.role === 'student' && u.classId === classId && u.status === 'active'; }); }
+  function bulkGroupsDialog() {
+    var has = KB.classes.groups(CL.sel).length;
+    var m = KBUI.modal('<h3><i class="fa-solid fa-layer-group" style="color:#4f46e5"></i>一次建立多組</h3><label>要建立幾組?(1~40)</label><input class="kbui-input" type="number" min="1" max="40" data-f="n" value="' + (has ? 1 : 5) + '"><label>組名格式({n} 會換成 1、2、3…)</label><input class="kbui-input" data-f="p" value="第{n}組" autocomplete="off"><div class="text-xs text-slate-500 mt-2" data-f="pv"></div><div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="no">取消</button><button class="kbui-btn kbui-primary" data-f="ok">建立</button></div>');
+    var f = function (n) { return m.card.querySelector('[data-f=' + n + ']'); };
+    function pv() { var n = Math.max(0, Math.min(40, parseInt(f('n').value, 10) || 0)), p = f('p').value || '第{n}組', out = []; for (var i = 1; i <= Math.min(n, 6); i++) out.push(p.indexOf('{n}') >= 0 ? p.split('{n}').join(i) : p + i); f('pv').textContent = n ? '會建立:' + out.join('、') + (n > 6 ? '…(共 ' + n + ' 組)' : '') + '。已經有的組名會自動略過。' : ''; }
+    f('n').oninput = pv; f('p').oninput = pv; pv();
+    f('no').onclick = m.close;
+    f('ok').onclick = function () { var r = KB.classes.createGroups(CL.sel, f('n').value, f('p').value); if (r.ok === false) { f('err').innerHTML = '<div class="kbui-err">' + esc(r.error) + '</div>'; return; } m.close(); KBUI.toast('已建立 ' + r.created + ' 組' + (r.skipped ? '(略過 ' + r.skipped + ' 個已存在的名稱)' : ''), 'ok'); keepClassUI(R.classes); };
+    setTimeout(function () { f('n').focus(); f('n').select(); }, 30);
+  }
+  function autoGroupDialog() {
+    var st = classStudents(CL.sel), gs = KB.classes.groups(CL.sel), gi = {}; gs.forEach(function (g) { gi[g.id] = 1; });
+    var un = st.filter(function (u) { return !gi[u.groupId]; }).length;
+    var m = KBUI.modal('<h3><i class="fa-solid fa-wand-magic-sparkles" style="color:#4f46e5"></i>自動分組</h3>' +
+      '<label>要分哪些學生?</label><div class="text-sm" style="line-height:2"><label style="font-weight:400"><input type="radio" name="sc" value="unassigned"' + (un ? ' checked' : '') + '> 只分還沒分組的(' + un + ' 位),已分好的不動</label><br><label style="font-weight:400"><input type="radio" name="sc" value="all"' + (un ? '' : ' checked') + '> 全部重新分組(' + st.length + ' 位,會覆蓋現在的分組)</label></div>' +
+      '<label>怎麼分?</label><div class="text-sm" style="line-height:2"><label style="font-weight:400"><input type="radio" name="md" value="block" checked> 依學號順序,連續分段(S01~S03 第 1 組、S04~S06 第 2 組…)</label><br><label style="font-weight:400"><input type="radio" name="md" value="round"> 輪流(1、2、3、1、2、3…)</label><br><label style="font-weight:400"><input type="radio" name="md" value="random"> 隨機,各組人數接近</label></div>' +
+      '<div class="text-xs text-slate-500 mt-2">班上有 ' + gs.length + ' 個組別(' + esc(gs.map(function (g) { return g.name; }).join('、')) + ')。分好以後,還可以在表格裡一個一個調整。</div><div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="no">取消</button><button class="kbui-btn kbui-primary" data-f="ok">開始分組</button></div>');
+    var f = function (n) { return m.card.querySelector('[data-f=' + n + ']'); }, val = function (nm) { var e = m.card.querySelector('input[name=' + nm + ']:checked'); return e ? e.value : ''; };
+    f('no').onclick = m.close;
+    f('ok').onclick = function () {
+      var go = function () { var r = KB.classes.autoAssign(CL.sel, { scope: val('sc'), method: val('md') }); if (r.ok === false) { f('err').innerHTML = '<div class="kbui-err">' + esc(r.error) + '</div>'; return; } m.close(); KBUI.toast(r.assigned ? '已分組:' + r.assigned + ' 位學生' : '沒有需要分組的學生', 'ok'); CL.f = 'all'; keepClassUI(R.classes); };
+      if (val('sc') === 'all') KBUI.confirm({ title: '全部重新分組', html: '會覆蓋目前所有學生的分組,確定嗎?', danger: true, okText: '重新分組' }).then(function (y) { if (y) go(); }); else go();
+    };
+  }
   R.classes = function () {
     var cls = KB.classes.list(), users = KB.users.list().filter(function (u) { return u.role === 'student'; });
     if (!CL.sel || !cls.some(function (c) { return c.id === CL.sel; })) CL.sel = cls.length ? cls[0].id : '';
-    var left = '<div class="space-y-1">' + (cls.length ? cls.map(function (c) { var n = users.filter(function (u) { return u.classId === c.id; }).length; return '<div class="flex items-center gap-2 p-2 rounded-lg cursor-pointer ' + (c.id === CL.sel ? 'bg-indigo-50 border border-indigo-200' : 'hover:bg-slate-50 border border-transparent') + '" data-act="c-sel" data-id="' + c.id + '"><i class="fa-solid fa-people-roof text-indigo-500"></i><div class="flex-1 min-w-0"><div class="font-bold text-sm truncate">' + esc(c.name) + (c.archived ? ' <span class="chip gray">已封存</span>' : '') + '</div><div class="text-[11px] text-slate-500">' + n + ' 位學生' + (c.term ? ' · ' + esc(c.term) : '') + '</div></div></div>'; }).join('') : '<div class="text-sm text-slate-400 py-6 text-center">還沒有班級,請先建立</div>') + '</div>';
+    var left = '<div class="space-y-1">' + (cls.length ? cls.map(function (c) { var n = users.filter(function (u) { return u.classId === c.id; }).length; return '<div class="flex items-center gap-2 p-2 rounded-lg cursor-pointer ' + (c.id === CL.sel ? 'bg-indigo-50 border border-indigo-200' : 'hover:bg-slate-50 border border-transparent') + '" data-act="c-sel" data-id="' + c.id + '"><i class="fa-solid fa-people-roof text-indigo-500"></i><div class="flex-1 min-w-0"><div class="font-bold text-sm truncate">' + esc(c.name) + (c.archived ? ' <span class="chip gray">已封存</span>' : '') + (KB.classes.isMaterial(c) ? ' <span class="chip" style="background:#fef3c7;color:#92400e">教材班</span>' : '') + '</div><div class="text-[11px] text-slate-500">' + n + ' 位學生' + (c.term ? ' · ' + esc(c.term) : '') + '</div></div></div>'; }).join('') : '<div class="text-sm text-slate-400 py-6 text-center">還沒有班級,請先建立</div>') + '</div>';
     var right = '<div class="text-sm text-slate-400 py-10 text-center">請先在左邊選擇或建立班級</div>';
     if (CL.sel) {
       var c = cls.filter(function (x) { return x.id === CL.sel; })[0], gs = KB.classes.groups(CL.sel), members = users.filter(function (u) { return u.classId === CL.sel; });
-      right = '<div class="flex flex-wrap items-center gap-2 mb-3"><h3 class="font-bold text-lg">' + esc(c.name) + '</h3><button class="btn btn-g btn-sm" data-act="c-edit" data-id="' + c.id + '"><i class="fa-solid fa-pen"></i>編輯</button><button class="btn btn-g btn-sm" data-act="c-archive" data-id="' + c.id + '"><i class="fa-solid fa-box-archive"></i>' + (c.archived ? '取消封存' : '封存') + '</button><button class="btn btn-d btn-sm" data-act="c-del" data-id="' + c.id + '"><i class="fa-solid fa-trash"></i>刪除</button></div>' +
-        '<div class="mb-4"><div class="flex items-center gap-2 mb-2"><b class="text-sm">組別</b><button class="btn btn-p btn-sm" data-act="g-new"><i class="fa-solid fa-plus"></i>新增組別</button></div><div class="flex flex-wrap gap-2">' + (gs.length ? gs.map(function (g) { var n = members.filter(function (u) { return u.groupId === g.id; }).length; return '<span class="inline-flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-1.5 text-sm"><i class="fa-solid fa-user-group text-slate-500"></i>' + esc(g.name) + '<span class="text-xs text-slate-500">' + n + '人</span><button class="text-slate-400 hover:text-indigo-600" data-act="g-edit" data-id="' + g.id + '" title="改名"><i class="fa-solid fa-pen text-xs"></i></button><button class="text-slate-400 hover:text-red-600" data-act="g-del" data-id="' + g.id + '" title="刪除"><i class="fa-solid fa-xmark text-xs"></i></button></span>'; }).join('') : '<span class="text-xs text-slate-400">尚未建立組別</span>') + '</div></div>' +
-        '<div class="flex flex-wrap items-center gap-2 mb-2"><b class="text-sm">成員(' + members.length + ')</b><span class="text-xs text-slate-500">勾選後可批次分配組別</span><select class="inp" id="c-move-g">' + opts(gs.map(function (g) { return { v: g.id, t: g.name }; }), '', '分配到組別…') + '</select><button class="btn btn-p btn-sm" data-act="c-move">套用</button><button class="btn btn-g btn-sm" data-act="c-unassign">移出組別</button></div>' +
-        '<div class="overflow-x-auto max-h-[46vh] border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th><input type="checkbox" data-act="c-all"></th><th>學號</th><th>姓名</th><th>組別</th></tr></thead><tbody>' + (members.length ? members.map(function (u) { return '<tr><td><input type="checkbox" data-csel="' + esc(u.id) + '"></td><td class="font-mono font-bold">' + esc(u.id) + '</td><td>' + esc(u.realName) + '</td><td>' + esc(grpName(u.groupId) || '—') + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="text-center text-slate-400 py-8">這個班級還沒有學生,可到「使用者管理」匯入名單</td></tr>') + '</tbody></table></div>';
+      var gIds = {}; gs.forEach(function (g) { gIds[g.id] = 1; });
+      var unassigned = members.filter(function (u) { return u.status === 'active' && !gIds[u.groupId]; });
+      if (CL.f !== 'all' && CL.f !== 'none' && !gIds[CL.f]) CL.f = 'all';
+      var shown = members.filter(function (u) { return CL.f === 'all' ? true : CL.f === 'none' ? (u.status === 'active' && !gIds[u.groupId]) : u.groupId === CL.f; });
+      var gOpts = gs.map(function (g) { return { v: g.id, t: g.name }; });
+      var fchip = function (k, label, n) { return '<button type="button" class="chip ' + (CL.f === k ? 'ok' : 'gray') + '" data-act="c-filter" data-k="' + esc(k) + '" style="cursor:pointer">' + label + ' ' + n + '</button>'; };
+      var warnBox = 'style="background:#fffbeb;border:1px solid #fde68a;color:#92400e"';
+      var banner = '';
+      if (members.length && !gs.length) banner = '<div class="flex flex-wrap items-center gap-2 mb-3 p-3 rounded-lg text-sm" ' + warnBox + ' id="c-banner"><i class="fa-solid fa-user-group"></i>這個班級還沒有組別。<button class="btn btn-p btn-sm" data-act="g-bulk"><i class="fa-solid fa-layer-group"></i>一次建立多組</button></div>';
+      else if (members.length && unassigned.length) banner = '<div class="flex flex-wrap items-center gap-2 mb-3 p-3 rounded-lg text-sm" ' + warnBox + ' id="c-banner"><i class="fa-solid fa-triangle-exclamation"></i>還有 <b>' + unassigned.length + '</b> 位學生還沒分組。<button class="btn btn-g btn-sm" data-act="c-filter" data-k="none">只看未分組</button><button class="btn btn-p btn-sm" data-act="g-auto"><i class="fa-solid fa-wand-magic-sparkles"></i>自動分組</button><span class="text-xs">也可以直接用下面表格每位學生右邊的選單分組(選了就立刻存下)。</span></div>';
+      right = '<div class="flex flex-wrap items-center gap-2 mb-3"><h3 class="font-bold text-lg">' + esc(c.name) + '</h3><button class="btn btn-g btn-sm" data-act="c-edit" data-id="' + c.id + '"><i class="fa-solid fa-pen"></i>編輯</button><button class="btn btn-g btn-sm" data-act="c-material" data-id="' + c.id + '" title="教材班:所有學生登入後都可以進來看這個班的內容(唯讀),只有這個班的學生能發言"><i class="fa-solid fa-book-open"></i>' + (KB.classes.isMaterial(c) ? '取消教材班' : '設為教材班') + '</button><button class="btn btn-g btn-sm" data-act="c-archive" data-id="' + c.id + '"><i class="fa-solid fa-box-archive"></i>' + (c.archived ? '取消封存' : '封存') + '</button><button class="btn btn-d btn-sm" data-act="c-del" data-id="' + c.id + '"><i class="fa-solid fa-trash"></i>刪除</button></div>' +
+        '<div class="mb-4"><div class="flex flex-wrap items-center gap-2 mb-2"><b class="text-sm">組別</b><button class="btn btn-p btn-sm" data-act="g-new"><i class="fa-solid fa-plus"></i>新增組別</button><button class="btn btn-g btn-sm" data-act="g-bulk"><i class="fa-solid fa-layer-group"></i>一次建立多組</button><button class="btn btn-g btn-sm" data-act="g-auto"' + (gs.length && members.length ? '' : ' disabled') + '><i class="fa-solid fa-wand-magic-sparkles"></i>自動分組</button></div><div class="flex flex-wrap gap-2">' +
+        (gs.length ? gs.map(function (g) { var n = members.filter(function (u) { return u.groupId === g.id; }).length; return '<span class="inline-flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-1.5 text-sm"><i class="fa-solid fa-user-group text-slate-500"></i><button type="button" class="font-bold hover:text-indigo-600" data-act="c-filter" data-k="' + esc(g.id) + '" title="只看這一組">' + esc(g.name) + '</button><span class="text-xs text-slate-500">' + n + '人</span><button class="text-slate-400 hover:text-indigo-600" data-act="g-edit" data-id="' + g.id + '" title="改名"><i class="fa-solid fa-pen text-xs"></i></button><button class="text-slate-400 hover:text-red-600" data-act="g-del" data-id="' + g.id + '" title="刪除"><i class="fa-solid fa-xmark text-xs"></i></button></span>'; }).join('') : '<span class="text-xs text-slate-400">尚未建立組別</span>') + '</div></div>' + banner +
+        '<div class="flex flex-wrap items-center gap-2 mb-2"><b class="text-sm">成員(' + members.length + ')</b>' + fchip('all', '全部', members.length) + fchip('none', '未分組', unassigned.length) + gs.map(function (g) { return fchip(g.id, esc(g.name), members.filter(function (u) { return u.groupId === g.id; }).length); }).join('') + '</div>' +
+        '<div class="flex flex-wrap items-center gap-2 mb-2"><span class="text-xs text-slate-500">批次:勾選後</span><select class="inp" id="c-move-g">' + opts(gOpts, '', '分配到組別…') + '</select><button class="btn btn-p btn-sm" data-act="c-move">套用</button><button class="btn btn-g btn-sm" data-act="c-unassign">移出組別</button></div>' +
+        '<div id="c-members" class="overflow-x-auto max-h-[46vh] border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th><input type="checkbox" data-act="c-all"></th><th>學號</th><th>姓名</th><th>組別(選了立刻存下)</th></tr></thead><tbody>' +
+        (shown.length ? shown.map(function (u) { return '<tr><td><input type="checkbox" data-csel="' + esc(u.id) + '"></td><td class="font-mono font-bold">' + esc(u.id) + '</td><td>' + esc(u.realName) + '</td><td><select class="inp" style="padding:2px 6px;min-width:7rem" data-gsel="' + esc(u.id) + '">' + opts(gOpts, gIds[u.groupId] ? u.groupId : '', '未分組') + '</select></td></tr>'; }).join('') : '<tr><td colspan="4" class="text-center text-slate-400 py-8">' + (members.length ? '這個篩選下沒有學生' : '這個班級還沒有學生,可到「使用者管理」匯入名單') + '</td></tr>') + '</tbody></table></div>';
     }
     $('#content').innerHTML = '<div class="grid md:grid-cols-3 gap-5"><div>' + card('班級', 'fa-people-roof', left, '<button class="btn btn-p btn-sm" data-act="c-new"><i class="fa-solid fa-plus"></i>新增</button>') + '</div><div class="md:col-span-2">' + card('班級內容', 'fa-diagram-project', right) + '</div></div>';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-gsel]'), function (sel) { sel.onchange = function () { var r = KB.users.update(sel.getAttribute('data-gsel'), { groupId: sel.value }); if (r && r.ok === false) { KBUI.toast(r.error || '分組失敗', 'err'); return; } KBUI.toast(sel.value ? '已分到「' + sel.options[sel.selectedIndex].text + '」' : '已移出組別', 'ok'); keepClassUI(R.classes); }; });
   };
   function textPrompt(title, label, value, onOk, extra) {
     var m = KBUI.modal('<h3>' + esc(title) + '</h3><label>' + esc(label) + '</label><input class="kbui-input" data-f="v" value="' + esc(value || '') + '" autocomplete="off">' + (extra || '') + '<div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="no">取消</button><button class="kbui-btn kbui-primary" data-f="ok">確定</button></div>');
@@ -389,27 +449,28 @@
   /* ================= 4 論壇設定 ================= */
   function topicForm(t) {
     var edit = !!t; t = t || { name: '', desc: '', categories: [] };
-    var m = KBUI.modal('<h3><i class="fa-solid fa-folder-plus" style="color:#4f46e5"></i>' + (edit ? '編輯討論區' : '新增討論區') + '</h3><label>名稱 / 研究問題</label><input class="kbui-input" data-f="name" value="' + esc(t.name) + '"><label>說明</label><textarea class="kbui-input" rows="3" data-f="desc">' + esc(t.desc) + '</textarea><label>分類(可複選)</label><div class="flex flex-wrap gap-2" data-f="cats">' + CATS.map(function (c) { return '<label style="display:inline-flex;align-items:center;gap:4px;margin:0;font-weight:500"><input type="checkbox" value="' + c + '" ' + ((t.categories || []).indexOf(c) >= 0 ? 'checked' : '') + '>' + c + '</label>'; }).join('') + '</div><div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="no">取消</button><button class="kbui-btn kbui-primary" data-f="ok">儲存</button></div>');
+    var m = KBUI.modal('<h3><i class="fa-solid fa-folder-plus" style="color:#4f46e5"></i>' + (edit ? '編輯討論區' : '新增討論區') + '</h3><label>名稱 / 研究問題</label><input class="kbui-input" data-f="name" value="' + esc(t.name) + '"><label>說明</label><textarea class="kbui-input" rows="3" data-f="desc">' + esc(t.desc) + '</textarea><label>班級</label><select class="kbui-input" data-f="classId"><option value="">全部班級共用</option>' + KB.classes.list().map(function (c) { return '<option value="' + esc(c.id) + '"' + (t.classId === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select><div class="text-xs text-slate-500">選「全部班級共用」= 每個班級都看得到、都能發言;選某個班級 = 只有那一班的學生能發言(可在「論壇設定」開啟「學生可以跨班級發言」)。</div><label>分類(可複選)</label><div class="flex flex-wrap gap-2" data-f="cats">' + CATS.map(function (c) { return '<label style="display:inline-flex;align-items:center;gap:4px;margin:0;font-weight:500"><input type="checkbox" value="' + c + '" ' + ((t.categories || []).indexOf(c) >= 0 ? 'checked' : '') + '>' + c + '</label>'; }).join('') + '</div><div data-f="err"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="no">取消</button><button class="kbui-btn kbui-primary" data-f="ok">儲存</button></div>');
     var f = function (n) { return m.card.querySelector('[data-f=' + n + ']'); };
     f('no').onclick = m.close;
     f('ok').onclick = function () {
       var name = f('name').value.trim(); if (!name) { f('err').innerHTML = '<div class="kbui-err">請輸入名稱</div>'; return; }
       var cats = Array.prototype.slice.call(f('cats').querySelectorAll('input:checked')).map(function (x) { return x.value; }); if (!cats.length) cats = ['其他'];
       var c = KB.content.get(), topics = JSON.parse(JSON.stringify(c.topics));
-      if (edit) { var i = topics.findIndex(function (x) { return x.id === t.id; }); if (i >= 0) { topics[i].name = name; topics[i].desc = f('desc').value; topics[i].categories = cats; } KB.content.audit('topic.update', t.id, name); }
-      else { var nt = { id: 't_' + Date.now().toString(36), name: name, desc: f('desc').value, categories: cats, author: gate.id, date: new Date().toISOString(), status: 'open' }; topics.unshift(nt); KB.content.audit('topic.create', nt.id, name); }
+      if (edit) { var i = topics.findIndex(function (x) { return x.id === t.id; }); if (i >= 0) { topics[i].name = name; topics[i].desc = f('desc').value; topics[i].categories = cats; topics[i].classId = f('classId').value; topics[i].shared = !f('classId').value; } KB.content.audit('topic.update', t.id, name); }
+      else { var nt = { id: 't_' + Date.now().toString(36), name: name, desc: f('desc').value, categories: cats, classId: f('classId').value, shared: !f('classId').value, author: gate.id, date: new Date().toISOString(), status: 'open' }; topics.unshift(nt); KB.content.audit('topic.create', nt.id, name); }
       KB.content.save({ topics: topics }); m.close(); KBUI.toast('已儲存', 'ok'); R.forum();
     };
     setTimeout(function () { f('name').focus(); }, 30);
   }
   R.forum = function () {
     var cfg = KB.settings.get(), c = KB.content.get();
-    var tl = c.topics.length ? '<div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>名稱</th><th>分類</th><th>貼文</th><th>建立</th><th>操作</th></tr></thead><tbody>' + c.topics.map(function (t) {
+    var tl = c.topics.length ? '<div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>名稱</th><th>班級</th><th>分類</th><th>貼文</th><th>建立</th><th>操作</th></tr></thead><tbody>' + c.topics.map(function (t) {
       var n = c.nodes.filter(function (x) { return x.topicId === t.id; }).length;
-      return '<tr><td class="font-bold">' + esc(t.name) + '<div class="text-xs font-normal text-slate-500">' + esc(t.desc || '') + '</div></td><td>' + (t.categories || []).map(function (x) { return '<span class="chip gray">' + esc(x) + '</span>'; }).join(' ') + '</td><td>' + n + '</td><td class="text-xs text-slate-500">' + fmt(t.date) + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="t-edit" data-id="' + esc(t.id) + '"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-sm" data-act="t-del" data-id="' + esc(t.id) + '"><i class="fa-solid fa-trash"></i></button></td></tr>';
+      return '<tr><td class="font-bold">' + esc(t.name) + '<div class="text-xs font-normal text-slate-500">' + esc(t.desc || '') + '</div></td><td>' + (KB.topicClass(t) ? esc(clsName(KB.topicClass(t)) || '(已刪除的班級)') : '<span class="text-slate-400">全部班級共用</span>') + '</td><td>' + (t.categories || []).map(function (x) { return '<span class="chip gray">' + esc(x) + '</span>'; }).join(' ') + '</td><td>' + n + '</td><td class="text-xs text-slate-500">' + fmt(t.date) + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="t-edit" data-id="' + esc(t.id) + '"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-sm" data-act="t-del" data-id="' + esc(t.id) + '"><i class="fa-solid fa-trash"></i></button></td></tr>';
     }).join('') + '</tbody></table></div>' : '<div class="text-sm text-slate-400 py-8 text-center">目前沒有討論區</div>';
     var win = cfg.postWindow || {};
     var rules = setRow('開放訪客瀏覽論壇', '關閉後,首頁的「訪客瀏覽」會失效。', sw('guestEnabled', cfg.guestEnabled)) +
+      setRow('學生可以跨班級發言', '關閉(預設):討論區如果指定了某個班級,學生只能在「自己班級」和「全部班級共用」的討論區發言,到別班的討論區只能閱讀(仍可在論壇選班級來看)。開啟後,學生可以在任何班級的討論區發言。老師與管理者不受限制。', sw('crossClassPost', cfg.crossClassPost)) +
       setRow('學生可以編輯自己的貼文', '學生只能改自己的,看不到別人貼文的編輯鈕。', sw('studentEditOwn', cfg.studentEditOwn)) +
       setRow('學生刪除自己的貼文', '「僅限無人回覆」可避免整串討論被截斷。老師與管理者不受限制。', '<select class="inp" data-setting="studentDeleteOwn">' + opts([{ v: 'noReplies', t: '僅限沒有人回覆時' }, { v: 'always', t: '隨時可刪(連同回覆)' }, { v: 'never', t: '不可刪除' }], cfg.studentDeleteOwn) + '</select>') +
       setRow('鎖定論壇(學生唯讀)', '鎖定後學生與訪客都不能發文、編輯、刪除;老師與管理者仍可操作。', sw('forumLocked', cfg.forumLocked)) +
@@ -462,19 +523,30 @@
     $('#content').innerHTML = card('Gemini 金鑰', 'fa-key',
       '<div class="flex items-center gap-2 mb-3">' + (key ? '<span class="chip ok">已設定</span><span class="font-mono text-sm">…' + esc(key.slice(-4)) + '</span>' : '<span class="chip warn">尚未設定</span>') + '</div>' +
       '<label class="lbl">貼上 Gemini API Key</label><div class="flex gap-2"><input class="inp flex-1" type="password" id="ai-key" placeholder="AIza…" autocomplete="off"><button class="btn btn-p" data-act="ai-test"><i class="fa-solid fa-plug"></i>測試並儲存</button>' + (key ? '<button class="btn btn-g" data-act="ai-clear">清除</button>' : '') + '</div><div id="ai-res" class="text-xs mt-2"></div>' +
-      '<p class="text-xs text-slate-500 mt-3">這裡使用的就是在首頁輸入的那一把金鑰(同一個瀏覽器共用);想更換也可以直接在上面貼新的。金鑰只存在這台電腦的瀏覽器,不會寫進平台資料,也不會出現在備份檔裡。</p>') +
+      '<p class="text-xs text-slate-500 mt-3">這裡使用的就是在首頁輸入的那一把金鑰(同一個瀏覽器共用);想更換也可以直接在上面貼新的。金鑰只存在這台電腦的瀏覽器,不會寫進平台資料,也不會出現在備份檔裡。要讓學生在家也能用 AI,請用下面「雲端金鑰」。</p>') +
+      card('雲端金鑰(讓全班在家也能用 AI)', 'fa-cloud',
+        '<p class="text-xs text-slate-500 mb-3">學生不需要自己設定金鑰。你把金鑰存到雲端後,學生按 AI 功能時,由伺服器代為呼叫 Gemini,學生的瀏覽器看不到金鑰。需要先在 Vercel 設好「管理密碼」與「Firebase 服務帳戶」(見「AI金鑰雲端設定說明」)。</p>' +
+        '<div id="ai-cloud-status" class="text-sm mb-3"></div>' +
+        '<label class="lbl">管理密碼</label><div class="flex flex-wrap gap-2"><input class="inp flex-1" type="password" id="ai-pass" autocomplete="off" placeholder="Vercel 的 AI_ADMIN_PASSCODE"><button class="btn btn-p" data-act="ai-cloud-save"><i class="fa-solid fa-cloud-arrow-up"></i>把上面的金鑰存到雲端</button><button class="btn btn-g" data-act="ai-cloud-clear">清除雲端金鑰</button></div><div id="ai-cloud-res" class="text-xs mt-2"></div>') +
       card('模型選擇', 'fa-microchip', '<p class="text-xs text-slate-500 mb-3">下面的清單是用目前這把金鑰向 Google 查詢到的「可用模型」。選好後,老師分析、學生分析與首頁的 AI 功能都會優先使用這個模型;選「自動」則使用版本最新的 flash 模型。</p><div id="ai-model-box"></div>') +
       card('AI 功能', 'fa-robot',
         setRow('啟用 AI 功能', '關閉後,老師分析的 AI 診斷、Ref 的 AI 診斷、學生分析的 AI 導師都會停用。', sw('aiEnabled', cfg.enabled)) +
         setRow('傳給 AI 的內容會去除學生姓名', '固定開啟:姓名、名字與學號一律換成 S01、S02… 代號,AI 回覆後再由你的瀏覽器換回。', '<span class="chip ok">固定開啟</span>') +
         '');
     renderModelBox();
+    refreshCloud();
     if (key && aiModels.list === null && !aiModels.loading) loadModels();
   };
 
   /* ---- 模型清單:向 Google 查詢這把金鑰實際可用的模型 ---- */
   var aiModels = { list: null, loading: false, err: '', key: '' };
   function getKey() { try { return localStorage.getItem('kb_ai_key') || ''; } catch (e) { return ''; } }
+  // 雲端金鑰:只顯示「有沒有設定」;存、清除要管理密碼
+  function cloudRes(text, bad) { var e = $('#ai-cloud-res'); if (!e) return; e.textContent = text; e.className = 'text-xs mt-2 ' + (bad ? 'text-red-600' : 'text-emerald-700'); }
+  function refreshCloud() {
+    var e = $('#ai-cloud-status'); if (!e || !window.KBAI) return;
+    KBAI.status(true).then(function (st) { var x = $('#ai-cloud-status'); if (!x) return; x.innerHTML = st.configured ? '<span class="chip ok">雲端已設定</span> <span class="text-xs text-slate-500">目前使用:' + esc(KBAI.SRC_TEXT[st.source] || '雲端') + '。學生在家也能使用 AI。' + (st.source === 'cloud' ? '(App 裡存的金鑰會優先於 Vercel 的 GEMINI_API_KEY。)' : '') + '</span>' : '<span class="chip warn">雲端尚未設定</span> <span class="text-xs text-slate-500">學生只能在已設定金鑰的那台電腦使用 AI。可以在下面存到雲端,或到 Vercel 設環境變數 GEMINI_API_KEY。</span>'; });
+  }
   function verOf(n) { var m = /^gemini-([0-9]+(?:[.][0-9]+)?)/.exec(n); return m ? parseFloat(m[1]) : 0; }
   function listGeminiModels(key) {
     var out = [];
@@ -646,11 +718,18 @@
     'c-new': function () { textPrompt('新增班級', '班級名稱', '', function (v) { var r = KB.classes.create(v); if (r.ok) { CL.sel = r.id; R.classes(); } return r; }, '<label>學期(選填)</label><input class="kbui-input" data-f="term" placeholder="例如 114-1">'); },
     'c-sel': function (b) { CL.sel = b.dataset.id; R.classes(); },
     'c-edit': function (b) { var c = KB.classes.list().filter(function (x) { return x.id === b.dataset.id; })[0]; textPrompt('編輯班級', '班級名稱', c.name, function (v, card2) { var r = KB.classes.update(c.id, { name: v.trim() || c.name, term: (card2.querySelector('[data-f=term]') || {}).value || '' }); if (r.ok) R.classes(); return r; }, '<label>學期</label><input class="kbui-input" data-f="term" value="' + esc(c.term || '') + '">'); },
+    'c-material': function (b) { var c = KB.classes.list().filter(function (x) { return x.id === b.dataset.id; })[0]; KB.classes.update(c.id, { material: !KB.classes.isMaterial(c) }); R.classes(); },
     'c-archive': function (b) { var c = KB.classes.list().filter(function (x) { return x.id === b.dataset.id; })[0]; KB.classes.update(c.id, { archived: !c.archived }); R.classes(); },
     'c-del': function (b) { KBUI.confirm({ title: '刪除班級', html: '確定刪除這個班級與底下的組別?(班級內有學生時無法刪除)', danger: true, okText: '刪除' }).then(function (y) { if (!y) return; if (ok(KB.classes.remove(b.dataset.id), '已刪除')) R.classes(); }); },
     'g-new': function () { textPrompt('新增組別', '組別名稱', '', function (v) { var r = KB.classes.createGroup(CL.sel, v); if (r.ok) R.classes(); return r; }); },
     'g-edit': function (b) { var g = KB.classes.groups().filter(function (x) { return x.id === b.dataset.id; })[0]; textPrompt('組別改名', '組別名稱', g.name, function (v) { var r = KB.classes.updateGroup(g.id, v); if (r.ok) R.classes(); return r; }); },
-    'g-del': function (b) { KBUI.confirm({ title: '刪除組別', html: '確定刪除這個組別?(組別內有學生時無法刪除)', danger: true, okText: '刪除' }).then(function (y) { if (!y) return; if (ok(KB.classes.removeGroup(b.dataset.id), '已刪除')) R.classes(); }); },
+    'c-filter': function (b) { CL.f = b.dataset.k; keepClassUI(R.classes); },
+    'g-bulk': function () { bulkGroupsDialog(); },
+    'g-auto': function () { autoGroupDialog(); },
+    'g-del': function (b) {
+      var inside = KB.users.list().filter(function (u) { return u.groupId === b.dataset.id; }).length;
+      KBUI.confirm({ title: '刪除組別', html: inside ? '這個組別裡有 <b>' + inside + '</b> 位學生。刪除後,他們會變成「未分組」(學生與貼文都不會被刪除)。確定嗎?' : '確定刪除這個組別?', danger: true, okText: '刪除' }).then(function (y) { if (!y) return; if (ok(KB.classes.removeGroup(b.dataset.id, { unassign: true }), '已刪除')) keepClassUI(R.classes); });
+    },
     'c-all': function (b) { $$('[data-csel]').forEach(function (x) { x.checked = b.checked; }); },
     'c-move': function () { var gid = $('#c-move-g').value; var ids = $$('[data-csel]:checked').map(function (x) { return x.dataset.csel; }); if (!gid) { KBUI.toast('請先選擇要分配的組別', 'err'); return; } if (!ids.length) { KBUI.toast('請先勾選學生', 'err'); return; } ids.forEach(function (i) { KB.users.update(i, { groupId: gid }); }); KBUI.toast('已分配 ' + ids.length + ' 位', 'ok'); R.classes(); },
     'c-unassign': function () { var ids = $$('[data-csel]:checked').map(function (x) { return x.dataset.csel; }); if (!ids.length) { KBUI.toast('請先勾選學生', 'err'); return; } ids.forEach(function (i) { KB.users.update(i, { groupId: '' }); }); KBUI.toast('已移出組別', 'ok'); R.classes(); },
@@ -696,6 +775,24 @@
       }).catch(function (e) { res.innerHTML = '<span class="text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> 驗證失敗:' + esc(e.message) + '</span>'; });
     },
     'ai-clear': function () { KBUI.confirm({ title: '清除金鑰', html: '清除這台電腦儲存的 Gemini 金鑰?AI 功能會暫時無法使用。', danger: true, okText: '清除' }).then(function (y) { if (!y) return; try { localStorage.removeItem('kb_ai_key'); localStorage.removeItem('kb_ai_models'); localStorage.removeItem('kb_ai_model'); } catch (e) {} aiModels.list = null; KB.audit.add('ai.keyCleared', '', ''); KBUI.toast('已清除', 'ok'); R.ai(); }); },
+    'ai-cloud-save': function () {
+      var key = ($('#ai-key') && $('#ai-key').value.trim()) || getKey(), pass = $('#ai-pass') ? $('#ai-pass').value : '';
+      if (!key) { cloudRes('請先貼上金鑰(或先「測試並儲存」)。', true); return; }
+      if (!pass) { cloudRes('請輸入管理密碼。', true); return; }
+      cloudRes('正在儲存到雲端…', false);
+      KBAI.admin('save', pass, key).then(function (r) {
+        if (!r.ok) { cloudRes(r.error, true); return; }
+        try { KB.audit.add('ai.cloudKeySaved', '', '金鑰已存到雲端(後四碼 ' + r.data.last4 + ')'); } catch (e) {}
+        KBUI.toast('已儲存到雲端', 'ok'); refreshCloud(); cloudRes('已儲存到雲端(後四碼 ' + r.data.last4 + ')。學生不用自己設定,在家也能使用 AI。', false); if ($('#ai-pass')) $('#ai-pass').value = '';
+      });
+    },
+    'ai-cloud-clear': function () {
+      var pass = $('#ai-pass') ? $('#ai-pass').value : ''; if (!pass) { cloudRes('請輸入管理密碼。', true); return; }
+      KBUI.confirm({ title: '清除雲端金鑰', html: '清除雲端的 Gemini 金鑰?學生在家就不能用 AI 了。', danger: true, okText: '清除' }).then(function (y) {
+        if (!y) return;
+        KBAI.admin('clear', pass).then(function (r) { if (!r.ok) { cloudRes(r.error, true); return; } try { KB.audit.add('ai.cloudKeyCleared', '', ''); } catch (e) {} KBUI.toast('已清除雲端金鑰', 'ok'); refreshCloud(); cloudRes('已清除雲端金鑰。', false); });
+      });
+    },
     'ai-redetect': function () { try { localStorage.removeItem('kb_ai_models'); } catch (e) {} aiModels.list = null; loadModels(); },
     'ai-model-test': function () {
       var key = getKey(), sel = $('#ai-model-sel'), res = $('#ai-model-res'); if (!key || !sel) return;
@@ -739,7 +836,7 @@
   };
 
   var SW = {
-    guestEnabled: function (v) { KB.settings.update({ guestEnabled: v }); }, studentEditOwn: function (v) { KB.settings.update({ studentEditOwn: v }); },
+    guestEnabled: function (v) { KB.settings.update({ guestEnabled: v }); }, crossClassPost: function (v) { KB.settings.update({ crossClassPost: v }); }, studentEditOwn: function (v) { KB.settings.update({ studentEditOwn: v }); },
     forumLocked: function (v) { KB.settings.update({ forumLocked: v }); }, postWindowEnabled: function (v) { KB.settings.update({ postWindow: { enabled: v } }); },
     aiEnabled: function (v) { KB.settings.update({ ai: { enabled: v } }); }, annEnabled: function (v) { KB.settings.update({ announcement: { enabled: v } }); },
     maintenance: function (v) { KB.settings.update({ maintenance: v }); }, voiceEnabled: function (v) { KB.settings.update({ voice: { enabled: v } }); }, mediaEnabled: function (v) { KB.settings.update({ media: { enabled: v } }); }, consentEnabled: function (v) { KB.settings.update({ consent: { enabled: v } }); }, requireStudentPwChange: function (v) { KB.settings.update({ requireStudentPwChange: v }); }

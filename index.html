@@ -23,6 +23,7 @@
 <script src="kb-core.js"></script>
 <script src="kb-cloud.js"></script>
     <script src="kb-ui.js"></script>
+    <script src="kb-ai.js"></script>
 
     <script>
         tailwind.config = {
@@ -254,8 +255,18 @@
                             </div>
                             <div id="api-key-guide" class="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs text-slate-300 leading-relaxed"><div class="font-bold text-indigo-300 mb-1"><i class="fa-solid fa-circle-question"></i> 還沒有 API 金鑰?照這三步取得(只要有 Gmail 就能登入)</div><ol class="list-decimal pl-4 space-y-0.5"><li>點下面的按鈕,用自己的 <b>Gmail(Google 帳號)</b>登入。</li><li>在頁面上按「<b>建立 API 金鑰</b>」(Create API key)。</li><li>複製那一長串金鑰,貼回上面的欄位,再按「測試並儲存金鑰」。</li></ol><a id="api-key-link" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold"><i class="fa-solid fa-arrow-up-right-from-square"></i> 前往取得 Gemini API 金鑰(Google AI Studio)</a><div class="text-[10px] text-slate-400 mt-2">金鑰等於密碼,請不要貼到公開的地方,也不要傳給別人。如果學校的 Google 帳號無法使用,請改用個人 Gmail。</div></div>
                             <p class="text-[10px] text-slate-500 mt-2">
-                                * 金鑰僅儲存於您的瀏覽器 (Local Storage)，不會上傳至任何伺服器。
+                                * 上面驗證成功後,金鑰只存在<b>這台電腦的瀏覽器</b>(Local Storage)。要讓學生在家也能用,請用下面的「儲存到雲端」。
                             </p>
+                            <div id="cloud-key-box" class="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-slate-300 leading-relaxed">
+                                <div class="font-bold text-emerald-300 mb-1"><i class="fa-solid fa-cloud"></i> 讓全班在家也能用 AI(儲存到雲端)</div>
+                                <p>把上面的金鑰存到雲端後,學生不用自己設定;他們按 AI 功能時,由<b>伺服器</b>代為呼叫 Gemini,學生的瀏覽器看不到金鑰。需要先在 Vercel 設好「管理密碼」與「Firebase 服務帳戶」(見「AI金鑰雲端設定說明」)。</p>
+                                <div class="flex flex-wrap gap-2 mt-2">
+                                    <input type="password" id="cloud-pass" autocomplete="off" placeholder="管理密碼" class="flex-1 min-w-[8rem] bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white focus:outline-none">
+                                    <button type="button" onclick="saveCloudKey()" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold">儲存到雲端</button>
+                                    <button type="button" onclick="clearCloudKey()" class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">清除雲端金鑰</button>
+                                </div>
+                                <div id="cloud-key-status" class="mt-2"></div>
+                            </div>
                         </div>
 
                         <button onclick="testApiKey()" class="w-full py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-bold transition-colors flex items-center justify-center gap-2">
@@ -307,6 +318,7 @@
             showNeed();
             refreshSession();
             KBUI.announce();
+            try { refreshCloudStatus(); } catch (e) {}
             KB.on(function (keys) { if (keys.indexOf('session') >= 0 || keys.indexOf('settings') >= 0) refreshSession(); });
             document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeRole(); });
         };
@@ -432,6 +444,7 @@ async function geminiPickModels(key) {
     return list;
 }
 async function geminiFetch(key, init) {
+    if (window.KBAI && key === KBAI.SENT) return KBAI.proxyFetch(init);   // 本機沒有金鑰、但老師已把金鑰存到雲端:改由伺服器代為呼叫
     let stored = ''; try { stored = localStorage.getItem('kb_ai_model') || ''; } catch (e) {}
     const discovered = await geminiPickModels(key);
     // 優先使用查詢到的最新模型;上次成功的模型與固定備援排在後面
@@ -449,6 +462,31 @@ async function geminiFetch(key, init) {
     }
     return last;
 }
+
+        // ---- 雲端金鑰(讓學生在家也能用 AI)----
+        function cloudMsg(text, bad) { var e = document.getElementById('cloud-key-status'); if (!e) return; e.textContent = text; e.className = 'mt-2 ' + (bad ? 'text-red-400' : 'text-emerald-300'); }
+        async function refreshCloudStatus() {
+            if (!window.KBAI || !document.getElementById('cloud-key-status')) return;
+            var st = await KBAI.status(true);
+            cloudMsg(st.configured ? '目前使用:' + (KBAI.SRC_TEXT[st.source] || '雲端') + '。學生在家也能使用 AI。' + (st.source === 'cloud' ? '(App 裡存的金鑰會優先於 Vercel 的 GEMINI_API_KEY。)' : '') : '目前沒有雲端金鑰:學生只能在已設定金鑰的那台電腦使用 AI。(可以在上面存到雲端,或到 Vercel 設環境變數 GEMINI_API_KEY。)', false);
+            var e = document.getElementById('cloud-key-status'); if (e && !st.configured) e.className = 'mt-2 text-slate-400';
+        }
+        async function saveCloudKey() {
+            var key = document.getElementById('api-key-input').value.trim(), pass = document.getElementById('cloud-pass').value;
+            if (!key) { cloudMsg('請先在上面貼上 Gemini 金鑰。', true); return; }
+            if (!pass) { cloudMsg('請輸入管理密碼。', true); return; }
+            cloudMsg('正在儲存到雲端…', false);
+            var r = await KBAI.admin('save', pass, key);
+            if (r.ok) { try { KB.audit.add('ai.cloudKeySaved', '', '金鑰已存到雲端(後四碼 ' + r.data.last4 + ')'); } catch (e) {} document.getElementById('cloud-pass').value = ''; cloudMsg('已儲存到雲端(後四碼 ' + r.data.last4 + ')。學生不用自己設定,在家也能使用 AI。', false); }
+            else cloudMsg(r.error, true);
+        }
+        async function clearCloudKey() {
+            var pass = document.getElementById('cloud-pass').value;
+            if (!pass) { cloudMsg('請輸入管理密碼。', true); return; }
+            if (!confirm('確定要清除雲端的 AI 金鑰嗎?學生在家就不能用 AI 了。')) return;
+            var r = await KBAI.admin('clear', pass);
+            if (r.ok) { try { KB.audit.add('ai.cloudKeyCleared', '', ''); } catch (e) {} document.getElementById('cloud-pass').value = ''; cloudMsg('已清除雲端金鑰。', false); } else cloudMsg(r.error, true);
+        }
 
         async function testApiKey() {
             const key = document.getElementById('api-key-input').value.trim();

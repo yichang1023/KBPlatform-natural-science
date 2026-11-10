@@ -253,6 +253,26 @@
   // opts = { nodes:[{id,topicId,author,parentId,type,title,date}], topics:[{id,name}], userList:{}, topicFilter, nameOf?(authorId) }
   var forests = new WeakMap();
   global.KBForest = {
+    // 還沒有任何貼文(例如剛新增的班級):只畫一顆種子和土壤,有人發言後才會長成樹
+    emptySeed: function (container, o) {
+      injectCSS(); o = o || {};
+      var prev = forests.get(container); if (prev && prev.destroy) prev.destroy();
+      container.innerHTML = '';
+      var wrap = doc.createElement('div'); wrap.className = 'kf-wrap'; wrap.style.gridTemplateColumns = '1fr'; container.appendChild(wrap);
+      var card = doc.createElement('div'); card.className = 'kf-card kf-empty'; wrap.appendChild(card);
+      card.innerHTML = '<div class="kf-head"><div class="kf-name"></div><div class="kf-stage">種子</div></div>';
+      card.querySelector('.kf-name').textContent = o.title || '還沒有人發言';
+      var svg = el('svg', { viewBox: '0 330 400 140', class: 'kf-svg', role: 'img', 'aria-label': '一顆等待發芽的種子', style: 'max-height:200px' }, card);
+      var defs = el('defs', null, svg), g = el('radialGradient', { id: 'kfe-g', cx: '.5', cy: '.5', r: '.5' }, defs);
+      el('stop', { offset: '0', 'stop-color': '#c98a8f', 'stop-opacity': '.85' }, g); el('stop', { offset: '.6', 'stop-color': '#f2c0cf', 'stop-opacity': '.55' }, g); el('stop', { offset: '1', 'stop-color': '#fff', 'stop-opacity': '0' }, g);
+      el('ellipse', { cx: BX, cy: BY + 4, rx: 150, ry: 22, fill: 'url(#kfe-g)' }, svg);
+      var seed = el('g', { class: 'kf-seed' }, svg);
+      el('ellipse', { cx: BX, cy: BY - 3, rx: 7, ry: 4.4, fill: '#7a4b3d' }, seed);
+      el('ellipse', { cx: BX - 2, cy: BY - 4.5, rx: 3, ry: 1.4, fill: '#a9735f' }, seed);
+      el('path', { d: 'M' + BX + ' ' + (BY - 6) + ' q-1 -9 -6 -13 M' + BX + ' ' + (BY - 6) + ' q1 -9 6 -13', stroke: '#7cb342', 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round' }, seed);
+      var meta = doc.createElement('div'); meta.className = 'kf-meta'; meta.style.cssText = 'text-align:center;padding:6px 10px 10px;font-size:12.5px;line-height:1.7'; meta.textContent = o.text || '第一則貼文,就是種下第一顆種子。有人發言後,這裡會長出樹苗、樹枝,慢慢開成一樹繁花。'; card.appendChild(meta);
+      var h = { destroy: function () { container.innerHTML = ''; } }; forests.set(container, h); return h;
+    },
     mount: function (container, opts) {
       injectCSS();
       var prev = forests.get(container); if (prev) prev.destroy();

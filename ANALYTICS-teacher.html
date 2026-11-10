@@ -96,6 +96,7 @@
     return { get: function () { return mode; }, set: set, ctl: ctl, on: function (f) { subs.push({ f: f }); } };
   })();
   // 讓網絡圖「好玩」:拖一顆球(浮動:其他球跟著跑;固定:只有它動);滾輪放大縮小;拖背景移動畫面
+  function global_getPos(el) { return (window.getComputedStyle ? window.getComputedStyle(el).position : (el.style && el.style.position) || 'static'); }
   window.kbLively = function (net) {
     if (!net || net.__lively) return net; net.__lively = true;
     var t = null;
@@ -119,8 +120,26 @@
         var h = document.createElement('div'); h.className = 'kb-lively-hint';
         h.style.cssText = 'position:absolute;left:6px;bottom:6px;right:6px;font-size:10px;color:#64748b;pointer-events:none;background:rgba(255,255,255,.88);padding:2px 8px;border-radius:10px;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px';
         var tx = document.createElement('span'); tx.textContent = '👆 拖拖看圓球・滾輪放大縮小'; h.appendChild(tx); h.appendChild(window.kbMove.ctl());
-        if (c.style && !c.style.position) c.style.position = 'relative'; c.appendChild(h);
+        try { if (global_getPos(c) === 'static') c.style.position = 'relative'; } catch (e) {} c.appendChild(h);
       }
+    } catch (e) {}
+    // 容器大小變了(切換分頁、收合側欄、視窗縮放、從隱藏變成顯示)就重新量尺寸並置中,圖才不會只剩一半
+    try {
+      var c2 = net.body && net.body.container, lastW = 0, lastH = 0, tmr = null;
+      var refit = function () {
+        try {
+          if (!c2 || !c2.clientWidth || !c2.clientHeight) return;      // 還在隱藏中,等它出現再處理
+          if (c2.clientWidth === lastW && c2.clientHeight === lastH) return;
+          lastW = c2.clientWidth; lastH = c2.clientHeight;
+          net.setSize('100%', '100%'); net.redraw(); net.fit({ animation: false });
+          var s = net.getScale(), hh = c2.querySelector('.kb-lively-hint'), clear = hh ? hh.offsetHeight + 8 : 0;
+          net.moveTo({ scale: s * 0.9, position: (function () { var p = net.getViewPosition(); return { x: p.x, y: p.y + clear / 2 / (s * 0.9) }; })(), animation: false });
+        } catch (e) {}
+      };
+      net.__kbRefit = refit;
+      if (window.ResizeObserver && c2) new ResizeObserver(function () { clearTimeout(tmr); tmr = setTimeout(refit, 120); }).observe(c2);
+      net.once('stabilized', function () { lastW = 0; setTimeout(refit, 60); });
+      setTimeout(function () { lastW = 0; refit(); }, 1800);
     } catch (e) {}
     return net;
   };
@@ -204,9 +223,13 @@
 <script src="kb-core.js"></script>
 <script src="kb-cloud.js"></script>
     <script src="kb-ui.js"></script>
+    <script src="kb-ai.js"></script>
 <script src="kb-asra-core.js"></script>
+<script src="kb-asra-src.js"></script>
 <script src="kb-asra.js"></script>
 <script src="kb-asra-teacher.js"></script>
+<script src="kb-netlab-core.js"></script>
+<script src="kb-netlab.js"></script>
 <script src="kb-replay.js"></script>
 <script src="kb-why.js"></script>
 <script src="kb-vocab.js"></script>
@@ -382,7 +405,7 @@
     <aside id="sidebar" class="w-64 bg-slate-900 text-slate-400 flex flex-col shadow-2xl flex-shrink-0 md:relative absolute top-0 bottom-0 left-0">
         <div class="p-6 border-b border-slate-800 hidden md:block">
             <h1 class="text-xl font-bold tracking-wider text-white flex items-center"><i class="fas fa-network-wired mr-2 text-blue-500"></i> KB ANALYTICS</h1>
-            <p class="text-xs text-slate-500 mt-1 ml-6">v20.48 AI-Powered</p>
+            <p class="text-xs text-slate-500 mt-1 ml-6">V7.7 AI-Powered</p>
         </div>
 
         <div class="p-4 border-b border-slate-800 md:hidden flex justify-between items-center">
@@ -409,6 +432,7 @@
             <button onclick="switchView('quality')" id="nav-quality" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left"><i class="fas fa-microscope w-5"></i><span>言談品質 (Quality)</span></button>
             <button onclick="switchView('academic')" id="nav-academic" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left text-purple-300 hover:text-purple-200"><i class="fas fa-graduation-cap w-5"></i><span>學術深度指標 (Academic)</span></button>
             <button onclick="switchView('asra')" id="nav-asra" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left text-emerald-300 hover:text-emerald-200"><i class="fas fa-seedling w-5"></i><span>ASRA 反思歷程 (Reflection)</span></button>
+            <button onclick="switchView('netlab')" id="nav-netlab" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left text-teal-300 hover:text-teal-200"><i class="fas fa-project-diagram w-5"></i><span>網絡實驗室 (Network Lab)</span></button>
 
             <div class="pt-4 mt-4 border-t border-slate-800">
                 <a href="Knowledge Building Forum.html?home=1" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-r-lg hover:bg-slate-800 transition text-left text-blue-400 hover:text-blue-300">
@@ -435,12 +459,20 @@
     <main class="flex-1 bg-slate-50 p-4 md:p-8 overflow-y-auto relative w-full" id="main-scroll-area">
 
         <!-- 最上面:選要看哪一個討論區(組);總體概況、主題與觀點、言談品質、學術指標共用,捲動時釘在最上方 -->
-        <div id="topic-bar" class="sticky top-0 z-20 mb-4 md:mb-5 bg-white/95 border border-slate-200 rounded-xl shadow-sm px-3 py-2 flex flex-wrap items-center gap-2 md:max-w-[calc(100%-14rem)]">
+        <div id="top-sticky" class="md:sticky md:top-0 z-20 mb-4 md:mb-5 md:max-w-[calc(100%-14rem)] space-y-2">
+        <!-- 班級:有兩個以上班級時才出現。每一頁(總覽、個別學生、討論、言談、學術、ASRA、網絡實驗室)都只看這裡選的班級 -->
+        <div id="class-bar" class="hidden bg-white/95 border border-emerald-200 rounded-xl shadow-sm px-3 py-2 flex flex-wrap items-center gap-2">
+            <label for="class-selector-top" class="text-sm font-bold text-slate-700 whitespace-nowrap"><i class="fas fa-school text-emerald-600 mr-1"></i> 先選班級</label>
+            <select id="class-selector-top" onchange="filterDataByClass(this.value)" class="flex-1 min-w-[12rem] bg-white border-2 border-emerald-300 text-slate-800 text-sm font-bold rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2 shadow-sm"></select>
+            <span class="text-[11px] text-slate-400 hidden lg:inline">選了之後,每一頁的分析都只看這個班級</span>
+        </div>
+        <div id="topic-bar" class="bg-white/95 border border-slate-200 rounded-xl shadow-sm px-3 py-2 flex flex-wrap items-center gap-2">
             <label for="topic-selector-top" class="text-sm font-bold text-slate-700 whitespace-nowrap"><i class="fas fa-layer-group text-blue-500 mr-1"></i> 看哪一個討論區(組)?</label>
             <select id="topic-selector-top" onchange="filterDataByTopic(this.value)" class="flex-1 min-w-[12rem] bg-white border-2 border-blue-300 text-slate-800 text-sm font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 shadow-sm">
                 <option value="all" selected>所有主題 (All Topics)</option>
             </select>
             <span class="text-[11px] text-slate-400 hidden lg:inline">換了之後,下面所有圖表都會跟著換</span>
+        </div>
         </div>
 
         <!-- VIEW 1: 總體概況 -->
@@ -676,16 +708,18 @@
                     <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">1. 觀點關注度分布圖</h3><p class="text-xs text-slate-500">回覆數 × 貼文類型(並非學生評選)</p></div><button class="ref-btn" onclick="openRef('promisingness')"><i class="fas fa-book"></i> Ref:</button></div>
                     <div class="relative flex-1 bg-slate-50 border border-slate-200 rounded-lg p-4" id="promisingness-container"></div>
                 </div>
+                <div class="card h-[300px] md:h-[400px] overflow-y-auto custom-scrollbar">
+                    <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">2. 專業詞彙成長 (Domain Vocabulary)</h3><p class="text-xs text-slate-500">全班用到幾種單元專業詞(不重複,依詞庫比對)</p></div><button class="ref-btn" onclick="openRef('lexical_growth')"><i class="fas fa-book"></i> Ref:</button></div>
+                    <div id="vocab-summary" class="mb-2 text-xs text-slate-600 leading-relaxed"></div><div class="relative" style="height:190px"><canvas id="lexicalChart"></canvas></div>
+                </div>
                 <div class="card" id="concept-card">
                     <div class="flex justify-between items-center mb-4">
-                        <div><h3 class="font-bold text-slate-800">2. 概念語義網絡 (Concept Space)</h3><p class="text-xs text-slate-500">互動式共現網絡：<span class='text-red-500 font-bold'>●</span> 熱點觀點 | 點擊查看</p></div>
+                        <div><h3 class="font-bold text-slate-800">3. 概念語義網絡 (Concept Space)</h3><p class="text-xs text-slate-500">互動式共現網絡：<span class='text-red-500 font-bold'>●</span> 熱點觀點 | 點擊查看</p></div>
                         <button class="ref-btn" onclick="openRef('concept_network')"><i class="fas fa-book"></i> Ref:</button>
                     </div>
                     <div id="concept-network-container" class="bg-slate-50 rounded border border-slate-100" style="height:280px"></div>
-                </div>
-                <div class="card h-[300px] md:h-[400px] overflow-y-auto custom-scrollbar">
-                    <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">3. 專業詞彙成長 (Domain Vocabulary)</h3><p class="text-xs text-slate-500">全班用到幾種單元專業詞(不重複,依詞庫比對)</p></div><button class="ref-btn" onclick="openRef('lexical_growth')"><i class="fas fa-book"></i> Ref:</button></div>
-                    <div id="vocab-summary" class="mb-2 text-xs text-slate-600 leading-relaxed"></div><div class="relative" style="height:190px"><canvas id="lexicalChart"></canvas></div>
+                    <div id="concept-story" class="kb-ai-body mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3" style="font-size:13px"></div>
+                    <div id="concept-story-ai"></div>
                 </div>
                 <div class="card h-[350px] md:h-[400px] overflow-y-auto custom-scrollbar">
                     <div class="flex justify-between items-center mb-6"><div><h3 class="font-bold text-slate-800">4. 觀點演化路徑 (Evolution)</h3><p class="text-xs text-slate-500">從發散到整合</p></div><button class="ref-btn" onclick="openRef('rise_above')"><i class="fas fa-book"></i> Ref:</button></div>
@@ -747,7 +781,7 @@
                             </div>
                         </div>
 
-                        <div id="topic-ai-summary-result" class="hidden bg-indigo-50 rounded-lg p-4 border border-indigo-100 text-sm text-slate-700 h-[150px] overflow-y-auto custom-scrollbar"></div>
+                        <div id="topic-ai-summary-result" class="hidden bg-indigo-50 rounded-lg p-4 border border-indigo-100 text-sm text-slate-700 min-h-[150px] max-h-[520px] overflow-y-auto custom-scrollbar"></div>
                     </div>
                 </div>
             </div>
@@ -773,7 +807,7 @@
                         </div>
                         <button class="ref-btn" onclick="openRef('lens')"><i class="fas fa-book"></i> Ref:</button>
                     </div>
-                    <div class="h-[250px] bg-slate-50 rounded border border-slate-100 relative"><div id="lens-network-container" class="absolute inset-0"></div></div>
+                    <div class="h-[290px] bg-slate-50 rounded border border-slate-100 relative"><div id="lens-network-container" class="absolute inset-0"></div></div>
                     <div id="lens-detail" class="mt-2 text-xs text-black p-2 bg-slate-50 rounded">點擊節點查看詳情...</div>
                 </div>
                 <div class="card">
@@ -893,6 +927,11 @@
             <div id="asra-root"></div>
         </div>
 
+        <!-- VIEW 7: 網絡實驗室(誰回應了誰,可追溯原文) -->
+        <div id="view-netlab" class="section-view space-y-4 md:space-y-6">
+            <div id="netlab-root"></div>
+        </div>
+
     </main>
 
     <script>
@@ -923,17 +962,23 @@
         function classScopeText() {
             if (activeClassFilter === 'all') return '';
             const src = window.__kbSrc && window.__kbSrc.userList || {}, one = Object.values(src).find(u => classKeyOf(u) === activeClassFilter);
-            return '(班級:' + (activeClassFilter === '__none__' ? '還沒分班' : (one && one.className) || activeClassFilter) + ')';
+            return '(班級:' + (activeClassFilter === '__none__' ? '還沒分班' : (one && one.className) || (function () { try { const c = KB.classes.list().find(x => x.id === activeClassFilter); return c && c.name; } catch (e) { return ''; } })() || activeClassFilter) + ')';
         }
         function populateClassSelector(userList) {
             const box = document.getElementById('class-filter-box'), sel = document.getElementById('class-selector'); if (!box || !sel) return;
-            const groups = {}; Object.values(userList || {}).filter(u => u.role !== 'teacher').forEach(u => { const k = classKeyOf(u); (groups[k] = groups[k] || { name: u.className || '(還沒分班)', n: 0 }).n++; });
+            const bar = document.getElementById('class-bar'), sel2 = document.getElementById('class-selector-top');
+            const groups = {};
+            // 班級清單以設定中心為準:剛建立、還沒有人發言(甚至還沒有學生)的班級也要能選,選了就是一個空的分析畫面
+            try { KB.classes.list().filter(c => !c.archived).forEach(c => { groups[c.id] = { name: c.name, n: 0 }; }); } catch (e) {}
+            Object.values(userList || {}).filter(u => u.role !== 'teacher').forEach(u => { const k = classKeyOf(u); (groups[k] = groups[k] || { name: u.className || '(還沒分班)', n: 0 }).n++; });
             const keys = Object.keys(groups);
-            if (keys.length < 2) { box.classList.add('hidden'); if (activeClassFilter !== 'all') { activeClassFilter = 'all'; } return; }   // 只有一個班級時不顯示,也不篩選
+            if (keys.length < 2) { box.classList.add('hidden'); if (bar) bar.classList.add('hidden'); if (activeClassFilter !== 'all') { activeClassFilter = 'all'; } return; }   // 只有一個班級時不顯示,也不篩選
             if (activeClassFilter !== 'all' && !groups[activeClassFilter]) activeClassFilter = 'all';
             const total = keys.reduce((a, k) => a + groups[k].n, 0);
             sel.innerHTML = '<option value="all">全部班級(' + total + ' 人)</option>' + keys.sort((a, b) => groups[a].name.localeCompare(groups[b].name, 'zh-Hant')).map(k => '<option value="' + k + '">' + groups[k].name + '(' + groups[k].n + ' 人)</option>').join('');
             sel.value = activeClassFilter; box.classList.remove('hidden');
+            if (sel2) { sel2.innerHTML = sel.innerHTML; sel2.value = activeClassFilter; }
+            if (bar) bar.classList.remove('hidden');
         }
         function filterDataByClass(v) {
             activeClassFilter = v || 'all'; try { localStorage.setItem('kb_class_filter', activeClassFilter); } catch (e) {}
@@ -996,6 +1041,7 @@ async function geminiPickModels(key) {
     return list;
 }
 async function geminiFetch(key, init) {
+    if (window.KBAI && key === KBAI.SENT) return KBAI.proxyFetch(init);   // 本機沒有金鑰、但老師已把金鑰存到雲端:改由伺服器代為呼叫
     let stored = ''; try { stored = localStorage.getItem('kb_ai_model') || ''; } catch (e) {}
     const discovered = await geminiPickModels(key);
     // 優先使用查詢到的最新模型;上次成功的模型與固定備援排在後面
@@ -1017,8 +1063,9 @@ async function geminiFetch(key, init) {
         async function callGeminiAPI(promptText) {
             // ⭐ 像學生端一樣，直接從 Local Storage 即時抓取 index 設定的 Key
             if (!KB.settings.get().ai.enabled) return "⚠️ AI 功能目前已被關閉(設定中心 → AI 設定)。";
-            const currentApiKey = localStorage.getItem('kb_ai_key');
-            if (!currentApiKey) return "⚠️ API Key 尚未載入，請先至首頁輸入並儲存金鑰。";
+            let currentApiKey = localStorage.getItem('kb_ai_key');
+            if (!currentApiKey) { try { const st = window.KBAI ? await KBAI.status() : null; if (st && st.configured) currentApiKey = KBAI.SENT; } catch (e) {} }
+            if (!currentApiKey) return "⚠️ API Key 尚未載入，請先至首頁輸入並儲存金鑰(要讓學生在家也能用,請按「儲存到雲端」)。";
 
             // ⭐ 修正模型名稱：改為與 index 相同的 gemini-2.5-flash
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${currentApiKey}`;
@@ -1083,7 +1130,8 @@ async function geminiFetch(key, init) {
             const host = document.getElementById('view-overview');
             if (!host || typeof KBForest === 'undefined') return;
             const db = getRealData();
-            if (!db || !(db.nodes || []).length) return;
+            if (!db) return;
+            const noPosts = !(db.nodes || []).length;
             let card = document.getElementById('kb-forest-card');
             if (!card) {
                 card = document.createElement('div');
@@ -1093,6 +1141,12 @@ async function geminiFetch(key, init) {
                 if (story && story.parentNode === host) host.insertBefore(card, story.nextSibling); else host.insertBefore(card, host.firstChild);
             }
             const box = document.getElementById('kb-forest-box');
+            if (noPosts) {   // 這個範圍(例如剛新增的班級)還沒有人發言:只留一顆種子,之後在論壇有發言才會長大
+                Array.prototype.forEach.call(document.querySelectorAll('[data-kbnet="forest"],[data-kbai="forest"]'), x => x.remove());
+                const lg = document.getElementById('kb-forest-log'); if (lg) lg.innerHTML = '';
+                KBForest.emptySeed(box, { title: '還沒有人發言' + classScopeText(), text: '這個範圍還沒有貼文。有人在論壇發言後,這裡會從一顆種子長出樹苗、樹枝,慢慢開成一樹繁花。' });
+                return;
+            }
             const nodes = (db.nodes || []).map(n => ({ id: n.id, topicId: n.topicId, author: String(n.author), parentId: n.parentId, type: n.type, title: n.title, date: new Date(n.date).getTime() }));
             const nameOf = id => { const u = (db.userList || {})[id] || Object.values(db.userList || {}).find(x => String(x.id) === String(id)); return (u && u.name) || String(id); };
             const ctl = KBForest.mount(box, { nodes, topics: db.topics || [], userList: db.userList || {}, nameOf, topicFilter: activeTopicFilter, mode: 'forest', logEl: document.getElementById('kb-forest-log') });
@@ -1393,7 +1447,19 @@ async function geminiFetch(key, init) {
         const TRAJ_DAY = 86400000;
         // 貼文時間(毫秒):有的資料用 dateTime,有的只有 date
         const trajTs = n => (n.dateTime !== undefined && n.dateTime !== null) ? n.dateTime : (typeof n.date === 'number' ? n.date : new Date(n.date).getTime());
-        const trajUI = { filter: 'all', all: false, ctx: null, step: 0 };
+        const trajUI = { filter: 'all', all: false, ctx: null, step: 0, plans: {} };
+        // 問題(階梯上的一列)→ 學生為它訂的 ASRA 計畫與後續結果(只在最後一步顯示,回放時不顯示)
+        function kbPlanIndex() {
+            const idx = {}; if (typeof KBAsra === 'undefined' || typeof ASRA === 'undefined' || !ASRA.effect) return idx;
+            try {
+                const raw = getRealData(), nodes = raw.nodes || [], byId = {}; nodes.forEach(n => { byId[n.id] = n; });
+                const unitOf = n => { let cur = n, g = 0; while (cur && g++ < 300) { if (cur.type === 'question' || !cur.parentId || !byId[cur.parentId]) return cur; cur = byId[cur.parentId]; } return cur; };
+                Object.values(raw.userList || {}).filter(u => u.role !== 'teacher').forEach(u => {
+                    KBAsra.derive(String(u.id)).plans.forEach(p => { const t = byId[p.postId]; if (!t) return; const unit = unitOf(t); if (!unit) return; (idx[unit.id] = idx[unit.id] || []).push({ u: u, p: p, e: ASRA.effect(nodes, String(u.id), p) }); });
+                });
+            } catch (err) { console.error(err); }
+            return idx;
+        }
         const trajMD = ts => { const d = new Date(ts); return (d.getMonth() + 1) + '/' + d.getDate(); };
         // 一個「問題」= 一則提問貼文,加上它底下接著回應的貼文(遇到下一個提問就停,那是另一個問題)。
         // 沒有上層的主貼文(不是提問時)也算一個。這樣一個大討論串裡的每個小問題各有自己的階梯,才看得到誰往前走。
@@ -1432,13 +1498,15 @@ async function geminiFetch(key, init) {
             const c = trajUI.ctx, box = document.getElementById('traj-ladder'), sum = document.getElementById('traj-summary'); if (!c || !box || !sum) return;
             trajUI.step = step;
             const S = trajState(step); window.__trajNow = S.text;
+            const showPlans = step === c.sd.labels.length - 1, PI = showPlans ? (trajUI.plans || {}) : {};
+            const planN = S.rows.filter(r => PI[r.id]).length;
             const chip = (id, label, n, col) => '<button type="button" data-tf="' + id + '" class="px-3 py-1 rounded-full text-xs font-bold border ' + (trajUI.filter === id ? 'text-white' : 'bg-white text-slate-600 border-slate-300') + '" style="' + (trajUI.filter === id ? 'background:' + col + ';border-color:' + col : '') + '">' + label + ' ' + n + '</button>';
             sum.innerHTML = S.n ? '<div class="text-sm text-slate-700 leading-relaxed">' +
                 '全班目前有 <b>' + S.n + '</b> 個問題。這一週有 <b style="color:#d97706">' + S.moved + '</b> 個往前走了一步' + (S.stuck ? ',有 <b style="color:#dc2626">' + S.stuck + '</b> 個還沒人回應' : '') + ',已經整理成結論的有 <b style="color:#7c3aed">' + S.done + '</b> 個。</div>' +
-                '<div class="flex flex-wrap gap-2 mt-2">' + chip('all', '全部', S.n, '#475569') + chip('moved', '這週往前走', S.moved, '#d97706') + chip('stuck', '還沒人回應', S.stuck, '#dc2626') + '</div>' :
+                '<div class="flex flex-wrap gap-2 mt-2">' + chip('all', '全部', S.n, '#475569') + chip('moved', '這週往前走', S.moved, '#d97706') + chip('stuck', '還沒人回應', S.stuck, '#dc2626') + (planN ? chip('plan', '有人訂了計畫', planN, '#059669') : '') + '</div>' :
                 '<div class="text-sm text-slate-400">還沒有貼文,等同學發表後,這裡就會看到每個問題一格一格長大。</div>';
             let rows = S.rows.slice();
-            if (trajUI.filter === 'moved') rows = rows.filter(r => r.moved); else if (trajUI.filter === 'stuck') rows = rows.filter(r => r.stuck);
+            if (trajUI.filter === 'moved') rows = rows.filter(r => r.moved); else if (trajUI.filter === 'stuck') rows = rows.filter(r => r.stuck); else if (trajUI.filter === 'plan') rows = rows.filter(r => PI[r.id]);
             rows.sort((a, b) => (b.moved - a.moved) || (b.adv - a.adv) || (b.level - a.level) || (b.last - a.last));
             const total = rows.length, shown = trajUI.all ? rows : rows.slice(0, 10);
             const legend = '<div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mb-1">' + TRAJ_STAGES.map(g => '<span class="inline-flex items-center gap-1" title="' + g.tip + '"><span style="width:10px;height:10px;border-radius:3px;background:' + g.color + ';display:inline-block"></span>' + g.icon + ' ' + g.name + '</span>').join('<span>→</span>') + '<span class="ml-2"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;box-shadow:0 0 0 2px #f59e0b;background:#fff"></span> 橘框 = 這一週剛走到這一格</span></div>';
@@ -1447,14 +1515,22 @@ async function geminiFetch(key, init) {
                 return '<div style="width:56px;text-align:center;border-radius:10px;padding:3px 0;' + (on ? 'background:' + g.color + ';color:#fff;' : 'background:#e2e8f0;color:#94a3b8;') + (r.newStage[g.k] ? 'box-shadow:0 0 0 2px #f59e0b;' : '') + '" title="' + g.icon + ' ' + g.name + (on && d ? ':' + trajMD(d) + ' 走到這一格' : ':還沒走到') + '"><div style="font-size:15px;line-height:1.2;' + (on ? '' : 'opacity:.45') + '">' + g.icon + '</div><div style="font-size:9px;line-height:1.1">' + (on && d ? trajMD(d) : '&nbsp;') + '</div></div>';
             };
             const status = r => r.level === 4 ? '<span style="color:#7c3aed">🌸 已整理成結論(' + trajMD(r.reach[4]) + ')</span>' : r.level === 3 ? '<span style="color:#059669">🔧 被改進或質疑過(' + trajMD(r.reach[3]) + ')</span>' : r.level === 2 ? '<span style="color:#a16207">🌿 有 ' + r.replies + ' 則回應</span>' : (r.stuck ? '<span style="color:#dc2626">🌱 還沒人回應,已 ' + r.age + ' 天</span>' : '<span style="color:#2563eb">🌱 剛提出來</span>');
+            const planBadge = r => {
+                const L = PI[r.id]; if (!L || !L.length) return '';
+                const acted = L.filter(x => x.e.acted).length, adv = L.filter(x => x.e.advanced).length;
+                const tip = L.map(x => (x.u.name || '同學') + ':' + ((ASRA.OUT[x.e.outcome] || {}).name || '')).join('\n');
+                return '<div class="mt-0.5" title="' + esc(tip) + '"><span style="display:inline-block;font-size:11px;font-weight:700;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:999px;padding:0 8px">📝 ' + L.length + ' 個計畫' + (acted ? '・' + acted + ' 個已行動' : '・還沒行動') + (adv ? '・' + adv + ' 個想法前進' : '') + '</span></div>';
+            };
             const html = shown.map(r => '<div class="flex items-center gap-2 py-1.5 border-t border-slate-100"><button type="button" data-tv="' + esc(r.id) + '" class="text-left flex-1 min-w-0 text-sm font-bold text-slate-800 hover:text-indigo-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="點一下看原文">' + (r.moved ? '<span style="color:#d97706">▲ </span>' : '') + esc(String(r.root.title || r.root.content || '(沒有標題)').slice(0, 26)) + '</button>' +
-                '<div class="flex gap-1 shrink-0">' + TRAJ_STAGES.map(g => cell(g, r)).join('') + '</div><div class="shrink-0 text-xs" style="width:11rem">' + status(r) + '</div></div>').join('');
+                '<div class="flex gap-1 shrink-0">' + TRAJ_STAGES.map(g => cell(g, r)).join('') + '</div><div class="shrink-0 text-xs" style="width:11rem">' + status(r) + planBadge(r) + '</div></div>').join('');
             box.innerHTML = S.n ? legend + (html || '<div class="text-sm text-slate-400 py-2">這個條件下沒有問題。</div>') + (total > shown.length ? '<div class="text-center mt-2"><button type="button" data-tmore="1" class="text-xs font-bold text-indigo-600 underline">看全部 ' + total + ' 個問題</button></div>' : (trajUI.all && total > 10 ? '<div class="text-center mt-2"><button type="button" data-tmore="0" class="text-xs font-bold text-indigo-600 underline">只看前 10 個</button></div>' : '')) : '';
         }
         function renderTrajectoryLadder(nodes) {
             const box = document.getElementById('traj-ladder'); if (!box) return;
             const sd = kbStepDays((nodes || []).map(n => trajTs(n)));
             trajUI.ctx = { nodes: nodes || [], sd: sd, threads: trajBuild(nodes || []) };
+            trajUI.plans = kbPlanIndex();
+            try { if (typeof KBAsra !== 'undefined' && !window.__kbTrajAsra) { window.__kbTrajAsra = true; KBAsra.onChange(() => { try { trajUI.plans = kbPlanIndex(); if (trajUI.ctx) trajDraw(trajUI.step); } catch (e) {} }); } } catch (e) {}
             if (!box.__kbTraj) {
                 box.__kbTraj = true;
                 const root = document.getElementById('traj-card');
@@ -1944,6 +2020,7 @@ async function geminiFetch(key, init) {
 
         function populateTopicSelectors(topics) {
             const selectors = ['topic-selector-top', 'topic-selector-ideas', 'topic-selector-quality', 'topic-selector-overview', 'topic-selector-academic'];
+            if (activeTopicFilter !== 'all' && topics.length && !topics.some(t => t.id === activeTopicFilter)) activeTopicFilter = 'all';   // 換了班級,原本選的討論區不在這個班級
             let options = `<option value="all">所有主題 (All Topics)</option>`;
             if (topics.length > 0) options += topics.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
             else options = `<option value="all" disabled>暫無主題</option>`;
@@ -2119,6 +2196,7 @@ async function geminiFetch(key, init) {
             const stopSnaPhysics = () => { if (overviewNetwork) overviewNetwork.setOptions({ physics: false }); };
             overviewNetwork.once('stabilizationIterationsDone', stopSnaPhysics); kbLively(overviewNetwork);
             setTimeout(stopSnaPhysics, 2500);
+            try { kbEgoTalk(overviewNetwork, { edgesOnly: true, me: '', nodes: stats.nodes, userList: (globalRawDB && globalRawDB.userList) || {}, typeLabel: t => kbTypeMap[t] || '' }); } catch (e) { console.error(e); }
             kbAttachPlayer({ explainTitle: '全班互動網絡(誰回應了誰)的形成過程', id: 'sna', container: container, network: overviewNetwork, nodesDS: snaNodesDS, edgesDS: snaEdgesDS, labels: snaDays.stepLabels, steps: snaDays.steps, build: snaBuild });
             const typeCounts = { question:0, extend:0, improve:0, counter:0, riseabove:0 };
             stats.nodes.forEach(n => { if (typeCounts[n.type] !== undefined) typeCounts[n.type]++; });
@@ -2233,6 +2311,14 @@ async function geminiFetch(key, init) {
             } catch (e) { console.error(e); document.getElementById('asra-root').innerHTML = '<div class="p-4 text-red-600 text-sm">ASRA 反思歷程載入失敗:' + String(e && e.message || e) + '</div>'; }
         }
 
+        // 網絡實驗室(kb-netlab.js):誰回應了誰;使用目前選的班級範圍
+        function initNetLabView() {
+            try {
+                const st = window.state || {};
+                KBNetLab.render(document.getElementById('netlab-root'), { nodes: st.nodes || [], topics: st.topics || [], userList: st.userList || {}, scope: classScopeText() });
+            } catch (e) { console.error(e); document.getElementById('netlab-root').innerHTML = '<div class="p-4 text-red-600 text-sm">網絡實驗室載入失敗:' + String(e && e.message || e) + '</div>'; }
+        }
+
         // 新分頁用 #view=x 開啟時,資料載入好後直接進到該分頁
         window.addEventListener('load', function () {
             var m = /view=(\w+)/.exec(location.hash || ''); if (!m) return; var want = m[1], tries = 0;
@@ -2264,6 +2350,7 @@ async function geminiFetch(key, init) {
             }, 100);
             else if (viewName === 'academic') setTimeout(() => { initAcademicAnalysis(); }, 100);
             else if (viewName === 'asra') setTimeout(() => { initAsraView(); }, 50);
+            else if (viewName === 'netlab') setTimeout(() => { initNetLabView(); }, 50);
             else if (viewName === 'overview') setTimeout(() => { initOverview(globalRawDB); }, 100);
             else if (viewName === 'students') {
                 const active = document.querySelector('.active-student');
@@ -2297,7 +2384,7 @@ async function geminiFetch(key, init) {
                 window.__kbSrc = data; populateClassSelector(data.userList);
                 window.state = scopeByClass({
                     nodes: data.nodes || [],
-                    topics: data.topics || [],
+                    topics: (data.topics || []).filter(t => { if (activeClassFilter === 'all') return true; const tc = KB.topicClass(t); return !tc || tc === activeClassFilter; }),
                     userList: data.userList || {}
                 });
                 try { window.__kbIdent = kbAiIdent(window.state.userList); } catch (e) {}
@@ -2405,7 +2492,7 @@ async function geminiFetch(key, init) {
                 unique.forEach(w => { if (!keywordMap[w]) keywordMap[w] = []; keywordMap[w].push(n.id); });
             });
             const sortedKeywords = Object.keys(keywordMap).sort((a,b) => keywordMap[b].length - keywordMap[a].length).slice(0, 15);
-            if (sortedKeywords.length === 0) { container.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm">此主題尚無足夠內容進行語義分析</div>'; return; }
+            if (sortedKeywords.length === 0) { container.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm">此主題尚無足夠內容進行語義分析</div>'; renderConceptStory(null); return; }
             const nodesData = sortedKeywords.map(w => {
                 const noteIds = keywordMap[w];
                 let totalHeat = 0; noteIds.forEach(nid => { const n = globalAllNotes.find(x => x.id === nid); if(n) totalHeat += getNoteHeat(n); });
@@ -2440,7 +2527,18 @@ async function geminiFetch(key, init) {
             let cpCurve = null;
             try { cpCurve = conceptCurveDraw(document.getElementById('concept-card') || container.parentElement, container, cpDays.stepLabels, conceptCurveSeries(sortedKeywords, keywordMap, noteDay, cpDays.steps, globalAllNotes.length)); } catch (e) { console.error(e); }
             kbAttachPlayer({ explainTitle: '概念語義網絡(關鍵詞如何彼此連結)的成形過程', id: 'concept', container: container, network: conceptNetworkInstance, nodesDS: cpNodesDS, edgesDS: cpEdgesDS, labels: cpDays.stepLabels, steps: cpDays.steps, build: cpBuild, onStep: i => { if (cpCurve) cpCurve.setCursor(i); } });
-            conceptNetworkInstance.on("click", function (params) { if (params.nodes.length > 0) showKeywordContext(params.nodes[0], keywordMap[params.nodes[0]]); });
+            // 單擊=看含有這個詞的貼文清單;點兩下=說明視窗。單擊稍等一下,避免點兩下時先跳出清單把第二下擋住
+            let cpClickTimer = null;
+            conceptNetworkInstance.on("click", function (params) { clearTimeout(cpClickTimer); if (params.nodes.length > 0) { const wd = params.nodes[0]; cpClickTimer = setTimeout(() => showKeywordContext(wd, keywordMap[wd]), 320); } });
+            conceptNetworkInstance.on("doubleClick", function (params) {
+                clearTimeout(cpClickTimer);
+                try {
+                    if (params.nodes.length > 0) conceptWordDialog(params.nodes[0], keywordMap, sortedKeywords);
+                    else if (params.edges.length > 0) { const pr = String(params.edges[0]).split('|'); if (pr.length === 2) conceptPairDialog(pr[0], pr[1], keywordMap); }
+                } catch (e) { console.error(e); }
+            });
+            try { const hs = container.querySelector('.kb-lively-hint span'); if (hs && hs.textContent.indexOf('點兩下') < 0) hs.textContent += '・點兩下圓球或連線看說明'; } catch (e) {}
+            try { renderConceptStory({ kws: sortedKeywords, kmap: keywordMap, edges: cpBuild(cpLast).edges, hot: nodesData.filter(nd => nd.color && nd.color.background === '#fee2e2').map(nd => nd.id), total: globalAllNotes.length }); } catch (e) { console.error(e); }
         }
 
         /* ---- 累積連結曲線:跟概念網絡一起播放(連線一條一條長出來,曲線的游標跟著走) ---- */
@@ -2500,6 +2598,37 @@ async function geminiFetch(key, init) {
             return { setCursor: setCursor, jumps: marks };
         }
 
+        // ===== 概念語義網絡:圓球(關鍵詞)或連線(兩個詞一起出現)點兩下,跳出說明視窗 =====
+        function conceptNameOf(id) { const u = Object.values((globalRawDB && globalRawDB.userList) || {}).find(x => String(x.id) === String(id)); return (u && u.name) || String(id); }
+        function conceptNoteCard(n, words) {
+            const all = (globalRawDB && globalRawDB.nodes) || [], p = n.parentId ? (globalAllNotes.find(x => x.id === n.parentId) || all.find(x => x.id === n.parentId)) : null;
+            const d = new Date(n.dateTime || n.date), when = isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate();
+            let body = esc(String(n.content || '').replace(/\s+/g, ' ').slice(0, 180));
+            words.forEach(w => { body = body.split(esc(w)).join('<mark style="background:#fef08a;border-radius:3px;padding:0 2px">' + esc(w) + '</mark>'); });
+            return '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;margin:8px 0;background:#fff">' +
+                '<div style="font-size:11px;color:#64748b;margin-bottom:3px">' + esc(when) + (kbTypeMap[n.type] ? ' · <span style="background:#eef2ff;color:#4338ca;border-radius:999px;padding:0 7px">' + esc(kbTypeMap[n.type]) + '</span>' : '') + '</div>' +
+                '<div style="font-size:12px;margin-bottom:2px"><b>' + esc(conceptNameOf(n.author)) + '</b>' + (p ? ' <span style="color:#64748b">回應了</span> <b>' + esc(conceptNameOf(p.author)) + '</b>' : ' <span style="color:#64748b">開了新話題</span>') + '</div>' +
+                '<div style="font-weight:700;color:#1e293b">' + esc(n.title || '(無標題)') + '</div><div style="word-break:break-word">' + body + '</div>' +
+                (p ? '<div style="margin-top:6px;padding:5px 8px;border-left:3px solid #99f6e4;background:#f0fdfa;border-radius:0 6px 6px 0;font-size:12px;color:#475569"><b>' + esc(conceptNameOf(p.author)) + ' 原本說:</b>「' + esc(String(p.title || '').slice(0, 24)) + '」 ' + esc(String(p.content || '').replace(/\s+/g, ' ').slice(0, 80)) + '</div>' : '') + '</div>';
+        }
+        function conceptWordDialog(w, kmap, kws) {
+            const notes = (kmap[w] || []).map(id => globalAllNotes.find(x => x.id === id)).filter(Boolean).sort((a, b) => (a.dateTime || 0) - (b.dateTime || 0));
+            const who = {}; notes.forEach(n => { who[n.author] = (who[n.author] || 0) + 1; });
+            const top = Object.keys(who).sort((a, b) => who[b] - who[a]).slice(0, 5);
+            const near = kws.filter(x => x !== w).map(x => ({ x, c: (kmap[x] || []).filter(id => (kmap[w] || []).includes(id)).length })).filter(o => o.c > 0).sort((a, b) => b.c - a.c).slice(0, 5);
+            const html = '<p style="margin-top:0">這個詞出現在 <b>' + notes.length + '</b> 篇貼文(約占 ' + Math.round(notes.length / Math.max(1, globalAllNotes.length) * 100) + '%),共 <b>' + Object.keys(who).length + '</b> 位同學用過。</p>' +
+                '<p>最常用它的是:' + (top.map(a => '<b>' + esc(conceptNameOf(a)) + '</b>(' + who[a] + ' 篇)').join('、') || '—') + '。</p>' +
+                (near.length ? '<p>常和它一起出現的詞:' + near.map(o => '「' + esc(o.x) + '」(' + o.c + ' 篇)').join('、') + '。想看兩個詞一起出現的發言,請在<b>它們之間的連線</b>上點兩下。</p>' : '') +
+                '<p style="margin-bottom:0"><b>發言例子</b>(最早的 3 篇):</p>' + notes.slice(0, 3).map(n => conceptNoteCard(n, [w])).join('');
+            kbEgoDialog('「' + esc(w) + '」這個詞', '共 ' + notes.length + ' 篇貼文用到', html);
+        }
+        function conceptPairDialog(w1, w2, kmap) {
+            const set2 = new Set(kmap[w2] || []);
+            const notes = (kmap[w1] || []).filter(id => set2.has(id)).map(id => globalAllNotes.find(x => x.id === id)).filter(Boolean).sort((a, b) => (a.dateTime || 0) - (b.dateTime || 0));
+            const html = '<p style="margin-top:0">「' + esc(w1) + '」和「' + esc(w2) + '」一起出現在 <b>' + notes.length + '</b> 篇貼文裡(由早到晚,最多列 6 篇;黃色標示是這兩個詞):</p>' + notes.slice(0, 6).map(n => conceptNoteCard(n, [w1, w2])).join('') +
+                (notes.length > 6 ? '<p style="color:#64748b">還有 ' + (notes.length - 6) + ' 篇沒有列出。</p>' : '');
+            kbEgoDialog('「' + esc(w1) + '」和「' + esc(w2) + '」', '一起出現的發言(誰回給誰會一併標出)', html);
+        }
         function showKeywordContext(word, noteIds) {
             const listHtml = noteIds.map(id => {
                 const n = globalAllNotes.find(x => x.id === id); if(!n) return '';
@@ -2617,6 +2746,58 @@ async function geminiFetch(key, init) {
         }
 
         // --- 4. 導入真實 AI 總結分析與快取 (針對主題) ---
+        // 沒有 AI 時:用統計數字講成白話(不呼叫 AI、不送出任何資料)
+        function topicStoryOffline(why) {
+            const N = globalAllNotes.length, cnt = { question: 0, extend: 0, improve: 0, riseabove: 0 };
+            const authors = new Set();
+            globalAllNotes.forEach(n => { authors.add(String(n.author)); let t = n.type === 'counter' ? 'improve' : n.type; if (cnt[t] === undefined) t = 'extend'; cnt[t]++; });
+            const parentIds = new Set(globalAllNotes.map(n => n.parentId).filter(Boolean));
+            const replied = globalAllNotes.filter(n => parentIds.has(n.id)).length;
+            const days = new Set(globalAllNotes.map(n => dayKeyOf(n.dateTime))).size;
+            const pct = x => Math.round(x * 100) + '%';
+            const lines = [];
+            lines.push('**🔑 一句話重點:** 這個主題有 **' + authors.size + ' 位同學**寫了 **' + N + ' 篇**,分布在 ' + days + ' 個發文日;' + (cnt.improve + cnt.riseabove >= cnt.question ? '大家已經不只在提問,也開始修正與整合彼此的想法。' : '目前以提問與延伸為主,「深化、整合」還可以再加強。'));
+            lines.push('**🔍 現在的樣子:** 提問 ' + cnt.question + ' 篇(' + pct(cnt.question / N) + ')、延伸 ' + cnt.extend + ' 篇(' + pct(cnt.extend / N) + ')、深化 ' + cnt.improve + ' 篇(' + pct(cnt.improve / N) + ')、整合 ' + cnt.riseabove + ' 篇(' + pct(cnt.riseabove / N) + ')。有人回應的貼文有 ' + replied + ' 篇,占 ' + pct(replied / N) + ',' + (replied / N >= 0.5 ? '表示大家會彼此接話。' : '代表不少想法還沒有被同學接著討論。'));
+            lines.push('**🚧 可能卡住的地方:** ' + (cnt.riseabove === 0 ? '還沒有人把不同的說法整合起來(「整合」是 0 篇)。' : cnt.improve === 0 ? '還沒有人回頭修正自己或別人的想法(「深化」是 0 篇)。' : cnt.question < N * 0.1 ? '提問偏少,可以鼓勵同學多問「為什麼」「怎麼知道」。' : '沒有特別明顯的缺口,可以進一步請同學說出「證據在哪裡」。'));
+            lines.push('**🌱 接下來可以怎麼做:** 挑一個大家說法不同的地方,請兩位同學當面「接著說」;再請一位同學把前面的討論整理成一段話,貼在討論區。');
+            lines.push('<span class="text-[11px] text-slate-400">(這是系統用統計數字整理的版本' + (/Key|金鑰/.test(why || '') ? ';要用 AI 請先到首頁或設定頁儲存 API Key' : '') + ';連上 AI 後會改成更完整的說明。)</span>');
+            return lines.join('\n\n');
+        }
+
+        // 概念語義網絡:把圖「講成白話」(依目前畫面上的詞與連線整理,不用 AI)
+        function renderConceptStory(info) {
+            const box = document.getElementById('concept-story'); if (!box) return;
+            const aiBox = document.getElementById('concept-story-ai'); if (aiBox) aiBox.innerHTML = '';
+            if (!info) { box.innerHTML = ''; box.style.display = 'none'; return; }
+            box.style.display = '';
+            const { kws, kmap, edges, hot, total } = info;
+            const q = w => '「' + w + '」', cnt = w => kmap[w].length;
+            const deg = {}; edges.forEach(e => { deg[e.from] = (deg[e.from] || 0) + 1; deg[e.to] = (deg[e.to] || 0) + 1; });
+            const pairs = edges.slice().sort((a, b) => b.value - a.value).slice(0, 2);
+            const hub = kws.slice().sort((a, b) => (deg[b] || 0) - (deg[a] || 0))[0];
+            const alone = kws.filter(w => !deg[w]).slice(-3);
+            const top3 = kws.slice(0, 3);
+            const out = [];
+            out.push('**🔑 一句話重點:** 這個主題裡,同學最常談的是 ' + top3.map(q).join('、') + (pairs.length ? ';其中 ' + q(pairs[0].from) + ' 和 ' + q(pairs[0].to) + ' 最常被放在同一篇一起講(' + pairs[0].value + ' 篇)。' : '。'));
+            out.push('**🔍 這張圖在看什麼:** 每顆球是一個大家常用的詞,球越大,代表出現在越多篇貼文;兩顆球之間有線,代表這兩個詞常出現在同一篇貼文裡,線越粗,一起出現的次數越多。');
+            out.push('**🧭 現在的樣子:** ' + q(kws[0]) + ' 出現在 ' + cnt(kws[0]) + ' 篇(約占全部貼文的 ' + Math.round(cnt(kws[0]) / Math.max(1, total) * 100) + '%)。' +
+                (hub && deg[hub] ? q(hub) + ' 像是討論的「中心」,同時連到 ' + deg[hub] + ' 個詞,表示大家常用它把不同的想法接在一起。' : '') +
+                (hot.length ? '紅色的詞(' + hot.slice(0, 4).map(q).join('、') + ')是「熱點」:含有這些詞的貼文被回應得特別多,討論最熱烈。' : '目前沒有特別突出的熱點詞。'));
+            if (alone.length) out.push('**🚧 還沒連起來的詞:** ' + alone.map(q).join('、') + ' 只有自己一顆球,沒有和其他詞連在一起,代表這些想法還沒有被拿去跟別的想法對話。');
+            out.push('**🌱 接下來可以怎麼做:** ' + (alone.length ? '請同學試著把 ' + q(alone[0]) + ' 和 ' + q(hub || kws[0]) + ' 連起來,例如「' + alone[0] + ' 跟 ' + (hub || kws[0]) + ' 有什麼關係?」;' : '') + '也可以點一顆球,看含有這個詞的貼文,找出大家說法不同的地方。');
+            box.innerHTML = out.map(t => '<p>' + t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</p>').join('');
+            // AI 白話解說按鈕(要用 AI 時才送出詞彙與次數,不送學生姓名)
+            if (aiBox && window.kbAddExplain) {
+                const wrap = document.createElement('div'); wrap.style.cssText = 'margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+                aiBox.appendChild(wrap);
+                kbAddExplain(wrap, { title: '概念語義網絡:大家的想法怎麼連在一起', kind: 'snapshot', label: '🤖 請 AI 再多說一點', table: () =>
+                    '大家最常用的詞(括號是出現的貼文數):' + kws.map(w => w + '(' + cnt(w) + ')').join('、') + '\n' +
+                    '最常一起出現的詞:' + (edges.slice().sort((a, b) => b.value - a.value).slice(0, 8).map(e => e.from + '+' + e.to + ' ' + e.value + ' 篇').join('、') || '無') + '\n' +
+                    '熱點詞(貼文被回應得特別多):' + (hot.join('、') || '無') + '\n' +
+                    '沒有跟其他詞連在一起的詞:' + (alone.join('、') || '無') + '\n貼文總數:' + total }, 'concept-now');
+            }
+        }
+
         async function triggerTopicSummaryAI(force = false) {
              const resultDiv = document.getElementById('topic-ai-summary-result');
              const topicId = activeTopicFilter;
@@ -2634,19 +2815,30 @@ async function geminiFetch(key, init) {
              }
 
              resultDiv.classList.remove('hidden');
-             resultDiv.innerHTML = '<div class="flex items-center text-indigo-600 font-bold"><i class="fas fa-spinner fa-spin mr-2"></i>AI 正在深入閱讀並提煉共識，請稍候...</div>';
+             kbAiBusy.show(resultDiv, 'AI 正在深入閱讀並提煉共識…', { expect: 12 });
 
              const notesToAnalyze = globalAllNotes.slice(0, 30).map(n => `[${kbTypeMap[n.type]||'一般'}] ${n.title}: ${n.content}`).join('\n');
-             const prompt = `請以知識建構(Knowledge Building)專家角度，總結以下學生的討論內容（限 150 字以內）。請精煉指出：1. 目前達成的核心共識 2. 值得深究的衝突或迷思 3. 給老師的下一步引導建議。\n\n討論內容：\n${notesToAnalyze}`;
+             const tcnt = {}; globalAllNotes.forEach(n => { const k = kbTypeMap[n.type] || '一般'; tcnt[k] = (tcnt[k] || 0) + 1; });
+             const prompt = kbRefPrompt({
+                 audience: 'teacher',
+                 title: '主題內容深度分析(AI 內容總結)',
+                 meaning: '把這個主題底下所有討論整理成一段話:大家現在談到哪裡、有哪些共識、哪裡還在拉扯或有迷思,以及老師下一步可以怎麼引導。',
+                 current: '這個主題共有 ' + globalAllNotes.length + ' 篇貼文(' + Object.keys(tcnt).map(k => k + ' ' + tcnt[k] + ' 篇').join('、') + ')。以下只附前 30 篇。',
+                 data: notesToAnalyze,
+                 question: '1. 大家目前達成的核心共識是什麼? 2. 有哪些值得再深究的衝突或迷思? 3. 老師下一步可以怎麼引導?',
+                 extraRules: '請像跟同事聊天一樣用白話敘述,以短段落為主,不要把答案寫成三條死板的清單;全文約 300~450 字;最後給 2~3 個老師馬上能用的做法。'
+             });
 
-             const aiResult = await callGeminiAPI(prompt);
+             let aiResult = await callGeminiAPI(prompt), fromAI = true;
+             if (!aiResult || String(aiResult).indexOf('⚠️') === 0) { fromAI = false; aiResult = topicStoryOffline(String(aiResult || '')); }
 
              const formattedHtml = `
                 <div class="flex justify-between items-start mb-2">
-                    <strong class="text-indigo-800"><i class="fas fa-robot mr-1"></i> AI 深度總結</strong>
+                    <strong class="text-indigo-800"><i class="fas fa-robot mr-1"></i> ${fromAI ? 'AI 深度總結' : '系統整理的白話總結(AI 目前沒有回應)'}</strong>
                     <button onclick="triggerTopicSummaryAI(true)" class="text-[10px] bg-indigo-100 text-indigo-600 hover:bg-indigo-200 px-2 py-1 rounded transition flex items-center"><i class="fas fa-sync-alt mr-1"></i>重新分析</button>
                 </div>
-                <div class="text-slate-700 leading-relaxed">${marked.parse(aiResult)}</div>
+                <div class="kb-ai-body">${marked.parse(aiResult)}</div>
+                ${fromAI ? '<div class="mt-2 text-[10px] text-slate-400">AI 依上方討論內容推論,僅供教學參考。</div>' : ''}
              `;
 
              aiCache.topics[topicId] = formattedHtml;
@@ -2700,14 +2892,14 @@ async function geminiFetch(key, init) {
                 data: {
                     labels: labels,
                     datasets: [
-                        { type: 'line', label: '整合', data: buckets.map(b => b.counts.riseabove), backgroundColor: 'rgba(168, 85, 247, 0.75)', borderColor: '#a855f7', borderWidth: 1.5, fill: 'origin', tension: 0.4, pointRadius: 0 },
-                        { type: 'line', label: '深化', data: buckets.map(b => b.counts.improve), backgroundColor: 'rgba(34, 197, 94, 0.75)', borderColor: '#22c55e', borderWidth: 1.5, fill: '-1', tension: 0.4, pointRadius: 0 },
-                        { type: 'line', label: '延伸', data: buckets.map(b => b.counts.extend), backgroundColor: 'rgba(59, 130, 246, 0.75)', borderColor: '#3b82f6', borderWidth: 1.5, fill: '-1', tension: 0.4, pointRadius: 0 },
-                        { type: 'line', label: '提問', data: buckets.map(b => b.counts.question), backgroundColor: 'rgba(239, 68, 68, 0.75)', borderColor: '#ef4444', borderWidth: 1.5, fill: '-1', tension: 0.4, pointRadius: 0 },
+                        { type: 'line', label: '整合', data: buckets.map(b => b.counts.riseabove), backgroundColor: 'rgba(168, 85, 247, 0.75)', borderColor: '#a855f7', borderWidth: 1.5, fill: 'origin', cubicInterpolationMode: 'monotone', pointRadius: 0 },
+                        { type: 'line', label: '深化', data: buckets.map(b => b.counts.improve), backgroundColor: 'rgba(34, 197, 94, 0.75)', borderColor: '#22c55e', borderWidth: 1.5, fill: '-1', cubicInterpolationMode: 'monotone', pointRadius: 0 },
+                        { type: 'line', label: '延伸', data: buckets.map(b => b.counts.extend), backgroundColor: 'rgba(59, 130, 246, 0.75)', borderColor: '#3b82f6', borderWidth: 1.5, fill: '-1', cubicInterpolationMode: 'monotone', pointRadius: 0 },
+                        { type: 'line', label: '提問', data: buckets.map(b => b.counts.question), backgroundColor: 'rgba(239, 68, 68, 0.75)', borderColor: '#ef4444', borderWidth: 1.5, fill: '-1', cubicInterpolationMode: 'monotone', pointRadius: 0 },
                         { type: 'scatter', label: '關鍵發言', data: scatterPoints, backgroundColor: 'white', borderColor: '#475569', borderWidth: 2, pointRadius: 6, order: -1 }
                     ]
                 },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { stacked: true, beginAtZero: true } }, onClick: (e, activeEls) => { if (activeEls.length > 0) { const ds = streamChart.data.datasets[activeEls[0].datasetIndex]; if(ds.type === 'scatter') { const noteId = ds.data[activeEls[0].index].noteId; if(noteId) viewNote(noteId); } } } }
+                options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 }, interaction: { mode: 'index', intersect: false }, scales: { y: { stacked: true, beginAtZero: true, title: { display: true, text: '當天貼文數', font: { size: 11 } } }, x: { title: { display: true, text: '發文日期(只列出有人發言的日子,不是每天都有)', font: { size: 11 } }, ticks: { autoSkip: true, maxRotation: 0, minRotation: 0 } } }, plugins: { tooltip: { callbacks: { title: items => { const b = buckets[items[0] ? items[0].parsed.x : 0]; if (!b) return ''; const d = new Date(b.start); return (d.getMonth() + 1) + '月' + d.getDate() + '日(週' + '日一二三四五六'[d.getDay()] + ')'; }, label: c => c.dataset.type === 'scatter' ? '關鍵發言:' + (c.raw && c.raw.title ? c.raw.title : '') : (c.dataset.label + ':' + c.parsed.y + ' 則') } } }, onClick: (e, activeEls) => { if (activeEls.length > 0) { const ds = streamChart.data.datasets[activeEls[0].datasetIndex]; if(ds.type === 'scatter') { const noteId = ds.data[activeEls[0].index].noteId; if(noteId) viewNote(noteId); } } } }
             });
             try { kbAttachSeriesPlayer({ id: 'stream', explainTitle: '關鍵對話流(提問、延伸、深化、整合如何交替出現)', chart: streamChart }); } catch (e) {}
         }
@@ -3131,7 +3323,7 @@ async function geminiFetch(key, init) {
             if (cached && !force && scrollTo) { box.innerHTML = cached.html; showDiagnosisBadge(); return; }
             if (!globalAllNotes.length) { box.innerHTML = '<span class="text-slate-500">此範圍尚無討論內容,無法進行診斷。</span>'; return; }
 
-            box.innerHTML = '<div class="flex items-center text-purple-700 font-bold"><i class="fas fa-spinner fa-spin mr-2"></i>AI 正在彙整數據並撰寫診斷,請稍候(約 10~30 秒)...</div>';
+            kbAiBusy.show(box, 'AI 正在彙整數據並撰寫診斷…', { expect: 20 });
             if (btn) { btn.disabled = true; btn.classList.add('opacity-60', 'cursor-not-allowed'); }
             let payload;
             try { payload = buildDiagnosisPayload(); } catch (e) {
@@ -3176,7 +3368,7 @@ async function geminiFetch(key, init) {
             const sData = calculateStudentMetrics(db, userId);
             if(!sData) return;
 
-            sugBox.innerHTML = `<div class="p-3 bg-blue-50 border-l-4 border-blue-400 text-sm text-blue-800 rounded-r shadow-sm"><i class="fas fa-spinner fa-spin mr-2"></i>正在呼叫 AI 進行深入的個別化分析...</div>`;
+            sugBox.innerHTML = '<div class="p-3 bg-blue-50 border-l-4 border-blue-400 rounded-r shadow-sm" id="kb-sug-busy"></div>'; kbAiBusy.show(document.getElementById('kb-sug-busy'), '正在呼叫 AI 進行個別化分析…', { expect: 15 });
 
             const prompt = `
             請扮演教育數據分析專家，針對這位學生的「知識建構(Knowledge Building)」表現，給予老師一段具體且精煉的診斷與引導建議（限 150 字以內）。
@@ -3241,6 +3433,7 @@ async function geminiFetch(key, init) {
             const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
             egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics); kbLively(egoNetworkInstance);
             setTimeout(stopEgoPhysics, 2500);
+            try { kbEgoTalk(egoNetworkInstance, { me: userId, nodes: db.nodes || [], userList: db.userList || {}, typeLabel: t => kbTypeMap[t] || '', meSummary: '<p>系統依發文類型判斷,' + (displayName) + '比較像「<b>' + data.role + '</b>」。</p>' }); } catch (e) { console.error(e); }
             kbAttachPlayer({ explainTitle: '這位學生的自我互動圈(他和誰互動)的形成過程', id: 'ego-t', container: container, anchor: container.parentElement, network: egoNetworkInstance, nodesDS: egoNodesDS, edgesDS: egoEdgesDS, labels: egoDays.stepLabels, steps: egoDays.steps, build: egoBuild, why: kbStuWhy(userId, displayName, egoDays.stepLabels, null, '有人回應了別人就會長出新的連線;同一對同學多次互動,線就變粗。') });
             const ctxB = document.getElementById('balanceChart').getContext('2d'); if(balanceChartInstance) balanceChartInstance.destroy();
             const totalBal = data.balanceData[0] + data.balanceData[1];
@@ -3412,7 +3605,7 @@ async function geminiFetch(key, init) {
             }
 
             renderScaffoldTransition();
-            try { kbRep({ id: 'scaffold-trans', anchor: document.getElementById('scaffold-transition-container'), title: '鷹架回應模式(提問、延伸、改進、整合彼此怎麼接續)的累積', render: () => renderScaffoldTransition() }); } catch (e) {}
+            try { kbRep({ id: 'scaffold-trans', anchor: document.getElementById('scaffold-transition-container').parentElement, title: '鷹架回應模式(提問、延伸、改進、整合彼此怎麼接續)的累積', render: () => renderScaffoldTransition() }); } catch (e) {}
         }
 
         function renderScaffoldTransition() {
@@ -3595,7 +3788,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
         return;
     }
 
-    box.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> AI 正在依目前數據診斷...`;
+    kbAiBusy.show(box, 'AI 正在依目前數據診斷…', { expect: 15 });
 
     let ctx;
     try { ctx = buildRefContext(key, studentId); } catch (e) { console.error(e); ctx = { text: '(背景數據整理失敗,僅依下列指標數值回答)', nameOf: {} }; }

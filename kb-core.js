@@ -74,6 +74,7 @@
       studentDeleteOwn: 'noReplies',      // always | noReplies | never
       studentEditOwn: true,
       crossGroupPost: true,
+      crossClassPost: false,                // 學生可以跨班級發言(關閉:學生只能在「自己班級」與「全部班級共用」的討論區發言)
       forumLocked: false,
       postWindow: { enabled: false, start: '', end: '' },
       displayMode: 'name',                  // name(姓名,預設,所有人可見) | id(學號)
@@ -292,6 +293,46 @@
     var now = Date.now(), s = w.start ? Date.parse(w.start) : -Infinity, e = w.end ? Date.parse(w.end) : Infinity;
     return now >= s && now <= e;
   }
+  // 討論區可以屬於某個班級(topic.classId);沒有指定班級 = 全部班級共用。
+  // 學生只能在自己班級的討論區發言,除非老師打開「學生可以跨班級發言」;老師與管理者不受限制。
+  function topicById(id) { for (var i = 0; i < S.topics.length; i++) if (S.topics[i].id === id) return S.topics[i]; return null; }
+  // 這個討論區屬於哪個班級:有指定就用指定的;老師特別選了「全部班級共用」(shared)就是共用;
+  // 舊資料沒有設定也沒標共用,就看是誰在裡面發言:全是同一個班的學生 → 當作那個班的討論區(例如五年級示範班的教材),其他情況 = 共用。
+  function topicClassOf(tp) {
+    if (typeof tp === 'string') tp = topicById(tp);
+    if (!tp) return '';
+    if (tp.classId) return tp.classId;
+    if (tp.shared) return '';
+    var seen = {}, cnt = 0, i, u;
+    for (i = 0; i < S.nodes.length; i++) {
+      if (S.nodes[i].topicId !== tp.id) continue;
+      u = userById(S.nodes[i].author);
+      if (u && u.role === 'student' && u.classId && !seen[u.classId]) { seen[u.classId] = 1; cnt++; if (cnt > 1) return ''; }
+    }
+    return cnt === 1 ? Object.keys(seen)[0] : '';
+  }
+  function classAllows(cur, topicId) {
+    if (!topicId) return true;
+    var tp = topicById(topicId); if (!tp) return true;
+    var tc = topicClassOf(tp); if (!tc) return true;
+    if (S.settings.crossClassPost) return true;
+    var u = cur ? userById(cur.id) : null;
+    return !!u && u.classId === tc;
+  }
+  // 為什麼現在不能發言(給畫面顯示);可以發言時回傳空字串
+  function postBlock(topicId) {
+    var cur = auth.current(); if (!cur) return '請先登入';
+    if (cur.role === 'guest') return '訪客只能瀏覽,請登入後再發文';
+    if (isStaffRole(cur.role)) return '';
+    if (S.settings.forumLocked) return '論壇已鎖定,目前是唯讀';
+    if (!inPostWindow()) return '現在不在開放發文的時間';
+    if (!classAllows(cur, topicId)) {
+      var tp = topicById(topicId), c = S.classes.filter(function (x) { return x.id === topicClassOf(tp); })[0];
+      if (c && isMaterialClass(c)) return '這是教材班「' + c.name + '」的內容,只能閱讀。請回到自己班級的討論區發言。';
+      return '這是「' + (c ? c.name : '其他班級') + '」的討論區,目前只有該班的學生能發言。(老師可以在「設定中心 → 論壇設定」開啟「學生可以跨班級發言」。)';
+    }
+    return '';
+  }
   function can(action, ctx) {
     ctx = ctx || {};
     var cur = ctx.role ? { role: ctx.role, id: ctx.id } : auth.current();
@@ -299,7 +340,7 @@
     var staff = isStaffRole(role), loggedIn = role === 'student' || staff, st = S.settings;
     switch (action) {
       case 'forum.read': return loggedIn || (role === 'guest' && st.guestEnabled);
-      case 'forum.post': if (!loggedIn) return false; if (staff) return true; return !st.forumLocked && inPostWindow();
+      case 'forum.post': if (!loggedIn) return false; if (staff) return true; return !st.forumLocked && inPostWindow() && classAllows(cur, ctx.topicId);
       case 'forum.editOwn': if (staff) return true; return role === 'student' && st.studentEditOwn && !st.forumLocked && ctx.author === cur.id;
       case 'forum.deleteOwn':
         if (staff) return true;
@@ -459,6 +500,12 @@
           }
         }
         if (exist) {
+          // 學號就是登入帳號,全平台只能有一個。同一個學號出現在「另一個班級」時,不能略過、也不能更新(更新會把原本那位學生改成這個班級的人)
+          if (classId && exist.classId && exist.classId !== classId) {
+            var oc = S.classes.filter(function (x) { return x.id === exist.classId; })[0];
+            rep.errors.push({ row: line, id: id, msg: '學號已被「' + (oc ? oc.name : '其他班級') + '」的「' + (exist.realName || exist.id) + '」使用。學號就是登入帳號,不能重複,請改用不同的學號(例如加上班級前綴 7-' + id + ')' });
+            return;
+          }
           if (opts.onDuplicate === 'update') {
             var pwNow = !!(r.password && isPwDefault(exist) && String(r.password) !== String(exist.initialPw || exist.id));   // 還在用初始密碼的人,才換成檔案裡的新初始密碼
             if (!opts.dryRun) { exist.realName = name; if (classId) exist.classId = classId; if (groupId) exist.groupId = groupId; if (pwNow) users.resetPassword(id, r.password); }
@@ -483,10 +530,18 @@
   };
 
   /* ---------- 班級與分組 ---------- */
+  // 教材班(例如五年級示範班):所有學生登入後都可以進去看內容,但只有該班的學生能在裡面發言。舊資料的示範班(c_demo)視為教材班。
+  function isMaterialClass(c) { if (typeof c === 'string') c = S.classes.filter(function (x) { return x.id === c; })[0]; return !!c && (c.material === undefined ? c.id === 'c_demo' : c.material === true); }
   var classes = {
+    isMaterial: isMaterialClass,
+    // 某個人可以在論壇選到哪些班級:老師與管理者全部;學生 = 自己的班級 + 所有教材班
+    visibleTo: function (cur) {
+      var u = cur ? userById(cur.id) : null, staff = !cur || isStaffRole(cur.role);
+      return clone(S.classes.filter(function (c) { return staff ? true : (!c.archived && (isMaterialClass(c) || (u && u.classId === c.id))) || (u && u.classId === c.id); }));
+    },
     list: function () { return clone(S.classes); },
     create: function (name, term) { name = String(name || '').trim(); if (!name) return { ok: false, error: '請輸入班級名稱' }; if (S.classes.some(function (c) { return c.name === name; })) return { ok: false, error: '班級名稱已存在' }; var c = { id: uid('c'), name: name, term: term || '', archived: false }; S.classes.push(c); persist(['classes']); audit('class.create', c.id, name); return { ok: true, id: c.id }; },
-    update: function (id, patch) { var c = S.classes.filter(function (x) { return x.id === id; })[0]; if (!c) return { ok: false }; ['name', 'term', 'archived'].forEach(function (k) { if (patch[k] !== undefined) c[k] = patch[k]; }); persist(['classes']); audit('class.update', id, JSON.stringify(patch)); return { ok: true }; },
+    update: function (id, patch) { var c = S.classes.filter(function (x) { return x.id === id; })[0]; if (!c) return { ok: false }; ['name', 'term', 'archived', 'material'].forEach(function (k) { if (patch[k] !== undefined) c[k] = patch[k]; }); persist(['classes']); audit('class.update', id, JSON.stringify(patch)); return { ok: true }; },
     remove: function (id) {
       if (S.users.some(function (u) { return u.classId === id; })) return { ok: false, error: '班級內仍有使用者,請先移動或刪除' };
       S.classes = S.classes.filter(function (c) { return c.id !== id; }); S.groups = S.groups.filter(function (g) { return g.classId !== id; });
@@ -495,9 +550,55 @@
     groups: function (classId) { return clone(S.groups.filter(function (g) { return !classId || g.classId === classId; })); },
     createGroup: function (classId, name) { name = String(name || '').trim(); if (!name) return { ok: false, error: '請輸入組別名稱' }; var g = { id: uid('g'), classId: classId, name: name }; S.groups.push(g); persist(['groups']); audit('group.create', g.id, name); return { ok: true, id: g.id }; },
     updateGroup: function (id, name) { var g = S.groups.filter(function (x) { return x.id === id; })[0]; if (!g) return { ok: false }; g.name = String(name); persist(['groups']); audit('group.update', id, name); return { ok: true }; },
-    removeGroup: function (id) {
-      if (S.users.some(function (u) { return u.groupId === id; })) return { ok: false, error: '組別內仍有學生,請先移動' };
-      S.groups = S.groups.filter(function (g) { return g.id !== id; }); persist(['groups']); audit('group.delete', id, ''); return { ok: true };
+    // 刪除組別。opts.unassign:true → 組內的學生一併移到「未分組」(否則組內還有學生時不能刪)
+    removeGroup: function (id, opts) {
+      var inside = S.users.filter(function (u) { return u.groupId === id; });
+      if (inside.length && !(opts && opts.unassign)) return { ok: false, error: '組別內仍有學生,請先移動' };
+      inside.forEach(function (u) { u.groupId = ''; });
+      S.groups = S.groups.filter(function (g) { return g.id !== id; }); persist(inside.length ? ['groups', 'users'] : ['groups']); audit('group.delete', id, inside.length ? '並將 ' + inside.length + ' 位學生移到未分組' : ''); return { ok: true, moved: inside.length };
+    },
+    // 一次建立多組:pattern 裡的 {n} 換成 1、2、3…(沒有 {n} 就在後面接數字);已存在的名稱會略過
+    createGroups: function (classId, count, pattern) {
+      count = parseInt(count, 10);
+      if (!classId || !S.classes.some(function (c) { return c.id === classId; })) return { ok: false, error: '請先選擇班級' };
+      if (!(count >= 1) || count > 40) return { ok: false, error: '請輸入 1 到 40 之間的組數' };
+      pattern = String(pattern || '第{n}組');
+      var made = 0, skipped = 0;
+      for (var i = 1; i <= count; i++) {
+        var nm = (pattern.indexOf('{n}') >= 0 ? pattern.split('{n}').join(String(i)) : pattern + i).trim();
+        if (!nm) continue;
+        if (S.groups.some(function (g) { return g.classId === classId && g.name === nm; })) { skipped++; continue; }
+        S.groups.push({ id: uid('g'), classId: classId, name: nm }); made++;
+      }
+      persist(['groups']); audit('group.bulk', classId, '建立 ' + made + ' 組'); return { ok: true, created: made, skipped: skipped };
+    },
+    // 自動分組:o.scope 'unassigned'(只分還沒分組的,預設)或 'all'(全部重新分);o.method 'block'(依學號順序連續分段,預設)/'round'(輪流)/'random'(隨機,各組人數接近);o.random 可指定亂數函式(測試用)
+    autoAssign: function (classId, o) {
+      o = o || {};
+      var gs = S.groups.filter(function (g) { return g.classId === classId; });
+      if (!gs.length) return { ok: false, error: '這個班級還沒有組別,請先建立組別' };
+      var inGroup = {}; gs.forEach(function (g) { inGroup[g.id] = 1; });
+      var members = S.users.filter(function (u) { return u.role === 'student' && u.classId === classId && u.status === 'active'; });
+      var scope = o.scope === 'all' ? 'all' : 'unassigned', method = ['block', 'round', 'random'].indexOf(o.method) >= 0 ? o.method : 'block';
+      var todo = scope === 'all' ? members.slice() : members.filter(function (u) { return !inGroup[u.groupId]; });
+      var cnt = {}; gs.forEach(function (g) { cnt[g.id] = 0; });
+      if (scope !== 'all') members.forEach(function (u) { if (inGroup[u.groupId]) cnt[u.groupId]++; });
+      if (!todo.length) return { ok: true, assigned: 0, groups: gs.length };
+      var nat = function (a, b) { return String(a.id).localeCompare(String(b.id), 'zh-Hant', { numeric: true }); };
+      todo.sort(nat);
+      if (method === 'random') { var rnd = o.random || Math.random; for (var i = todo.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), t = todo[i]; todo[i] = todo[j]; todo[j] = t; } }
+      var smallest = function () { var best = gs[0]; gs.forEach(function (g) { if (cnt[g.id] < cnt[best.id]) best = g; }); return best; };
+      if (method === 'block') {
+        // 每組的目標人數:全班人數平均分,多出來的從前面幾組各多 1 人(例如 10 人分 3 組 → 4、3、3)
+        var total = scope === 'all' ? todo.length : members.length, base = Math.floor(total / gs.length), extra = total % gs.length, k = 0;
+        gs.forEach(function (g, gi) { var target = base + (gi < extra ? 1 : 0); while (k < todo.length && cnt[g.id] < target) { todo[k].groupId = g.id; cnt[g.id]++; k++; } });
+        for (; k < todo.length; k++) { var g2 = smallest(); todo[k].groupId = g2.id; cnt[g2.id]++; }
+      } else {
+        if (scope === 'all') gs.forEach(function (g) { cnt[g.id] = 0; });
+        todo.forEach(function (u) { var g3 = smallest(); u.groupId = g3.id; cnt[g3.id]++; });
+      }
+      persist(['users']); audit('group.auto', classId, scope + '/' + method + ' 共 ' + todo.length + ' 人');
+      return { ok: true, assigned: todo.length, groups: gs.length, sizes: cnt };
     }
   };
 
@@ -767,7 +868,7 @@
     },
     on: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
     reload: function () { load(); notify(KEYS, true); },
-    settings: settings, auth: auth, can: can, guard: guard, users: users, classes: classes, content: content,
+    settings: settings, auth: auth, can: can, postBlock: postBlock, topicClass: topicClassOf, guard: guard, users: users, classes: classes, content: content,
     backup: backup, io: io, audit: auditApi, display: display, compat: compat,
     stats: function () {
       return {

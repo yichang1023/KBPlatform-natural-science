@@ -75,7 +75,7 @@
             <div class="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg md:text-xl shrink-0">KB</div>
             <div>
                 <h1 class="font-bold text-base md:text-lg leading-tight text-slate-800 truncate max-w-[120px] md:max-w-none">知識建構平台</h1>
-                <p class="text-[10px] md:text-xs text-slate-500 hidden md:block">Knowledge Building Environment (v2.30)</p>
+                <p class="text-[10px] md:text-xs text-slate-500 hidden md:block">Knowledge Building Environment (V7.7)</p>
             </div>
         </div>
 
@@ -167,6 +167,11 @@
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-2">類別 (可複選)</label>
                     <div id="topic-category-selector" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scroll p-1"></div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">班級</label>
+                    <select id="topic-class" class="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500 bg-white"></select>
+                    <p class="text-xs text-slate-400 mt-1">選「全部班級共用」= 每個班級都看得到、都能發言。選某個班級 = 只有那一班的學生能發言(老師可以在設定中心開啟「學生可以跨班級發言」)。</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1">背景說明</label>
@@ -395,6 +400,30 @@
 
         window.app.generateCategoryOptions = () => Object.entries(window.TOPIC_CATEGORIES).map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
 
+        // ===== 班級:老師/管理者與學生都可以選班級來看討論區(發言權限見 KB.can('forum.post') 與設定中心的「學生可以跨班級發言」) =====
+        window.app.escH = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        window.app.classOptions = () => KB.classes.visibleTo(KB.auth.current());   // 老師:全部;學生:自己的班 + 教材班(例如五年級示範班)
+        window.app.isStaffView = () => KB.can('topic.manage');
+        window.app.currentClass = () => {
+            const st = window.state, uid = (st.user && st.user.id) || '';
+            if (st.activeClass === undefined) {
+                let v = null; try { v = localStorage.getItem('kb_forum_class_' + uid); } catch (e) {}
+                const list = window.app.classOptions();
+                if (v === 'all' && KB.can('topic.manage')) st.activeClass = 'all';
+                else if (v && list.some(c => c.id === v)) st.activeClass = v;
+                else { const cu = KB.auth.current(), mine = KB.can('topic.manage') ? '' : ((cu && cu.classId) || ''); st.activeClass = mine && list.some(c => c.id === mine) ? mine : (KB.can('topic.manage') ? 'all' : ((list[0] && list[0].id) || 'all')); }
+            }
+            return st.activeClass;
+        };
+        window.app.setClass = (v) => { window.state.activeClass = v; try { localStorage.setItem('kb_forum_class_' + ((window.state.user && window.state.user.id) || ''), v); } catch (e) {} window.ui.renderEntrance(); };
+        window.app.className = (id) => { const c = KB.classes.list().filter(x => x.id === id)[0]; return c ? c.name : ''; };
+        window.app.classSelector = () => {
+            const list = window.app.classOptions(), cur = window.app.currentClass();
+            return `<label class="flex items-center gap-2 text-sm text-slate-600 flex-shrink-0"><i class="fa-solid fa-people-roof text-indigo-500"></i><span class="font-bold">班級</span><select id="class-select" onchange="window.app.setClass(this.value)" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white font-bold text-slate-700 outline-none focus:border-indigo-500">${window.app.isStaffView() ? `<option value="all"${cur === 'all' ? ' selected' : ''}>全部班級</option>` : ''}${list.map(c => `<option value="${window.app.escH(c.id)}"${cur === c.id ? ' selected' : ''}>${window.app.escH(c.name)}${c.archived ? '(已封存)' : ''}${KB.classes.isMaterial(c) ? '(教材班・只能看)' : ''}</option>`).join('')}</select></label>`;
+        };
+        window.app.canPost = (topicId) => KB.can('forum.post', { topicId: topicId === undefined ? window.state.currentTopicId : topicId });
+        window.app.fillTopicClass = (sel) => { const el = document.getElementById('topic-class'); if (!el) return; el.innerHTML = '<option value="">全部班級共用</option>' + window.app.classOptions().map(c => `<option value="${window.app.escH(c.id)}">${window.app.escH(c.name)}</option>`).join(''); el.value = sel || ''; };
+
         window.app.generateCategoryFilters = () => {
             let html = `<button class="px-4 py-1.5 rounded-full text-sm font-medium filter-btn transition ${window.state.activeFilter === '全部' ? 'active bg-slate-200 text-slate-900 border-slate-300' : 'bg-white text-slate-500 border border-slate-200'}" data-category="全部">所有主題</button>`;
             html += Object.keys(window.TOPIC_CATEGORIES).map(key => {
@@ -540,6 +569,7 @@
             document.getElementById('topic-desc').value = '';
             window.state.tempSelectedCategories = [];
             window.app.renderCategorySelector();
+            window.app.fillTopicClass(window.app.currentClass() === 'all' ? '' : window.app.currentClass());
             document.getElementById('modal-topic').classList.remove('hidden');
         };
 
@@ -554,6 +584,7 @@
             document.getElementById('topic-desc').value = topic.desc;
             window.state.tempSelectedCategories = [...(topic.categories || [])];
             window.app.renderCategorySelector();
+            window.app.fillTopicClass(KB.topicClass(topic) || '');
             document.getElementById('modal-topic').classList.remove('hidden');
         };
 
@@ -563,6 +594,7 @@
             if(!name) return window.ui.showToast('請輸入問題', 'error');
             const categories = window.state.tempSelectedCategories.length > 0 ? window.state.tempSelectedCategories : ['其他'];
             const desc = document.getElementById('topic-desc').value;
+            const classId = (document.getElementById('topic-class') || {}).value || '';
 
             if (window.state.editingTopicId) {
                 const topicIndex = window.state.topics.findIndex(t => t.id === window.state.editingTopicId);
@@ -570,6 +602,7 @@
                     window.state.topics[topicIndex].name = name;
                     window.state.topics[topicIndex].categories = categories;
                     window.state.topics[topicIndex].desc = desc;
+                    window.state.topics[topicIndex].classId = classId; window.state.topics[topicIndex].shared = !classId;
                     window.ui.showToast('主題已更新');
                 }
             } else {
@@ -579,6 +612,7 @@
                     name,
                     categories: categories,
                     desc: desc,
+                    classId: classId, shared: !classId,
                     author: safeUserId,
                     date: new Date().toISOString()
                 });
@@ -732,9 +766,9 @@
         const KIDS_SCAFFOLD = { question: ['提問', '?', '#8aa9e8'], extend: ['延伸', '+', '#e6c96a'], improve: ['改進', '↗', '#82c69b'], counter: ['反例', '!', '#d9828a'], riseabove: ['昇華', '↑', '#b08ae0'] };
         Object.keys(KIDS_SCAFFOLD).forEach(k => { if (window.SCAFFOLDS[k]) { window.SCAFFOLDS[k].zh = KIDS_SCAFFOLD[k][0]; window.SCAFFOLDS[k].glyph = KIDS_SCAFFOLD[k][1]; window.SCAFFOLDS[k].chip = KIDS_SCAFFOLD[k][2]; } });
         window.app.openComposer = (pid) => {
-            if (!KB.can('forum.post')) {
+            if (!window.app.canPost()) {
                 const cu = window.state.user;
-                return window.ui.showToast(cu && cu.realRole === 'guest' ? '訪客只能瀏覽,請登入後再發文' : '目前論壇暫時無法發文(已鎖定或不在開放時間)', 'error');
+                return window.ui.showToast(KB.postBlock(window.state.currentTopicId) || (cu && cu.realRole === 'guest' ? '訪客只能瀏覽,請登入後再發文' : '目前論壇暫時無法發文(已鎖定或不在開放時間)'), 'error');
             }
             if (pid) { try { KB.content.markRead(pid); } catch (e) {} }   // 要回覆別人的想法,一定先讀過了(分析頁的「閱讀他人」)
             window.state.composer.editingId = null;
@@ -818,7 +852,7 @@
                 window.ui.showToast('已更新你的貼文', 'success');
                 return;
             }
-            if (!KB.can('forum.post')) return window.ui.showToast('目前無法發文', 'error');
+            if (!window.app.canPost()) return window.ui.showToast(KB.postBlock(window.state.currentTopicId) || '目前無法發文', 'error');
 
             const pid = window.state.composer.parentId;
             let nx, ny;
@@ -874,7 +908,7 @@
             document.getElementById('detail-date').innerText = new Date(n.date).toLocaleDateString('zh-TW');
             document.getElementById('detail-content').innerText = n.content;
             try { if (window.KBMedia) KBMedia.renderView(document.getElementById('detail-media'), n.media || []); } catch (e) {}
-            document.getElementById('btn-detail-reply').style.display = KB.can('forum.post') ? '' : 'none';
+            document.getElementById('btn-detail-reply').style.display = window.app.canPost() ? '' : 'none';
             document.getElementById('btn-detail-reply').onclick = () => {
                 window.ui.closeModal('modal-detail');
                 setTimeout(() => window.app.openComposer(n.id), 200);
@@ -1717,9 +1751,13 @@
 
         window.ui.renderEntrance = () => {
             const container = document.getElementById('app-container');
-            const visibleTopics = window.state.activeFilter === '全部'
+            const curClass = window.app.currentClass();
+            // 選了某一班 = 只看到這個班的討論區(新班級沒有討論區、沒有發言,就是空的);「全部班級共用」的討論區只在選「全部班級」時列出
+            const classOk = (t) => curClass === 'all' || KB.topicClass(t) === curClass;
+            const sharedHidden = curClass === 'all' ? 0 : window.state.topics.filter(t => !KB.topicClass(t)).length;
+            const visibleTopics = (window.state.activeFilter === '全部'
                 ? window.state.topics
-                : window.state.topics.filter(t => t.categories && t.categories.includes(window.state.activeFilter));
+                : window.state.topics.filter(t => t.categories && t.categories.includes(window.state.activeFilter))).filter(classOk);
 
             const currentUserRole = window.state.user?.role || 'student';
 
@@ -1730,9 +1768,12 @@
                     <p class="text-slate-500 text-sm">"知識建構不是追求答案，而是以改善想法為共同使命，讓社群思維持續朝向更深刻的理解。"</p>
                 </div>
                 <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                    <div class="w-full md:w-auto category-scroll-container">
-                        <div id="category-filters" class="flex gap-2 whitespace-nowrap md:flex-wrap">
-                            ${window.app.generateCategoryFilters()}
+                    <div class="w-full md:w-auto flex flex-col md:flex-row md:items-center gap-3">
+                        ${window.app.classSelector()}
+                        <div class="category-scroll-container">
+                            <div id="category-filters" class="flex gap-2 whitespace-nowrap md:flex-wrap">
+                                ${window.app.generateCategoryFilters()}
+                            </div>
                         </div>
                     </div>
                     ${currentUserRole === window.ROLES.LEAD ? `<button onclick="window.app.openCreateTopic()" class="bg-indigo-600 text-white px-5 py-2 rounded-lg shadow text-sm hover:bg-indigo-700 transition flex-shrink-0"><i class="fa-solid fa-plus"></i> 新增主題</button>` : ''}
@@ -1743,12 +1784,14 @@
                     <a href="載入示範資料.html" class="font-bold underline text-indigo-700">「載入示範資料」頁</a>
                     按一次「載入示範資料」,再回到這裡重新整理。
                 </div>` : ''}
+                ${sharedHidden ? `<p class="text-xs text-slate-400 mb-3 text-center">另外有 ${sharedHidden} 個「全部班級共用」的討論區,要看請把上面的班級選成「全部班級」。</p>` : ''}
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
-                    ${visibleTopics.length === 0 ? `<div class="col-span-full text-center text-slate-400 py-10">此分類暫無主題，點擊右上角新增一個吧！</div>` : ''}
+                    ${visibleTopics.length === 0 ? (() => { const cc = window.app.currentClass(); const nm = cc && cc !== 'all' ? window.app.className(cc) : ''; return nm ? `<div class="col-span-full text-center py-10"><div class="text-5xl mb-3">🌱</div><div class="text-slate-600 font-bold">「${window.app.escH(nm)}」還沒有討論區,也還沒有人發言</div><div class="text-slate-400 text-sm mt-1">${KB.can('topic.manage') ? '點右上角「新增主題」建立第一個討論區(新增時班級會預設在這個班)。' : '請老師先建立討論區。'}</div></div>` : `<div class="col-span-full text-center text-slate-400 py-10">此分類暫無主題，點擊右上角新增一個吧！</div>`; })() : ''}
                     ${visibleTopics.map(t => {
                         const count = window.state.nodes.filter(n => n.topicId === t.id).length;
                         const cats = t.categories || [t.category] || ['其他'];
-                        const tagsHtml = cats.map(c => `<span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-bold mr-1">${window.TOPIC_CATEGORIES[c] || c}</span>`).join('');
+                        const classChip = `<span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold mr-1" title="這個討論區屬於哪個班級">${KB.topicClass(t) ? '<i class="fa-solid fa-people-roof"></i> ' + window.app.escH(window.app.className(KB.topicClass(t)) || '(已刪除的班級)') : '全部班級共用'}</span>`;
+                        const tagsHtml = classChip + cats.map(c => `<span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-bold mr-1">${window.TOPIC_CATEGORIES[c] || c}</span>`).join('');
                         const adminControls = currentUserRole === window.ROLES.LEAD ? `
                             <div class="flex gap-2">
                                 <button onclick="event.stopPropagation(); window.app.openEditTopic('${t.id}')" class="text-slate-300 hover:text-indigo-500 transition" title="編輯主題"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -1799,6 +1842,8 @@
                     <button onclick="window.app.router('entrance')" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500"><i class="fa-solid fa-arrow-left"></i></button>
                     <div class="h-6 w-px bg-slate-200"></div>
                     <h2 class="font-bold text-xs md:text-sm truncate px-1">${topic.name}</h2>
+                    ${KB.topicClass(topic) ? `<span class="hidden md:inline-block bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"><i class="fa-solid fa-people-roof"></i> ${window.app.escH(window.app.className(KB.topicClass(topic)))}</span>` : ''}
+                    ${window.app.canPost() ? '' : `<span id="readonly-badge" class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" title="${window.app.escH(KB.postBlock(topic.id))}"><i class="fa-solid fa-eye"></i> 僅閱讀</span>`}
                 </div>
                 <div class="flex gap-2 pointer-events-auto">
                     <button onclick="window.app.canvas.toggleHeatmap()" id="btn-heatmap" class="${window.state.canvas.isHeatmapMode ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white/90 text-slate-500 border-slate-200'} backdrop-blur shadow-sm border rounded-lg px-3 py-1 text-xs font-bold flex items-center gap-1 transition-all hover:scale-105">
@@ -1825,7 +1870,7 @@
                 </button>
             </div>
 
-            <div class="absolute bottom-20 right-4 md:bottom-8 md:right-8 z-40" style="${KB.can('forum.post') ? '' : 'display:none'}">
+            <div class="absolute bottom-20 right-4 md:bottom-8 md:right-8 z-40" style="${window.app.canPost() ? '' : 'display:none'}">
                  <button onclick="window.app.openComposer(null)" class="bg-indigo-600 text-white rounded-full w-12 h-12 md:w-14 md:h-14 shadow-xl flex items-center justify-center text-xl transition transform hover:scale-105"><i class="fa-solid fa-plus"></i></button>
             </div>
 
@@ -1964,7 +2009,7 @@
 
         window.ui.drawNodes = (nodes) => {
             const parentSet = new Set(window.state.nodes.map(n => n.parentId).filter(Boolean));
-            const canPostNow = KB.can('forum.post');
+            const canPostNow = window.app.canPost();
             document.getElementById('nodes-layer').innerHTML = nodes.map(node => {
                 const s = window.SCAFFOLDS[node.type];
                 const user = Object.values(window.state.userList).find(u => u.id === node.author) || {name: '?'};

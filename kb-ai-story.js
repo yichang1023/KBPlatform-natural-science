@@ -28,6 +28,41 @@
   function hash(str) { var h = 0; for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return h; }
   var aiCache = {};
 
+  // ===== AI 等待中:會轉動的沙漏 + 估計完成百分比(AI 不會回報真正的進度,所以百分比是依一般等待時間估計,慢慢趨近 95%,結果出來才跳到 100%) =====
+  (function () {
+    if (!doc || doc.getElementById('kb-busy-css')) return;
+    var st = doc.createElement('style'); st.id = 'kb-busy-css';
+    st.textContent = '.kb-busy{display:flex;align-items:center;gap:12px;padding:6px 2px;color:#5b21b6}' +
+      '.kb-hg{display:inline-block;font-size:30px;line-height:1;animation:kb-hg-turn 2.4s ease-in-out infinite;transform-origin:50% 55%}' +
+      '@keyframes kb-hg-turn{0%,30%{transform:rotate(0)}70%,100%{transform:rotate(180deg)}}' +
+      '.kb-busy-main{flex:1;min-width:0}.kb-busy-t{font-weight:800;font-size:13px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}' +
+      '.kb-busy-pct{font-variant-numeric:tabular-nums;font-weight:900;font-size:18px;color:#7c3aed}' +
+      '.kb-busy-bar{height:7px;border-radius:99px;background:#ede9fe;margin-top:6px;overflow:hidden}.kb-busy-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#a78bfa,#7c3aed);border-radius:99px;transition:width .5s ease}' +
+      '.kb-busy-s{font-size:10.5px;color:#7c6aa8;margin-top:4px;font-weight:500}' +
+      '@media (prefers-reduced-motion:reduce){.kb-hg{animation:none}}';
+    (doc.head || doc.documentElement).appendChild(st);
+  })();
+  function busyHtml(text) {
+    return '<div class="kb-busy" role="status" aria-live="polite"><span class="kb-hg" aria-hidden="true">⏳</span><div class="kb-busy-main"><div class="kb-busy-t"><span>' + esc(text || 'AI 正在處理…') + '</span><span class="kb-busy-pct">0%</span></div><div class="kb-busy-bar"><i></i></div><div class="kb-busy-s">已等 0 秒(百分比是估計值,AI 不會回報真正進度)</div></div></div>';
+  }
+  global.kbAiBusy = {
+    html: busyHtml,
+    // 把 el 的內容換成等待畫面並開始計時;只要等待畫面被換掉(結果出來了)計時就自動停止
+    show: function (el, text, o) {
+      if (!el) return null; o = o || {};
+      el.innerHTML = busyHtml(text);
+      var root = el.querySelector('.kb-busy'), pct = root.querySelector('.kb-busy-pct'), bar = root.querySelector('.kb-busy-bar i'), sec = root.querySelector('.kb-busy-s'), t0 = Date.now(), tau = (o.expect || 12) * 1000 / 2.2, timer;
+      function tick() {
+        if (!root.isConnected) { clearInterval(timer); return; }
+        var ms = Date.now() - t0, p = Math.min(95, Math.round(96 * (1 - Math.exp(-ms / tau))));
+        pct.textContent = p + '%'; bar.style.width = p + '%';
+        sec.textContent = '已等 ' + Math.floor(ms / 1000) + ' 秒(百分比是估計值,AI 不會回報真正進度)';
+      }
+      timer = setInterval(tick, 300); tick();
+      return { done: function () { clearInterval(timer); if (root.isConnected) { pct.textContent = '100%'; bar.style.width = '100%'; } } };
+    }
+  };
+
   // ===== 給 AI 的共同寫法:把數據「說成故事」,連國小高年級學生也看得懂;說明方式由 AI 自己挑最貼切的 =====
   var NL = String.fromCharCode(10);
   function styleRules(forStudent, snapshot) {
@@ -121,7 +156,7 @@
       if (again) again.onclick = function (e) { e.preventDefault(); runExplain(panel, title, tableFn, true, kind); };
     }
     if (aiCache[key] && !force) { show(aiCache[key], true); return; }
-    body.innerHTML = '<span style="color:#6d28d9">' + (kind === 'snapshot' ? '⏳ AI 正在整理這份資料…' : '⏳ AI 正在從最初讀到最後,整理這段歷程…') + '</span>';
+    global.kbAiBusy.show(body, kind === 'snapshot' ? 'AI 正在整理這份資料…' : 'AI 正在從最初讀到最後,整理這段歷程…', { expect: kind === 'snapshot' ? 10 : 18 });
     Promise.resolve(global.kbAiAsk(buildHead(kind) + '【分析對象】' + title + (kind === 'snapshot' ? '\n【資料(目前這一刻)】\n' : '\n【資料(由最初到最後)】\n') + table)).then(function (txt) {
       txt = String(txt || '');
       if (!txt || txt.indexOf('⚠️') === 0) { body.innerHTML = '<span style="color:#b91c1c">' + esc(txt || 'AI 沒有回應,請稍後再試。') + '</span>'; return; }

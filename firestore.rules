@@ -55,6 +55,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // AI 金鑰(老師存到雲端、讓學生在家也能用 AI):瀏覽器完全不能讀寫。
+    // 只有 Vercel 上的伺服器程式(用 Firebase 服務帳戶,不受這些規則限制)才存取 kb_secret/ai。
+    match /kb_secret/{docId} {
+      allow read, write: if false;
+    }
+
     // 其他所有路徑一律關閉
     match /{document=**} {
       allow read, write: if false;
