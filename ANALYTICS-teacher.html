@@ -551,7 +551,7 @@
                 <div class="card flex flex-col gap-6">
                     <div>
                         <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-compass text-indigo-500 mr-2"></i>鷹架分佈:前期 → 後期</h3><button class="ref-btn" onclick="openRef('principles')"><i class="fas fa-book"></i> Ref:</button></div>
-                        <p class="text-[11px] text-slate-500 mb-1 leading-relaxed">把全部貼文依時間分成前、中、後三段,看<b>各類型占的比例</b>怎麼變。</p>
+                        <p class="text-[11px] text-slate-500 mb-1 leading-relaxed">把全部貼文依時間分成前、中、後三段,看<b>各類型占的比例</b>怎麼變;最右邊的「綜合」是全部貼文合起來的比例。</p>
                         <div id="phase-insight" class="text-xs text-slate-700 leading-relaxed mb-2"></div>
                         <div class="h-[230px]"><canvas id="principlesChart" role="img" aria-label="前期、中期、後期的貼文類型比例堆疊柱狀圖">貼文類型比例</canvas></div>
                         <div id="phase-legend" class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-600"></div>
@@ -1433,16 +1433,17 @@ async function geminiFetch(key, init) {
             { k: 'counter', name: '反駁', color: '#ef4444', sym: '≠' },
             { k: 'riseabove', name: '整合', color: '#a855f7', sym: '★' }
         ];
-        const PH_NAMES = ['前期', '中期', '後期'];
+        const PH_NAMES = ['前期', '中期', '後期', '綜合'];   // 最後一根「綜合」= 全部貼文合起來
         function scaffoldPhaseData(nodes) {
             const list = (nodes || []).filter(n => PH_TYPES.some(t => t.k === n.type)).sort((x, y) => trajTs(x) - trajTs(y));
             if (list.length < 9) return null;
             const third = Math.ceil(list.length / 3), parts = [list.slice(0, third), list.slice(third, 2 * third), list.slice(2 * third)];
-            const pct = parts.map(p => PH_TYPES.map(t => p.length ? p.filter(n => n.type === t.k).length / p.length * 100 : 0));
-            const range = parts.map(p => p.length ? trajMD(trajTs(p[0])) + '~' + trajMD(trajTs(p[p.length - 1])) : '');
+            const four = parts.concat([list]);   // 前、中、後期 + 綜合(全部)
+            const pct = four.map(p => PH_TYPES.map(t => p.length ? p.filter(n => n.type === t.k).length / p.length * 100 : 0));
+            const range = four.map(p => p.length ? trajMD(trajTs(p[0])) + '~' + trajMD(trajTs(p[p.length - 1])) : '');
             const txt = pct.map(r => PH_TYPES.map((t, i) => t.name + ' ' + r[i].toFixed(1) + '%').join('、'));
             const diffs = PH_TYPES.map((t, i) => ({ t: t, from: pct[0][i], to: pct[2][i], d: pct[2][i] - pct[0][i] })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
-            return { pct: pct, range: range, txt: txt, diffs: diffs, n: list.length, sizes: parts.map(p => p.length) };
+            return { pct: pct, range: range, txt: txt, diffs: diffs, n: list.length, sizes: four.map(p => p.length) };
         }
         function renderScaffoldPhases(nodes, step) {
             const cv = document.getElementById('principlesChart'); if (!cv) return;
@@ -1465,7 +1466,7 @@ async function geminiFetch(key, init) {
                 scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 } } }, y: { stacked: true, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } } } } } };
             if (principlesChartInstance) { principlesChartInstance.destroy(); principlesChartInstance = null; }
             principlesChartInstance = new Chart(cv.getContext('2d'), cfg);
-            cv.setAttribute('aria-label', '前期、中期、後期的貼文類型比例:' + P.txt.map((t, i) => PH_NAMES[i] + ' ' + t).join(';'));
+            cv.setAttribute('aria-label', '前期、中期、後期與綜合(全部)的貼文類型比例:' + P.txt.map((t, i) => PH_NAMES[i] + ' ' + t).join(';'));
         }
 
         function renderOverviewTrajectory(nodes) {
@@ -3571,7 +3572,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: "鷹架分佈:前期 → 後期",
                 theory: "看全班把想法「用什麼動作」說出來(提問、延伸、改進、反駁、整合),以及這些動作的比例從學期前期到後期怎麼變。如果提問變少、改進與整合變多,代表討論從「問問題」走向「把想法變好」。",
                 source: "Chen, B., Resendes, M., Chai, C. S., & Hong, H.-Y. (2017). Two tales of time: Uncovering the significance of sequential patterns among contribution types in knowledge-building discourse. <i>Interactive Learning Environments, 25</i>(2), 162–175. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/10494820.2016.1276081\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
-                how: "把目前看得到的全部貼文依時間平分成前期、中期、後期三段(每段貼文數一樣多),計算各類型在每一段占的百分比,堆成 100% 的柱子。圖上方一句話指出前期到後期變化最大的類型。播放時看的是「截至那一天為止」的三段。貼文少於 9 則時不分段。",
+                how: "把目前看得到的全部貼文依時間平分成前期、中期、後期三段(每段貼文數一樣多),計算各類型在每一段占的百分比,堆成 100% 的柱子。最右邊多一根「綜合」,是全部貼文合起來的比例,可以當作整體的基準來對照。圖上方一句話指出前期到後期變化最大的類型。播放時看的是「截至那一天為止」的三段。貼文少於 9 則時不分段。",
                 diff: "類型是學生發文時自己選的,不是人工編碼,所以只是「大致的討論動作」。三段是依貼文數平分,不一定對應真正的教學單元。某一類變多或變少本身不代表好壞,請回到原貼文看內容。",
                 ai_prompt: '如何提高「改進」與「整合」的比例？'
             },
