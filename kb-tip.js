@@ -72,6 +72,33 @@
     return null;
   }
 
+  // 一般網頁元素(小標籤、符號、按鈕):滑鼠移到(或鍵盤停在、手機點一下)就跳出說明。
+  // o = { root, selector, html(el) → 說明的 HTML 或 null(null = 這個元素不顯示說明) }
+  function attach(o) {
+    css(); var root = o.root || doc, sel = o.selector, el = doc.createElement('div'), cur = null, timer = 0;
+    el.className = 'kbt-tip'; el.setAttribute('role', 'tooltip'); el.style.position = 'fixed'; el.style.zIndex = '200'; el.style.width = 'min(340px,calc(100vw - 16px))'; doc.body.appendChild(el);
+    function place(x, y) {
+      var w = el.offsetWidth || 300, h = el.offsetHeight || 100, W = global.innerWidth, H = global.innerHeight, left = x + 16, top = y + 20;
+      if (left + w > W - 8) left = x - w - 16; if (left < 8) left = clamp(x - w / 2, 8, Math.max(8, W - w - 8));
+      if (top + h > H - 8) top = y - h - 16; if (top < 8) top = 8;
+      el.style.left = left + 'px'; el.style.top = top + 'px';
+    }
+    function hide() { el.classList.remove('show'); cur = null; clearTimeout(timer); }
+    function show(t, x, y) { var h = null; try { h = o.html(t); } catch (e) { if (global.console) console.error(e); } if (!h) { hide(); return; } if (cur !== t || el.__h !== h) { el.innerHTML = h; el.__h = h; cur = t; } el.classList.add('show'); place(x, y); }
+    function find(t) { var e = t && t.closest ? t.closest(sel) : null; return e && root.contains && root.contains(e) ? e : null; }
+    function mv(ev) { var t = find(ev.target); if (t) show(t, ev.clientX, ev.clientY); else if (cur) hide(); }
+    root.addEventListener('mouseover', mv); root.addEventListener('mousemove', mv);
+    root.addEventListener('mouseout', function (ev) { if (cur && !find(ev.relatedTarget)) hide(); });
+    root.addEventListener('focusin', function (ev) { var t = find(ev.target); if (t) { var r = t.getBoundingClientRect(); show(t, r.left + r.width / 2, r.bottom - 6); } });
+    root.addEventListener('focusout', hide);
+    doc.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });
+    global.addEventListener('scroll', hide, { passive: true, capture: true });
+    root.addEventListener('pointerdown', function () { hide(); });
+    // 手機沒有「移上去」:點一下標籤,先出說明(再點一下才執行)——只對「純說明」的小標籤做,按鈕維持一點就執行
+    root.addEventListener('click', function (ev) { if (!(global.matchMedia && global.matchMedia('(hover: none)').matches)) return; var t = find(ev.target); if (t && t.hasAttribute && t.hasAttribute('data-tapinfo')) { show(t, ev.clientX, ev.clientY); clearTimeout(timer); timer = setTimeout(hide, 6000); } });
+    return { el: el, hide: hide, show: show };
+  }
+
   // vis-network 的圖:滑鼠移到圓球或線,跳出說明泡泡。o.node(id) / o.edge(id) 回傳 { html, key } 或 null
   function vis(net, container, o) {
     var card = (container.closest && container.closest('.card')) || container.parentElement, tip = create(card), ms = { x: 0, y: 0 };
@@ -81,5 +108,5 @@
     net.on('hoverEdge', function (p) { go(o.edge, p.edge, 'e:'); }); net.on('blurEdge', function () { tip.hide(); });
     return { tip: tip, hoverNode: function (id) { go(o.node, id, 'n:'); }, hoverEdge: function (id) { go(o.edge, id, 'e:'); } };
   }
-  global.KBTip = { create: create, h: h, esc: esc, radarHit: radarHit, css: css, vis: vis };
+  global.KBTip = { create: create, h: h, esc: esc, radarHit: radarHit, css: css, vis: vis, attach: attach };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -15,6 +15,7 @@
 <script src="kb-ui.js"></script>
 <script src="kb-ai.js"></script>
 <script src="kb-ai-story.js"></script>
+<script src="kb-tip.js"></script>
 <script src="kb-asra-push.js"></script>
 <script src="kb-asra-refs.js"></script>
 <script src="kb-asra-src.js"></script>
@@ -406,7 +407,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   function link(n) { return 'Knowledge Building Forum.html?topic=' + encodeURIComponent(n.topicId) + '&node=' + encodeURIComponent(n.id); }
   // 「看原文」:在目前畫面彈出唯讀視窗,不離開 ASRA 頁面(按住 Ctrl 點才會另開論壇分頁)
   function openOrig(id) { KBUI.postViewer.open(id, { nodes: nodes, topics: topics, nameOf: nameOf }); }
-  function tyDot(t) { return '<span class="ty" style="background:' + ASRA.TCOLOR[t] + '">' + (ASRA.TSYM[t] || '·') + '</span>'; }
+  function tyDot(t) { return '<span class="ty" data-ty="' + esc(t) + '" tabindex="0" style="background:' + ASRA.TCOLOR[t] + '">' + (ASRA.TSYM[t] || '·') + '</span>'; }
   function stPill(s) { return { wait: '<span class="pill todo"><i class="fas fa-hourglass-half"></i> 等同學回應</span>', check: '<span class="pill warn"><i class="fas fa-flask"></i> 待查證</span>', ok: '<span class="pill ok"><i class="fas fa-circle-check"></i> 有證據</span>', grow: '<span class="pill dev"><i class="fas fa-seedling"></i> 在發展</span>' }[s]; }
   function ideaById(id) { return data.ideas.filter(function (i) { return i.id === id; })[0]; }
 
@@ -711,12 +712,12 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   var CSHORT = { Q3: 'Q3', Q4: 'Q4', Q5: 'Q5', Q6: 'Q6', evid: '證據/回饋', idea: '我做的事' };
   function wsCardHtml(c) {
     var vv0 = KBSrc.applyView(c.records, curView()), n = KBSrc.counts(vv0.A.concat(vv0.B));
-    var pills = ['Q3', 'Q4', 'Q5', 'Q6', 'evid', 'idea'].filter(function (k) { return n[k]; }).map(function (k) { var C = KBSrc.CATS[k]; return '<button type="button" class="mini pillbtn" data-catpop="' + k + '" data-card="' + esc(c.id) + '" style="background:' + C.bg + ';color:' + C.color + '" title="點一下,看這 ' + n[k] + ' 則回答">' + CSHORT[k] + ' ' + n[k] + '</button>'; }).join('');
-    return '<div class="idea"><div class="flex items-start gap-2"><span class="ty" style="background:#7c3aed"><i class="fas fa-file-lines" style="font-size:.7rem"></i></span><div class="flex-1 min-w-0"><div class="font-black text-slate-800">' + esc(c.title) + '</div><div class="text-xs text-slate-500">' + esc(c.sub || '') + '</div></div></div><div class="mt-2">' + pills + '</div>' +
+    var pills = ['Q3', 'Q4', 'Q5', 'Q6', 'evid', 'idea'].filter(function (k) { return n[k]; }).map(function (k) { var C = KBSrc.CATS[k]; return '<button type="button" class="mini pillbtn" data-catpop="' + k + '" data-card="' + esc(c.id) + '" style="background:' + C.bg + ';color:' + C.color + '">' + CSHORT[k] + ' ' + n[k] + '</button>'; }).join('');
+    return '<div class="idea"><div class="flex items-start gap-2"><span class="ty" data-ty="_ws" tabindex="0" style="background:#7c3aed"><i class="fas fa-file-lines" style="font-size:.7rem"></i></span><div class="flex-1 min-w-0"><div class="font-black text-slate-800">' + esc(c.title) + '</div><div class="text-xs text-slate-500">' + esc(c.sub || '') + '</div></div></div><div class="mt-2">' + pills + '</div>' +
       '<div class="flex gap-2 mt-3"><button type="button" class="btn p" style="padding:.3rem .8rem;font-size:.8rem" data-reflect="' + esc(c.id) + '">拿這個去反思 <i class="fas fa-arrow-right"></i></button></div></div>';
   }
   function manCardHtml(c) {
-    return '<div class="idea"><div class="flex items-start gap-2"><span class="ty" style="background:#0ea5e9"><i class="fas fa-pen" style="font-size:.7rem"></i></span><div class="flex-1 min-w-0"><div class="font-black text-slate-800">' + esc(c.title) + '</div><div class="text-xs text-slate-500">' + esc(c.sub || '') + '</div></div></div>' + (c.text ? '<p class="text-sm text-slate-600 mt-2">' + esc(cut(c.text, 80)) + '</p>' : '') +
+    return '<div class="idea"><div class="flex items-start gap-2"><span class="ty" data-ty="_man" tabindex="0" style="background:#0ea5e9"><i class="fas fa-pen" style="font-size:.7rem"></i></span><div class="flex-1 min-w-0"><div class="font-black text-slate-800">' + esc(c.title) + '</div><div class="text-xs text-slate-500">' + esc(c.sub || '') + '</div></div></div>' + (c.text ? '<p class="text-sm text-slate-600 mt-2">' + esc(cut(c.text, 80)) + '</p>' : '') +
       '<div class="flex gap-2 mt-3"><button type="button" class="btn p" style="padding:.3rem .8rem;font-size:.8rem" data-reflect="' + esc(c.id) + '">拿這個去反思 <i class="fas fa-arrow-right"></i></button></div></div>';
   }
   // 學習單與自己新增的想法(論壇的想法在上面的卡片)
@@ -1096,6 +1097,65 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     ov.querySelector('#cat-go').onclick = function () { close(); selIdea = id; SRC.pref = famOf(id); go(2); };
     try { ov.querySelector('#cat-close').focus(); } catch (e) {}
   }
+
+  /* ---- 滑鼠移上去的說明:小標籤、符號、按鈕、步驟都會說明「這是什麼、點了會怎樣」 ---- */
+  var STEP_TIPS = [
+    ['Monitoring · 監控', '回頭看你寫過的想法和同學的回應,先看見「發生了什麼」。這一步只是看,不評分。'],
+    ['Evaluation · 評估', '挑一個想法,看它有沒有人回應、有沒有證據、有沒有被改進,量一量它「走多遠」。'],
+    ['Reflection · 證據支持的反思', '拿同學的回應和證據當材料,寫下你的想法有沒有越想越深入、哪裡還要再想。'],
+    ['Self-regulation · 自我調整', '根據反思訂一個具體的小計畫(補證據、改想法、問同學…),下一步要做什麼。'],
+    ['Iteration · 持續改進', '計畫做了之後回頭檢查:想法有沒有往前走?還要不要再來一輪?']
+  ];
+  var TY_TIPS = { question: ['提問', '你(或同學)提出了一個問題。', '#ef4444'], extend: ['延伸', '接著別人的想法補充、延伸。', '#3b82f6'], improve: ['改進', '把想法改得更好、更清楚。', '#22c55e'], counter: ['反例', '提出不同的看法或反例,檢驗想法。', '#f59e0b'], riseabove: ['昇華', '把零散的想法整理成更大的觀點。', '#a855f7'], _ws: ['學習單的想法', '這張卡來自學習單(省思單、成就單、回饋單…)裡你寫下的回答。', '#7c3aed'], _man: ['我自己新增的想法', '這是你自己寫下的想法(討論、實驗、作品,或剛想到的)。', '#0ea5e9'] };
+  var STATUS_TIPS = {
+    '等同學回應': ['等同學回應', '這個想法還沒有同學回應。可以去問問同學、或補充說明,讓更多人看到。', '#64748b'],
+    '待查證': ['待查證', '有人回應了,但你和同學的話裡還沒看到證據字眼(例如實驗、觀察、測量、資料、紀錄)。', '#d97706'],
+    '有證據': ['有證據', '你或同學的話裡提到了證據字眼(實驗、觀察、資料、紀錄…)。系統只看字眼,不判斷對不對,要自己再確認。', '#059669'],
+    '在發展': ['在發展', '這個想法之後有人接著改進或昇華,想法正在往前長。', '#4f46e5']
+  };
+  var LEGEND_TIPS = { '有人回應、也有證據': '有證據', '有人回應但還沒證據': '待查證', '還沒人回應': '等同學回應', '已經被改進或整合': '在發展' };
+  var BTN_TIPS = [
+    ['看原文', '看原文', '打開這則貼文的原文(唯讀視窗),不用離開這一頁。'],
+    ['拿這個去反思', '拿這個去反思', '把這個想法帶到「第 3 步 用證據想一想」,用它的證據寫下你的反思。'],
+    ['存下我的反思', '存下我的反思', '把你寫的反思存起來(只增不改,會記錄日期),之後可以回頭看。'],
+    ['下一步:決定怎麼做', '下一步', '前往「第 4 步 決定下一步」,根據這次反思訂一個小計畫。'],
+    ['訂好我的計畫', '訂好我的計畫', '把你選的行動和計畫存起來;做完之後再回「第 5 步」檢查。'],
+    ['去論壇行動', '去論壇行動', '回到知識論壇這個想法所在的討論,去做你選的行動(例如回應同學、補充證據)。'],
+    ['看全部', '看全部', '目前只顯示最新的 8 個,點了會把全部都列出來。'],
+    ['只看最新 8 個', '只看最新 8 個', '把清單收回到最新的 8 個。']
+  ];
+  var SRC_TIPS = { all: '論壇的想法、學習單的想法、自己新增的想法,全部一起看。', forum: '只看你在知識論壇發過的貼文(想法),以及同學對它的回應。', ws: '只看學習單裡你寫下的回答,依「想法單位」整理成卡片。', manual: '只看你自己新增的想法。' };
+  function tipH(title, tag, bg) { return window.KBTip.h(esc(title), tag ? esc(tag) : '', bg); }
+  function tipFor(el) {
+    var K = window.KBTip, t, txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (el.hasAttribute('data-catpop')) {   // 「Q3 1」「我做的事 3」:這一類回答
+      var cat = el.getAttribute('data-catpop'), c = cardOf(el.getAttribute('data-card')); if (!c || !window.KBSrc) return null;
+      var C = KBSrc.CATS[cat] || KBSrc.CATS.none, vv = KBSrc.applyView(c.records, curView()), recs = vv.A.concat(vv.B).filter(function (r) { return r.cat === cat; });
+      var pv = recs.slice(0, 2).map(function (r) { return '<p style="margin-top:6px;padding-left:8px;border-left:3px solid ' + C.color + '55"><span style="color:#64748b;font-size:13px">' + esc(KBSrc.stageName(r.stage)) + '・' + esc(r.form || '') + '</span><br>' + esc(cut(r.text || '(沒有寫)', 54)) + '</p>'; }).join('');
+      return tipH(C.name, recs.length + ' 則', C.color) + '<p>' + esc(C.zh) + '。這張卡(' + esc(cut(c.title, 22)) + ')裡有 <span class="hl">' + recs.length + '</span> 則這一類的回答。</p>' + pv + (recs.length > 2 ? '<p style="color:#64748b;font-size:14px">還有 ' + (recs.length - 2) + ' 則…</p>' : '') + '<div class="nx">點一下,看這 ' + recs.length + ' 則完整的回答(是你「當時」寫的,只當反思的材料)。</div>';
+    }
+    if (el.classList.contains('step-btn')) { var i = +el.getAttribute('data-i'), S = STEPS[i], T = STEP_TIPS[i]; if (!S) return null; return tipH('第 ' + (i + 1) + ' 步 ' + S.zh, i === cur ? '現在在這裡' : (i < cur ? '做過了' : ''), '#4f46e5') + '<p>' + esc(T[0]) + '</p><p>' + esc(T[1]) + '</p><div class="nx">點一下,就跳到這一步。</div>'; }
+    if (el.hasAttribute('data-ty')) { var ty = TY_TIPS[el.getAttribute('data-ty')]; if (!ty) return null; return tipH(ty[0], '', ty[2]) + '<p>' + esc(ty[1]) + '</p>'; }
+    if (el.hasAttribute('data-sf')) { var sf = el.getAttribute('data-sf'); return tipH('想法來源:' + txt.replace(/\s*\d+$/, ''), '', '#4f46e5') + '<p>' + esc(SRC_TIPS[sf] || '') + '</p><div class="nx">點一下,只看這個來源的想法。</div>'; }
+    if (el.classList.contains('pill') && STATUS_TIPS[txt]) { t = STATUS_TIPS[txt]; return tipH(t[0], '想法的狀態', t[2]) + '<p>' + esc(t[1]) + '</p>'; }
+    if (LEGEND_TIPS[txt] && STATUS_TIPS[LEGEND_TIPS[txt]]) { t = STATUS_TIPS[LEGEND_TIPS[txt]]; return tipH(t[0], '想法的狀態', t[2]) + '<p>' + esc(t[1]) + '</p>'; }
+    if (el.tagName === 'BUTTON' || el.tagName === 'A') { for (var b = 0; b < BTN_TIPS.length; b++) if (txt.indexOf(BTN_TIPS[b][0]) === 0) return tipH(BTN_TIPS[b][1], '', '#4f46e5') + '<p>' + esc(BTN_TIPS[b][2]) + '</p>'; }
+    var m0 = /^同學回應 (\d+) 則$/.exec(txt); if (m0) return tipH('同學回應 ' + m0[1] + ' 則', '', '#4f46e5') + '<p>有 <span class="hl">' + m0[1] + '</span> 則別人(不是你)的貼文,直接回應了這個想法。</p><div class="nx">點「看原文」可以讀他們說了什麼。</div>';
+    var m1 = /^不同看法 (\d+) 則$/.exec(txt); if (m1) return tipH('不同看法 ' + m1[1] + ' 則', '反例', '#e11d48') + '<p>同學的回應裡,有 <span class="hl">' + m1[1] + '</span> 則是「反例」類型:他們提出了不同的看法或反例。</p><div class="nx">不同看法不是壞事,通常是讓想法變更好的機會。</div>';
+    if (txt === '我有寫證據') return tipH('我有寫證據', '', '#059669') + '<p>你這則貼文裡,有提到證據字眼(實驗、觀察、測量、資料、紀錄…)。系統只看字眼,不判斷證據對不對。</p>';
+    if (txt === '我還沒寫證據') return tipH('我還沒寫證據', '', '#d97706') + '<p>你這則貼文裡,還沒看到證據字眼(實驗、觀察、測量、資料、紀錄…)。可以去查一查、做一做,把看到的結果補上。</p><div class="nx">拿這個想法去反思,就能決定怎麼補證據。</div>';
+    var m = /^(\d+) 則回答・(G\d+) 組$/.exec(txt); if (m) return tipH(m[1] + ' 則回答', m[2] + ' 組', '#7c3aed') + '<p>這張學習單想法卡裡,有 <span class="hl">' + m[1] + '</span> 則 ' + esc(m[2]) + ' 組同學(含你)當時寫下的回答。</p><div class="nx">下面的 Q3、Q4…標籤是這些回答依反思題目分的類,可以點進去看。</div>';
+    if (/^\d+ 個$/.test(txt) && el.closest('h4')) return tipH(txt, '', '#64748b') + '<p>在目前的「想法單位」和「時間方式」下,看得到的想法卡數量。</p>';
+    if (el.classList.contains('rounded-full') && /^[1-5]$/.test(txt) && STEPS[+txt - 1]) { var sn = +txt - 1; return tipH('第 ' + txt + ' 步 ' + STEPS[sn].zh, STEPS[sn].en, '#4f46e5') + '<p>' + esc(STEP_TIPS[sn][1]) + '</p>'; }
+    if (txt.indexOf('學習單的想法,用什麼單位整理') === 0 && window.KBSrc) { var U = KBSrc.UNITS[SRC.unit] || KBSrc.UNITS.stage; return tipH('想法單位:' + U.name, '', '#7c3aed') + '<p>' + esc(U.what) + '</p><p>' + esc(U.why) + '</p><div class="nx">' + esc(U.next) + '</div>'; }
+    if (txt.indexOf('看這些回答的方式') === 0 && window.KBSrc) { var Mo = KBSrc.MODES[curView().mode]; if (!Mo) return null; return tipH('時間方式:' + Mo.name, '', '#7c3aed') + '<p>' + esc(Mo.what) + '</p><p>' + esc(Mo.why) + '</p><div class="nx">' + esc(Mo.next) + '</div>'; }
+    if (txt.indexOf('我的想法') === 0 && el.classList.contains('font-black')) return tipH('我的想法', '', '#4f46e5') + '<p>這是你當時寫的那則貼文,也是這次反思的主角。</p>';
+    if (txt.indexOf('同學的回應') === 0 && el.classList.contains('font-black')) return tipH('同學的回應(證據)', '', '#4f46e5') + '<p>同學對你的想法說了什麼。看看他們是支持、質疑還是補充了什麼,這些可以當作想法有沒有進步的證據。</p>';
+    if (txt.indexOf('不知道怎麼開頭') === 0) return tipH('句子開頭', '', '#4f46e5') + '<p>點下面的句子開頭,會自動加進你的反思欄,再接著寫完就好。</p>';
+    if (txt.indexOf('前後測(每個循環') === 0) return tipH('前後測', '', '#4f46e5') + '<p>每個循環前測、後測的平均分數,只是參考,不代表想法有多深。</p>';
+    return null;
+  }
+  setTimeout(function () { if (window.KBTip && KBTip.attach) KBTip.attach({ root: document.body, selector: '[data-catpop],.step-btn,[data-ty],[data-sf],.pill,button.btn,a.btn,button.chip,.rounded-full,.text-xs,h4 .text-xs,label,div.font-black,.mt-1.text-xs,.mt-2.text-xs,.text-xs span', html: tipFor }); }, 0);
   function bindSrc(q, qa) {
     var redraw = function () { saveView(); renderPanel(); };
     qa('[data-gk]').forEach(function (b) { b.onclick = function () { var g = gs(b.getAttribute('data-gk')); g.open = !g.open; renderKeep(); }; });
