@@ -14,6 +14,9 @@
 <script src="kb-cloud.js"></script>
 <script src="kb-ui.js"></script>
 <script src="kb-ai.js"></script>
+<script src="kb-ai-story.js"></script>
+<script src="kb-asra-push.js"></script>
+<script src="kb-asra-refs.js"></script>
 <script src="kb-asra-src.js"></script>
 <script src="kb-asra.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
@@ -46,6 +49,8 @@ textarea,select,input[type=text]{width:100%;border:2px solid #dbe4f6;border-radi
 textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
 .starter{display:inline-block;margin:.2rem .3rem .2rem 0;padding:.25rem .7rem;border-radius:99px;background:#fff;border:1.5px dashed #a5b4fc;color:#4338ca;font-size:.82rem;font-weight:700;cursor:pointer}
 .starter:hover{background:#eef0ff}
+.pushc{border:2px solid #ddd6fe;border-radius:16px;padding:.85rem .95rem;background:#fff}.pushc.ai{border-color:#c4b5fd;background:#faf5ff}.pushc.picked{border-color:#4f46e5;box-shadow:0 4px 12px rgba(79,70,229,.18)}
+.pushc ol{margin:.35rem 0 .2rem 1.1rem;list-style:decimal;font-size:.86rem;color:#334155}.pushc .why{font-size:.78rem;color:#64748b}
 .phase{display:inline-block;font-size:.7rem;font-weight:900;padding:.1rem .6rem;border-radius:99px}
 .qlab{display:flex;gap:.55rem;align-items:flex-start;font-weight:900;color:#334155;font-size:.95rem;line-height:1.5}
 .qno{flex:none;width:1.55rem;height:1.55rem;border-radius:50%;background:#4f46e5;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;margin-top:.05rem}
@@ -150,7 +155,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     if (i) return { ideaTitle: i.title, ideaStatus: i.status, topic: i.topic, topicId: i.topicId, srcType: 'forum' };
     var c = cardOf(id); if (!c) return {};
     var v = curView(), o = { ideaTitle: c.title, topic: c.sub || '', srcType: c.src, srcRef: id, unit: c.unit };
-    if (c.src === 'ws') { o.timeMode = v.mode; o.asOf = v.asOf; if (v.mode === 'compare') { o.cmpA = v.a; o.cmpB = v.b; } }
+    if (c.src === 'ws') { o.timeMode = v.mode; o.asOf = v.asOf; if (v.mode === 'compare') { o.cmpA = v.a; o.cmpB = v.b; o.cmpPairs = v.pairs; } }
     return o;
   }
   function add(e) { var x = KBAsra.append(uid, e); reload(); return x; }
@@ -159,21 +164,28 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
    * ASRA 不再要求「先有論壇貼文」,而是「先有一個可以被反思的想法」。
    * 想法的三種來源:論壇貼文(原本的做法)、學習單(匯入資料包,見 kb-asra-src.js)、學生自己新增。
    * 學習單的回答依「時間方式」顯示:回到當時 / 回顧全部 / 前後對照。 */
-  var SRC = { filter: 'all', unit: 'stage', mode: 'all', asOf: null, a: null, b: null, openMan: false, importMsg: '', pref: '' };
+  var SRC = { filter: 'all', unit: 'stage', mode: 'all', asOf: null, a: null, b: null, pairs: null, openMan: false, importMsg: '', pref: '' };
   function famOf(id) { id = String(id || ''); return /^ws:/.test(id) ? 'ws' : /^manual:/.test(id) ? 'manual' : 'forum'; }
   function wsOn() { return !!(window.KBSrc && KBSrc.has(uid)); }
   function viewKey() { return 'kb_asra_view_' + uid; }
   function initSrc() {
-    SRC.filter = 'all'; SRC.unit = 'stage'; SRC.mode = 'all'; SRC.asOf = null; SRC.a = null; SRC.b = null; SRC.openMan = false; SRC.importMsg = '';
-    try { var o = JSON.parse(localStorage.getItem(viewKey()) || 'null'); if (o) ['filter', 'unit', 'mode', 'asOf', 'a', 'b'].forEach(function (k) { if (o[k] !== undefined) SRC[k] = o[k]; }); } catch (e) {}
+    SRC.filter = 'all'; SRC.unit = 'stage'; SRC.mode = 'all'; SRC.asOf = null; SRC.a = null; SRC.b = null; SRC.pairs = null; SRC.openMan = false; SRC.importMsg = '';
+    try { var o = JSON.parse(localStorage.getItem(viewKey()) || 'null'); if (o) ['filter', 'unit', 'mode', 'asOf', 'a', 'b', 'pairs'].forEach(function (k) { if (o[k] !== undefined) SRC[k] = o[k]; }); } catch (e) {}
   }
-  function saveView() { try { localStorage.setItem(viewKey(), JSON.stringify({ filter: SRC.filter, unit: SRC.unit, mode: SRC.mode, asOf: SRC.asOf, a: SRC.a, b: SRC.b })); } catch (e) {} }
+  function saveView() { try { localStorage.setItem(viewKey(), JSON.stringify({ filter: SRC.filter, unit: SRC.unit, mode: SRC.mode, asOf: SRC.asOf, a: SRC.a, b: SRC.b, pairs: SRC.pairs })); } catch (e) {} }
   function curView() {
     var on = wsOn(), lat = on ? KBSrc.latestOrd(uid) : 0, ds = on ? KBSrc.stagesWithData(uid) : [0];
     var asOf = (SRC.asOf == null || SRC.asOf > lat || SRC.asOf < 0) ? lat : SRC.asOf;
     var a = (SRC.a == null || ds.indexOf(SRC.a) < 0) ? ds[0] : SRC.a, b = (SRC.b == null || ds.indexOf(SRC.b) < 0) ? ds[ds.length - 1] : SRC.b;
     if (a > b) { var t = a; a = b; b = t; }
-    return { mode: SRC.mode, asOf: asOf, a: a, b: b };
+    // 前後對照:最多 6 組(沒選過就用建議的六組);每組「之前」排左邊、「之後」排右邊
+    var raw = (SRC.pairs && SRC.pairs.length) ? SRC.pairs : (on ? KBSrc.defaultPairs(ds) : [[a, b]]), pairs = [];
+    raw.slice(0, 6).forEach(function (p) {
+      var x = ds.indexOf(p[0]) < 0 ? ds[0] : p[0], y = ds.indexOf(p[1]) < 0 ? ds[ds.length - 1] : p[1]; if (x > y) { var t2 = x; x = y; y = t2; } pairs.push([x, y]);
+    });
+    if (!pairs.length) pairs = [[a, b]];
+    if (SRC.mode === 'compare') { a = pairs[0][0]; b = pairs[0][1]; }
+    return { mode: SRC.mode, asOf: asOf, a: a, b: b, pairs: pairs };
   }
   function isLocalId(id) { return /^(ws:|manual:)/.test(String(id || '')); }
   function manCards() { return window.KBSrc ? KBSrc.manualCards(S.ideas || [], uid) : []; }
@@ -236,7 +248,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
         '<div class="modeinfo"><b>' + u.name + '</b>:' + u.what + '<br><span class="text-slate-500">為什麼:</span>' + u.why + '<br><span class="text-slate-500">接下來可以:</span>' + u.next + (SRC.unit === 'thread' ? threadNote() : '') + '</div></div>';
       h += '<div class="mt-3"><div class="text-xs font-black text-slate-600 mb-1">看這些回答的方式(時間方式)</div><div class="flex flex-wrap gap-2">' + ['then', 'all', 'compare'].map(function (k) { return '<button type="button" class="mode' + (v.mode === k ? ' on' : '') + '" data-mode="' + k + '"><b><i class="fas ' + M[k].icon + ' mr-1 text-indigo-500"></i>' + M[k].name + '</b><span>' + M[k].what + '</span></button>'; }).join('') + '</div>';
       var stOpt = function (sel) { return stages.map(function (o) { return '<option value="' + o + '"' + (o === sel ? ' selected' : '') + '>' + KBSrc.STAGES[o].name + '</option>'; }).join(''); };
-      h += '<div class="mt-2 flex flex-wrap items-center gap-2"><span class="text-sm font-bold text-slate-700">' + m.pick + '</span>' + (v.mode === 'compare' ? '<select id="src-a" style="width:auto">' + stOpt(v.a) + '</select><span class="font-black text-slate-500">↔</span><select id="src-b" style="width:auto">' + stOpt(v.b) + '</select>' : '<select id="src-asof" style="width:auto">' + stOpt(v.asOf) + '</select>') + '</div>' +
+      h += '<div class="mt-2 flex flex-wrap items-center gap-2"><span class="text-sm font-bold text-slate-700">' + m.pick + '</span>' + (v.mode === 'compare' ? '<span class="text-xs text-slate-500">最多 6 組,每組「之前 ↔ 之後」</span>' : '<select id="src-asof" style="width:auto">' + stOpt(v.asOf) + '</select>') + '</div>' + (v.mode === 'compare' ? pairEditor(v, stOpt) : '') +
         '<div class="modeinfo mt-2"><b>' + m.name + '</b>:' + m.what + '<br><span class="text-slate-500">為什麼這樣做:</span>' + m.why + '<br><span class="text-slate-500">接下來可以做什麼:</span>' + m.next + '</div></div>';
     }
     return h + (SRC.openMan ? manualForm() : '') + '</div>';
@@ -261,6 +273,77 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     return '<div class="rec' + (r.later ? ' later' : '') + '"><div class="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500"><span class="pill todo" style="padding:.05rem .45rem">' + esc(KBSrc.stageName(r.stage)) + '</span><span>' + esc(r.form) + '</span>' + (r.later ? '<span class="pill warn" style="padding:.05rem .45rem">🕒 後來才出現</span>' : '') + C2 + '</div>' +
       '<div class="text-[11px] text-slate-400 mt-0.5">題目:' + esc(cut(r.q, 70)) + '</div><div class="text-sm text-slate-800 mt-0.5 whitespace-pre-wrap">' + esc(r.text || '(沒有寫)') + '</div></div>';
   }
+
+  /* ---- 前後對照:最多 6 組 + AI 解說 ---- */
+  function pairEditor(v, stOpt) {
+    var rows = v.pairs.map(function (p, i) {
+      return '<div class="flex flex-wrap items-center gap-2"><span class="pill todo" style="min-width:3.4rem;text-align:center">第 ' + (i + 1) + ' 組</span><select data-pa="' + i + '" style="width:auto" aria-label="第 ' + (i + 1) + ' 組:之前">' + stOpt(p[0]) + '</select><span class="font-black text-slate-500">↔</span><select data-pb="' + i + '" style="width:auto" aria-label="第 ' + (i + 1) + ' 組:之後">' + stOpt(p[1]) + '</select>' +
+        (v.pairs.length > 1 ? '<button type="button" class="chip" data-pdel="' + i + '" aria-label="移除第 ' + (i + 1) + ' 組" title="移除這一組">✕</button>' : '') + '</div>';
+    }).join('');
+    return '<div class="mt-2 space-y-1.5" id="pair-editor">' + rows + '</div><div class="mt-2 flex flex-wrap gap-2">' + (v.pairs.length < 6 ? '<button type="button" class="chip" id="pair-add"><i class="fas fa-plus"></i> 再加一組(最多 6 組)</button>' : '<span class="text-xs text-slate-500 self-center">已經是 6 組</span>') + '<button type="button" class="chip" id="pair-reset"><i class="fas fa-rotate-left"></i> 用建議的六組</button></div>';
+  }
+  function pairName(p) { return KBSrc.STAGES[p[0]].name + ' ↔ ' + KBSrc.STAGES[p[1]].name; }
+  var CMP_CATS = ['Q3', 'Q4', 'Q5', 'Q6', 'evid', 'idea'];
+  function cmpRows(records, v) {
+    return v.pairs.map(function (p, i) {
+      var vv = KBSrc.applyView(records, { mode: 'compare', a: p[0], b: p[1] });
+      return { i: i, p: p, vv: vv, ca: KBSrc.counts(vv.A), cb: KBSrc.counts(vv.B) };
+    });
+  }
+  function compareAll(records, v) {
+    var rows = cmpRows(records, v);
+    var head = '<tr><th class="text-left py-1 pr-2">組別(之前 ↔ 之後)</th>' + CMP_CATS.map(function (k) { var C = KBSrc.CATS[k]; return '<th class="px-1 text-center" style="color:' + C.color + '">' + esc(C.name.split(' ')[0] === 'Q3' || /^Q\d/.test(C.name) ? C.name.split(' ')[0] : (k === 'evid' ? '證據' : '我做的')) + '</th>'; }).join('') + '</tr>';
+    var body = rows.map(function (r) {
+      return '<tr class="border-t border-slate-100"><td class="py-1 pr-2 text-xs font-bold text-slate-700">第 ' + (r.i + 1) + ' 組 ' + esc(pairName(r.p)) + '</td>' + CMP_CATS.map(function (k) {
+        var a = r.ca[k] || 0, b = r.cb[k] || 0, c = b > a ? '#047857' : b < a ? '#b45309' : '#64748b', arr = b > a ? '↑' : b < a ? '↓' : '＝';
+        return '<td class="px-1 text-center text-xs" style="color:' + c + '">' + a + ' → ' + b + ' ' + arr + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    var blocks = rows.map(function (r) {
+      return '<details class="mt-2 cbox"' + (r.i === 0 ? ' open' : '') + '><summary class="cursor-pointer font-black text-sm text-slate-800">第 ' + (r.i + 1) + ' 組:' + esc(pairName(r.p)) + ' <span class="text-xs font-bold text-slate-400">(之前 ' + r.vv.A.length + ' 則 ↔ 之後 ' + r.vv.B.length + ' 則回答)</span></summary>' +
+        '<div class="grid md:grid-cols-2 gap-3 mt-2 text-xs font-black text-slate-500"><div>之前:' + esc(KBSrc.STAGES[r.p[0]].name) + '</div><div>之後:' + esc(KBSrc.STAGES[r.p[1]].name) + '</div></div>' + catCompare(r.vv.A, r.vv.B) + '</details>';
+    }).join('');
+    return '<div class="mt-3 cbox"><div class="font-black text-sm text-slate-800 mb-1">' + rows.length + ' 組前後對照:各類回答的筆數(之前 → 之後)</div><div class="overflow-x-auto"><table class="w-full text-sm">' + head + body + '</table></div>' +
+      '<p class="text-[11px] text-slate-400 mt-1">↑ 之後變多、↓ 之後變少、＝ 一樣。筆數只是線索,想法有沒有變深,要看下面的原話。</p></div>' + cmpAiHtml(rows, v) + (readonly && window.KBAsraRefs ? KBAsraRefs.box('compare') : '') + blocks;
+  }
+  var CAI = { key: '', busy: false, txt: '', err: '' };
+  function miniMd(t) {
+    var h = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').split('\n').map(function (ln) {
+      ln = ln.trim(); if (!ln) return '<div style="height:.4rem"></div>';
+      if (/^#{1,4}\s*/.test(ln)) return '<div class="font-black text-violet-800 mt-2">' + ln.replace(/^#{1,4}\s*/, '') + '</div>';
+      if (/^[-•*]\s+/.test(ln)) return '<div style="padding-left:1.1rem;text-indent:-.8rem">• ' + ln.replace(/^[-•*]\s+/, '') + '</div>';
+      return '<div>' + ln + '</div>';
+    }).join('');
+    return '<div class="kb-ai-body" style="font-size:.9rem;line-height:1.75">' + h + '</div>';
+  }
+  function cmpKey(v) { return [uid, selIdea, JSON.stringify(v.pairs)].join('|'); }
+  function cmpAiHtml(rows, v) {
+    var on = CAI.key === cmpKey(v);
+    return '<div class="mt-3 p-3 rounded-2xl" style="background:#faf5ff;border:1.5px solid #e9d5ff"><div class="flex flex-wrap items-center gap-2"><b class="text-violet-800"><i class="fas fa-robot mr-1"></i>AI 助教:這 ' + rows.length + ' 組前後對照說了什麼?</b>' +
+      '<button type="button" class="chip" id="cmp-ai-btn"' + (CAI.busy ? ' disabled' : '') + '><i class="fas fa-wand-magic-sparkles"></i> ' + (CAI.busy ? 'AI 助教想一想…' : (on && CAI.txt ? '再解說一次' : '請 AI 解說')) + '</button></div>' +
+      '<div id="cmp-ai-busy"></div>' + (on && CAI.err ? '<p class="text-xs text-rose-600 mt-1">' + esc(CAI.err) + '</p>' : '') + (on && CAI.txt ? '<div class="mt-2">' + miniMd(CAI.txt) + '</div>' : '') +
+      '<p class="text-[11px] text-slate-400 mt-1">按了才會送出:每組各類回答的筆數,和每組各挑幾句「越想越深入」「還要想深」的原話(姓名會換成「某位同學」)。AI 只是幫忙說明變化,不是評分。</p></div>';
+  }
+  function cmpPrompt(rows) {
+    var forT = readonly, L = [];
+    rows.forEach(function (r) {
+      var cn = function (c) { return CMP_CATS.map(function (k) { return (KBSrc.CATS[k].name.split(' ')[0] === 'Q3' || /^Q\d/.test(KBSrc.CATS[k].name) ? KBSrc.CATS[k].name : (k === 'evid' ? '證據與回饋' : '我做的事')) + ' ' + (c[k] || 0); }).join('、'); };
+      var q = function (recs) { return recs.filter(function (x) { return (x.cat === 'Q3' || x.cat === 'Q4') && x.text; }).slice(0, 2).map(function (x) { return '「' + scrubNames(cut(x.text, 50)) + '」'; }).join(' '); };
+      L.push('第 ' + (r.i + 1) + ' 組:' + pairName(r.p));
+      L.push('  之前的回答數:' + cn(r.ca) + (q(r.vv.A) ? ';原話:' + q(r.vv.A) : ''));
+      L.push('  之後的回答數:' + cn(r.cb) + (q(r.vv.B) ? ';原話:' + q(r.vv.B) : ''));
+    });
+    return '你是國小「知識建構」課的 AI 助教。下面是' + (forT ? '一位學生' : '一位學生(就是正在看的他自己)') + '在學習單裡,同一種問題「前後對照」' + rows.length + '組階段的回答。請用自然、好懂的話,說明他的想法怎麼一步步長大。\n' +
+      '【資料】\n' + L.join('\n') + '\n' +
+      '【怎麼寫】先寫一行「🔑 一句話重點」(粗體,直接說結論);再依組別,每一組用 1~2 句說明「之前→之後」哪裡變具體、哪裡還卡住(可以引用上面的原話);最後用一小段「這代表什麼」,並給 2~3 個接下來可以做的小行動。' +
+      (forT ? '對老師說明,稱他「這位學生」,不要出現姓名。' : '對學生說話,用「你」,語氣溫暖、鼓勵、但誠實。') + '筆數只是線索,不要當成想法深度的分數;資料看不出來的地方就說看不出來,不要硬猜。國小高年級看得懂的字詞,全文約 400~600 字,每個小標題最多一個 emoji。';
+  }
+  function cmpAsk() {
+    if (CAI.busy) return; var v = curView(), c = cardOf(selIdea); if (!c || v.mode !== 'compare') return;
+    var rows = cmpRows(c.records, v); CAI.key = cmpKey(v); CAI.busy = true; CAI.err = ''; renderKeep();
+    askAi(cmpPrompt(rows)).then(function (t) { CAI.txt = String(t || '').trim(); if (!CAI.txt) CAI.err = 'AI 助教沒有回應,請再試一次。'; })
+      .catch(function (e) { CAI.err = 'AI 助教暫時無法使用:' + String(e && e.message || e).slice(0, 80); }).then(function () { CAI.busy = false; renderKeep(); });
+  }
   function catHead(k) { var C = KBSrc.CATS[k]; return '<h5 style="background:' + C.bg + ';color:' + C.color + '">' + esc(C.name) + '</h5> <span class="text-[11px] text-slate-400">' + esc(C.zh) + '</span>'; }
   function catBoxes(recs) {
     var g = KBSrc.groupByCat(recs), h = '';
@@ -282,7 +365,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   }
   function viewLine(v, vv) {
     var M = KBSrc.MODES[v.mode];
-    if (v.mode === 'compare') return '<b>' + M.name + '</b>:左邊是「' + KBSrc.STAGES[v.a].name + '」,右邊是「' + KBSrc.STAGES[v.b].name + '」。';
+    if (v.mode === 'compare') return '<b>' + M.name + '</b>:一共 ' + v.pairs.length + ' 組,每一組左邊是「之前」、右邊是「之後」。';
     if (v.mode === 'then') return '<b>' + M.name + '</b>(站在「' + KBSrc.STAGES[v.asOf].name + '」):' + (vv.hidden ? '先藏起了 ' + vv.hidden + ' 則後來才寫的回答,切到「回顧全部」就看得到。' : '這個範圍裡沒有更晚的回答。');
     var later = vv.A.filter(function (r) { return r.later; }).length;
     return '<b>' + M.name + '</b>(從「' + KBSrc.STAGES[v.asOf].name + '」回頭看):' + (later ? '有 ' + later + ' 則標了「🕒 後來才出現」。' : '沒有比這個階段更晚的回答。');
@@ -291,13 +374,13 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   function wsEvidence(c) {
     var v = curView(), vv = KBSrc.applyView(c.records, v);
     var left = '<div class="idea"><div class="text-xs font-black text-indigo-600 mb-1">我的想法(來自學習單)</div><div class="font-black text-slate-800">' + esc(c.title) + '</div><div class="text-xs text-slate-500 mt-1">' + esc(c.sub || '') + '</div><div class="mt-2 text-xs" style="color:#64748b">' + KBSrc.counts(c.records).Q4 + ' 則和「還要想深」有關、' + KBSrc.counts(c.records).evid + ' 則是證據與回饋</div></div>';
-    var body = v.mode === 'compare' ? catCompare(vv.A, vv.B) : catBoxes(vv.A);
+    var body = v.mode === 'compare' ? compareAll(c.records, v) : catBoxes(vv.A);
     return '<div class="mt-4">' + left + '</div><div class="modeinfo mt-3">' + viewLine(v, vv) + '</div>' +
-      '<div class="mt-2 text-xs text-slate-500"><i class="fas fa-circle-info mr-1"></i>這些是你<b>當時</b>寫過的,只當作反思的材料,不是你現在的答案。現在的想法,請寫在下面。</div>' + body;
+      '<div class="mt-2 text-xs text-slate-500"><i class="fas fa-circle-info mr-1"></i>這些是你<b>當時</b>寫過的,只當作反思的材料,不是你現在的想法。現在的想法,請寫在下面。</div>' + body;
   }
   function wsHints(c) {
     var v = curView(), vv = KBSrc.applyView(c.records, v), shown = vv.A.concat(vv.B), n = KBSrc.counts(shown), h = [];
-    if (v.mode === 'compare') h.push('🔀 左右兩邊,「越想越深入嗎」類的回答:' + KBSrc.counts(vv.A).Q3 + ' 則 ↔ ' + KBSrc.counts(vv.B).Q3 + ' 則。看看哪些句子變得更具體、更有理由。');
+    if (v.mode === 'compare') h.push('🔀 ' + v.pairs.length + ' 組前後對照:先看最上面表格,哪幾組的「越想越深入」「證據」變多了?再打開那幾組,看看哪些句子變得更具體、更有理由。');
     h.push(n.evid ? '✅ 你當時寫過回饋或證據(' + n.evid + ' 則)。想想:它們有沒有改變你的想法?' : '❓ 這個範圍裡還看不到證據或回饋。想想:我是怎麼知道的?');
     h.push(n.Q4 ? '📌 你當時就提到還要想深、還卡住的地方(' + n.Q4 + ' 則)。現在還是這樣嗎?' : '📌 這個範圍裡沒有「還卡住」的回答,可以自己想想:還有什麼沒弄懂?');
     return h;
@@ -317,7 +400,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     }).join('');
     var ends = { C1: 4, C2: 9, C3: 15 };
     var ppH = pp.filter(function (p) { return v.mode !== 'then' || ends[p.k] <= v.asOf; }).map(function (p) { return '<span class="pill todo" style="margin:.15rem">' + esc(p.name) + ':前測 ' + p.pre + ' → 後測 ' + p.post + '</span>'; }).join('');
-    return '<div class="card fade"><h4 class="font-black text-slate-800 mb-1"><i class="fas fa-chart-simple mr-1 text-indigo-500"></i>我給自己的評分(學習單)</h4><p class="text-xs text-slate-500 mb-2">每一根是一個階段,三種學習單的自評平均(滿分 5)。這是你<b>當時的感覺</b>,不代表想法有多深;可以和下面的想法一起看。' + (v.mode === 'all' ? ' 黃色是比你選的階段更晚的。' : '') + '</p><div class="flex gap-1 items-end overflow-x-auto pb-1" style="min-height:104px">' + (bars || '<span class="text-sm text-slate-400">這個範圍裡沒有自評資料</span>') + '</div>' + (ppH ? '<div class="mt-2 text-xs text-slate-500">前後測(每個循環,平均分數):</div><div>' + ppH + '</div>' : '') + '</div>';
+    return '<div class="card fade"><h4 class="font-black text-slate-800 mb-1"><i class="fas fa-chart-simple mr-1 text-indigo-500"></i>我給自己的評分(學習單)</h4><p class="text-xs text-slate-500 mb-2">每一根是一個階段,三種學習單的自評平均(滿分 5)。這是你<b>當時的感覺</b>,不代表想法有多深;可以和下面的想法一起看。' + (v.mode === 'all' ? ' 黃色是比你選的階段更晚的。' : '') + '</p><div class="flex gap-1 items-end overflow-x-auto pb-1" style="min-height:104px">' + (bars || '<span class="text-sm text-slate-400">這個範圍裡沒有自評資料</span>') + '</div>' + (ppH ? '<div class="mt-2 text-xs text-slate-500">前後測(每個循環,平均分數):</div><div>' + ppH + '</div>' : '') + '<details class="mt-3" id="scale-help"><summary class="cursor-pointer text-sm font-black text-indigo-700">這裡有哪些評分?怎麼算出來的?</summary><div class="mt-2">' + KBSrc.scaleHelp(readonly) + '</div></details>' + (readonly && window.KBAsraRefs ? KBAsraRefs.box('scale') : '') + '</div>';
   }
 
   function link(n) { return 'Knowledge Building Forum.html?topic=' + encodeURIComponent(n.topicId) + '&node=' + encodeURIComponent(n.id); }
@@ -413,7 +496,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var byTopic = {}; d.ideas.forEach(function (x) { var k = x.topic || '(沒有分類)'; byTopic[k] = (byTopic[k] || 0) + 1; });
     var tchips = Object.keys(byTopic).sort(function (a, b) { return byTopic[b] - byTopic[a]; }).map(function (k) { return '<span class="pill todo">' + esc(cut(k, 14)) + ' · ' + byTopic[k] + ' 個想法</span>'; }).join(' ');
     var cps = (S.concepts || []).slice().sort(function (a, b) { return b.ts - a.ts; });
-    var qc = '<div class="card fade"><h4 class="font-black text-slate-800 mb-1"><i class="fas fa-bullseye mr-1 text-indigo-500"></i>我的概念追問</h4><p class="text-xs text-slate-500 mb-2">在「知識羅盤」的概念雲點一個詞,回答它為什麼在中間(核心)或在邊邊(邊緣)。答案會存在這裡,老師也看得到。</p>' +
+    var qc = '<div class="card fade"><h4 class="font-black text-slate-800 mb-1"><i class="fas fa-bullseye mr-1 text-indigo-500"></i>我的概念追問</h4><p class="text-xs text-slate-500 mb-2">在「知識羅盤」的概念雲點一個詞,回答它為什麼在中間(核心)或在邊邊(邊緣)。回應會存在這裡,老師也看得到。</p>' +
       (cps.length ? cps.slice(0, 6).map(function (x) { return '<div class="py-2 border-t border-slate-100"><div class="flex flex-wrap items-center gap-2"><span class="pill ' + (x.role === 'core' ? 'ok' : 'todo') + '">' + esc(x.term) + ' · ' + esc(KBAsra.ROLE_NAME[x.role] || '') + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(x.ts) + '</span>' + (x.choice ? '<span class="pill warn">' + esc(KBAsra.CHOICE_NAME[x.choice] || x.choice) + '</span>' : '') + '</div>' + (x.text ? '<div class="text-sm text-slate-700 mt-1">' + esc(x.text) + '</div>' : '') + '</div>'; }).join('') : '<p class="text-sm text-slate-400">還沒有追問過。</p>') +
       '<p class="mt-3 text-sm"><a class="text-indigo-600 font-bold underline" id="to-concept" href="' + backHref() + '#concept-card"><i class="fas fa-cloud mr-1"></i>去概念雲選一個詞追問</a></p></div>';
     var q2 = '<div class="card fade"><label for="q2-note">' + qlab('q2') + '</label><p class="text-xs text-slate-500 mb-2">看看上面的想法:你在哪些討論區說得最多?哪些很少提到?</p>' + (tchips ? '<div class="flex flex-wrap gap-1 mb-2">' + tchips + '</div>' : '') +
@@ -454,15 +537,16 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   function aiOn() { try { return !!KB.settings.get().ai.enabled; } catch (e) { return true; } }
   function aiKey() { try { return localStorage.getItem('kb_ai_key') || ''; } catch (e) { return ''; } }
   function askAi(prompt) {
-    if (typeof window.kbAsraAi === 'function') return Promise.resolve().then(function () { return window.kbAsraAi(prompt); });
+    if (typeof window.kbAsraAi === 'function') return Promise.resolve().then(function () { return window.kbAsraAi(prompt); }).then(function (t) { return window.KBAI && KBAI.noAnswer ? KBAI.noAnswer(t) : t; });
     if (!aiOn()) return Promise.reject(new Error('AI 功能目前已被關閉(請老師到設定中心開啟)'));
     var body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
+    if (window.KBAI && KBAI.guard) body = KBAI.guard({ body: body }).body;   // 加上「不使用『答案』」的用字規則
     function readText(r) {
       return r.json().then(function (j) {
         if (!r.ok) throw new Error((j.error && (j.error.message || j.error)) || ('HTTP ' + r.status));
         var t = j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts && j.candidates[0].content.parts[0] && j.candidates[0].content.parts[0].text;
         if (!t) throw new Error('AI 沒有回應');
-        return t;
+        return window.KBAI && KBAI.noAnswer ? KBAI.noAnswer(t) : t;
       });
     }
     var key = aiKey();
@@ -583,14 +667,14 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     if (sp.starters.length) h += '<div class="mt-2"><b>可以這樣開頭</b><span class="text-xs text-slate-500">(點一下放進輸入框,再改成你自己的話)</span></div><div>' + gChips(sp.starters, sp.target) + '</div>';
     if (sp.questions.length) h += '<div class="mt-2"><b>想一想</b><ul class="list-disc pl-5 text-sm">' + sp.questions.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul></div>';
     if (g.ai) {
-      h += '<div class="mt-3 p-2 rounded-xl bg-violet-50 border border-violet-100"><b class="text-violet-700"><i class="fas fa-robot mr-1"></i>AI 助教的引導</b><span class="text-xs text-slate-500">(只是幫你想,答案請用自己的話寫)</span>' +
+      h += '<div class="mt-3 p-2 rounded-xl bg-violet-50 border border-violet-100"><b class="text-violet-700"><i class="fas fa-robot mr-1"></i>AI 助教的引導</b><span class="text-xs text-slate-500">(只是幫你想,請用自己的話寫)</span>' +
         (g.ai.tip ? '<p class="text-sm mt-1">' + esc(g.ai.tip) + '</p>' : '') +
         (g.ai.questions.length ? '<ol class="list-decimal pl-5 text-sm mt-1">' + g.ai.questions.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ol>' : '') +
         (g.ai.starters.length ? '<div class="mt-1">' + gChips(g.ai.starters, sp.target) + '</div>' : '') + '</div>';
     }
     if (g.err) h += '<p class="text-xs text-rose-600 mt-2">' + esc(g.err) + '</p>';
     h += '<div class="mt-3"><button type="button" class="chip" id="ga-' + id + '" data-gai="' + esc(key) + '"' + (g.busy ? ' disabled' : '') + '><i class="fas fa-robot"></i> ' + (g.busy ? 'AI 助教想一想…' : (g.ai ? '再請 AI 助教引導一次' : '請 AI 助教來引導我要如何寫')) + '</button>' +
-      '<span class="text-[11px] text-slate-400 ml-2">按了才會送出,只會把「' + esc(sp.sent) + '」送給 AI 助教,不會送姓名,也不會替你寫答案。</span></div>';
+      '<span class="text-[11px] text-slate-400 ml-2">按了才會送出,只會把「' + esc(sp.sent) + '」送給 AI 助教,不會送姓名,也不會替你寫。</span></div>';
     return h + '</div>';
   }
   function guideHtml(key) {
@@ -599,10 +683,10 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     return '<div class="mb-2 mt-1"><button type="button" class="chip' + (g.open ? ' on' : '') + '" id="g-' + gid(key) + '" data-gk="' + esc(key) + '"><i class="fas fa-lightbulb"></i> 我可以怎麼寫?</button></div>' + (g.open ? gBox(key, sp, g) : '');
   }
   function gPrompt(sp) {
-    return '你是國小「知識建構」課的 AI 助教。學生正在寫 ASRA 反思單的這一題:「' + sp.q + '」。請「引導」他怎麼寫,不要替他寫答案。\n' +
+    return '你是國小「知識建構」課的 AI 助教。學生正在寫 ASRA 反思單的這一題:「' + sp.q + '」。請「引導」他怎麼寫,不要替他寫。\n' +
       '【學生目前的情況】\n' + scrubNames(sp.ai.join('\n')) + '\n' +
       '【輸出】只輸出 JSON,不要加任何說明:{"tip":"一句鼓勵或提醒","questions":["…","…","…"],"starters":["…","…"]}\n' +
-      '【規則】tip 20 字以內。questions 是 3 個一步一步幫他想的小問題,由簡單到深入。starters 是 2 到 3 個句子開頭,每個 25 字內,用「…」留空讓學生自己補完,不能把答案寫完。用國小五年級看得懂的字詞。不要出現任何人的姓名。不要評分、不要下結論。';
+      '【規則】tip 20 字以內。questions 是 3 個一步一步幫他想的小問題,由簡單到深入。starters 是 2 到 3 個句子開頭,每個 25 字內,用「…」留空讓學生自己補完,不能把整句寫完。用國小五年級看得懂的字詞。不要出現任何人的姓名。不要評分、不要下結論。';
   }
   function gParse(txt) {
     var m = /\{[\s\S]*\}/.exec(String(txt || '')); if (!m) return null;
@@ -700,7 +784,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var c = isLocalId(sel) ? cardOf(sel) : null, i = c ? null : ideaById(sel), ws = c && c.src === 'ws', ev, hints;
     if (c) { ev = ws ? wsEvidence(c) : manEvidence(c); hints = ws ? wsHints(c) : manHints(); } else { var fe = forumEvidence(i); ev = fe.html; hints = fe.hints; }
     var mine = S.refl.filter(function (r) { return r.postId === selIdea && !r.open; }).sort(function (a, b) { return b.ts - a.ts; });
-    var history = mine.map(function (r) { return '<div class="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 mb-2"><div class="text-[11px] text-indigo-500 font-bold">' + KBAsra.fmtTime(r.ts) + (r.timeMode ? ' · ' + esc(KBSrc.viewText({ mode: r.timeMode, asOf: r.asOf, a: r.cmpA, b: r.cmpB })) : '') + '</div><div class="text-sm text-slate-700 whitespace-pre-wrap">' + esc(r.text) + '</div></div>'; }).join('');
+    var history = mine.map(function (r) { return '<div class="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 mb-2"><div class="text-[11px] text-indigo-500 font-bold">' + KBAsra.fmtTime(r.ts) + (r.timeMode ? ' · ' + esc(KBSrc.viewText({ mode: r.timeMode, asOf: r.asOf, a: r.cmpA, b: r.cmpB, pairs: r.cmpPairs })) : '') + '</div><div class="text-sm text-slate-700 whitespace-pre-wrap">' + esc(r.text) + '</div></div>'; }).join('');
     var st = ws ? STARTERS_WS : STARTERS;
     return head(3, HD[0], HD[1], '', ws ? '挑一個想法,看看你<b>當時</b>寫過的(證據)。再回答兩個問題:<b>我的想法有越想越深入嗎?還有哪些地方要再想深一點?</b>' : '挑一個想法,看看當時的討論(證據)。再回答兩個問題:<b>我的想法有越想越深入嗎?還有哪些地方要再想深一點?</b>') + srcBar('refl') +
       '<div class="card fade"><label class="font-black text-slate-700 text-sm">我要反思哪一個想法?</label><select id="idea-sel">' + ideaOptions(sel, cand) + '</select>' + ev +
@@ -714,6 +798,67 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   }
 
   /* ---- 4. 決定下一步 ---- */
+
+  /* ---- 🚀 讓想法繼續往前走(AI 推進):把論壇、學習單、自己新增的想法整理成 3 個可以做的小計畫,學生自己挑、自己改 ---- */
+  var PS = { busy: false, ai: null, key: '', err: '', pick: null };
+  function pushInfo() {
+    var id = selIdea; if (!id) return null;
+    var past = { refl: '', plans: [] };
+    var rl = S.refl.filter(function (r) { return r.postId === id && !r.open; }); if (rl.length) past.refl = rl[rl.length - 1].text || '';
+    S.plans.filter(function (p) { return p.postId === id; }).slice(-2).forEach(function (p) { var re = p.reeval && p.reeval.length ? p.reeval[p.reeval.length - 1].result : ''; past.plans.push({ act: p.act, result: re }); });
+    var I = curIdeaInfo(); if (!I) return null;
+    if (I.kind === 'forum') {
+      var i = ideaById(id), reps = nodes.filter(function (n) { return n.parentId === id && n.author !== uid; }).sort(function (a, b) { return (a.date || 0) - (b.date || 0); }).slice(-3).map(function (n) { return (n.title ? n.title + ':' : '') + (n.content || ''); });
+      return { src: 'forum', title: i.title, status: i.status, replies: i.replies, diff: i.diff, ownEvid: i.ownEvid, text: i.content || '', replyTexts: reps, past: past };
+    }
+    var c = cardOf(id);
+    if (I.kind === 'ws') {
+      var v = curView(), vv = KBSrc.applyView(c.records, v), all = vv.A.concat(vv.B), pick = function (cats) { return all.filter(function (r) { return cats.indexOf(r.cat) >= 0 && r.text; }).map(function (r) { return r.text; }); };
+      return { src: 'ws', title: c.title, ws: { q4: pick(['Q4']), q5: pick(['Q5']), q6: pick(['Q6']), evid: pick(['evid']) }, past: past };
+    }
+    return { src: 'manual', title: c.title, text: c.text || '', past: past };
+  }
+  function pushCard(p, i, from) {
+    var A = ACTS[p.act] || { big: p.act, icon: 'fa-circle' };
+    return '<div class="pushc ' + (from === 'ai' ? 'ai' : '') + (PS.pick && PS.pick.from === from && PS.pick.i === i && PS.pick.key === selIdea ? ' picked' : '') + '"><div class="flex items-center gap-2 flex-wrap"><span class="pill todo"><i class="fas ' + A.icon + ' mr-1"></i>' + esc(A.big) + '</span><b class="text-slate-800">' + esc(p.title) + '</b>' + (from === 'ai' ? '<span class="text-[11px] font-bold text-violet-600">AI 助教排的</span>' : (p.src ? '<span class="text-[11px] text-slate-400">依據:' + esc(p.src) + '的資料</span>' : '')) + '</div>' +
+      '<ol>' + p.steps.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>' +
+      (p.check ? '<div class="why"><b>怎麼知道有進步:</b>' + esc(p.check) + '</div>' : '') + (p.why ? '<div class="why"><b>為什麼:</b>' + esc(p.why) + '</div>' : '') +
+      '<button type="button" class="btn p mt-2" style="padding:.3rem .8rem;font-size:.8rem" data-push="' + i + '" data-from="' + from + '"><i class="fas fa-check"></i> 用這個計畫(再改成我自己的話)</button></div>';
+  }
+  function pushHtml() {
+    if (readonly) return '';
+    var info = pushInfo(); if (!info) return '';
+    var loc = KBPush.local(info), ai = PS.ai && PS.key === selIdea ? PS.ai : null;
+    return '<div class="mt-4 p-3 rounded-2xl" style="background:#faf5ff;border:1.5px solid #e9d5ff"><div class="font-black text-violet-800"><i class="fas fa-rocket mr-1"></i>讓這個想法繼續往前走</div>' +
+      '<p class="text-xs text-slate-600 mt-1">系統先依照你的論壇、學習單和自己新增的資料,排出 3 個可以做的小計畫。也可以請 AI 助教看得更仔細。<b>你自己挑一個、改成自己的話</b>,再按「訂好我的計畫」。</p>' +
+      '<div class="grid md:grid-cols-3 gap-3 mt-2">' + loc.map(function (p, i) { return pushCard(p, i, 'local'); }).join('') + '</div>' +
+      (ai ? '<div class="font-bold text-violet-700 text-sm mt-3"><i class="fas fa-robot mr-1"></i>AI 助教看了你的資料,排的計畫</div><div class="grid md:grid-cols-3 gap-3 mt-1">' + ai.map(function (p, i) { return pushCard(p, i, 'ai'); }).join('') + '</div>' : '') +
+      '<div class="mt-3"><div id="push-busy"></div>' + (PS.err ? '<p class="text-xs text-rose-600">' + esc(PS.err) + '</p>' : '') +
+      '<button type="button" class="chip" id="push-ai"' + (PS.busy ? ' disabled' : '') + '><i class="fas fa-robot"></i> ' + (PS.busy ? 'AI 助教想一想…' : (ai ? '再請 AI 助教重排一次' : '請 AI 助教幫我排計畫')) + '</button>' +
+      '<span class="text-[11px] text-slate-400 ml-2">按了才會送出:這個想法的標題與重點、同學回應的重點、你之前寫的反思(姓名會換成「某位同學」)。AI 的計畫只是建議。</span></div></div>';
+  }
+  function pushAsk() {
+    if (PS.busy) return; PS.busy = true; PS.err = ''; renderKeep();
+    var info = pushInfo(); if (!info) { PS.busy = false; return; }
+    askAi(KBPush.prompt(info, scrubNames)).then(function (txt) {
+      var r = KBPush.parse(txt); if (r) { PS.ai = r; PS.key = selIdea; } else PS.err = 'AI 助教的回覆我看不懂,先用上面系統排的。';
+    }).catch(function (e) { PS.err = 'AI 助教暫時無法使用:' + String(e && e.message || e).slice(0, 80); }).then(function () { PS.busy = false; renderKeep(); });
+  }
+  function pushPick(from, i) {
+    var list = from === 'ai' ? PS.ai : KBPush.local(pushInfo()), p = list && list[i]; if (!p) return;
+    PS.pick = { from: from, i: i, key: selIdea, title: p.title, text: KBPush.toText(p), why: KBPush.toWhy(p) };
+    chosenAct = p.act; planWhy = PS.pick.why; renderPanel();
+    var tx = document.getElementById('plan-text'), wy = document.getElementById('plan-why');
+    if (tx) { tx.value = PS.pick.text; } if (wy) { wy.value = PS.pick.why; }
+    planInput(); adStatus('as-plan', '這是「' + (from === 'ai' ? 'AI 助教' : '系統') + '」排的建議,請改成你自己的話,再按「訂好我的計畫」');
+    if (tx) tx.focus();
+  }
+  // 計畫紀錄要帶上「是不是從推進建議來的、有沒有自己改過」
+  function pushChip(p) { return p && p.push ? ' <span class="text-[11px] font-bold text-violet-600">🚀 ' + (p.push.from === 'ai' ? 'AI 助教排的' : '系統排的') + (p.push.edited ? '・自己改過' : '') + '</span>' : ''; }
+  function pushMark(txt) {
+    var k = PS.pick; if (!k || k.key !== selIdea) return undefined;
+    return { from: k.from === 'ai' ? 'ai' : 'local', title: k.title, edited: String(txt || '').trim() !== String(k.text || '').trim() };
+  }
   var chosenAct = null, planWhy = '';
   function planSuggest(i, c) {
     if (i) return i.status === 'wait' ? '這個想法還沒人回應,可以考慮「找夥伴」。' : (i.status === 'check' ? '這個想法還沒有證據,可以考慮「補證據」。' : (i.status === 'ok' ? '這個想法有證據了,可以考慮「改想法」寫得更完整。' : '這個想法正在長大,可以繼續「改想法」或「找夥伴」。'));
@@ -727,7 +872,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var pick = function (cats) { return all.filter(function (r) { return cats.indexOf(r.cat) >= 0; }).slice(0, 3); };
     var a = pick(['Q4', 'Q5']), b = pick(['Q6']);
     if (!a.length && !b.length) return '';
-    return '<div class="modeinfo mt-3"><b>當時你寫過的,可以參考(不是現在的答案):</b>' + (a.length ? '<div class="text-xs text-slate-500 mt-1">還想深 / 想深化的地方</div>' + a.map(recHtml).join('') : '') + (b.length ? '<div class="text-xs text-slate-500 mt-2">當時說「接下來要…」的</div>' + b.map(recHtml).join('') : '') + '</div>';
+    return '<div class="modeinfo mt-3"><b>當時你寫過的,可以參考(不是現在的想法):</b>' + (a.length ? '<div class="text-xs text-slate-500 mt-1">還想深 / 想深化的地方</div>' + a.map(recHtml).join('') : '') + (b.length ? '<div class="text-xs text-slate-500 mt-2">當時說「接下來要…」的</div>' + b.map(recHtml).join('') : '') + '</div>';
   }
   function panelPlan() {
     var cand = candidates(), sel = ensureSel(cand), others = wsOn() || (S.ideas || []).length;
@@ -737,12 +882,12 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     selIdea = sel; planRestore();
     var c = isLocalId(sel) ? cardOf(sel) : null, i = c ? null : ideaById(sel);
     var cards = Object.keys(ACTS).map(function (k) { var a = ACTS[k]; return '<button type="button" class="act' + (chosenAct === k ? ' on' : '') + '" data-act="' + k + '"><div class="big"><i class="fas ' + a.icon + ' mr-2 text-indigo-500"></i>' + a.big + '</div><div class="text-sm text-slate-600 mt-1">' + a.tip + '</div></button>'; }).join('');
-    var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (p) { var t = ideaById(p.postId), nm = t ? t.title : p.ideaTitle; return '<div class="idea mb-2"><div class="flex items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span>' + (p.open ? '<span class="pill warn">草稿(還沒按「訂好」)</span>' : '') + '</div>' + (p.q5 ? '<div class="text-xs text-slate-500 mt-1">想深化:' + esc(p.q5) + '</div>' : '') + '<div class="text-sm text-slate-800 mt-1">' + esc(p.text) + '</div>' + (nm ? '<div class="text-xs text-slate-500 mt-1">想法:' + esc(cut(nm, 24)) + '</div>' : '') + '</div>'; }).join('');
+    var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (p) { var t = ideaById(p.postId), nm = t ? t.title : p.ideaTitle; return '<div class="idea mb-2"><div class="flex items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span>' + pushChip(p) + '<span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span>' + (p.open ? '<span class="pill warn">草稿(還沒按「訂好」)</span>' : '') + '</div>' + (p.q5 ? '<div class="text-xs text-slate-500 mt-1">想深化:' + esc(p.q5) + '</div>' : '') + '<div class="text-sm text-slate-800 mt-1">' + esc(p.text) + '</div>' + (nm ? '<div class="text-xs text-slate-500 mt-1">想法:' + esc(cut(nm, 24)) + '</div>' : '') + '</div>'; }).join('');
     var act = i ? '<a class="btn g" id="plan-forum" href="' + esc(link(i)) + '"><i class="fas fa-comments"></i> 去論壇行動</a>' : '<span class="text-xs text-slate-500 self-center">這個想法不在論壇裡:做完之後,到「回頭再檢查」自己檢查有沒有進步。</span>';
     return head(4, HD[0], HD[1], '', '想完了,就要自己決定接下來怎麼做!你可以<b>補證據</b>、<b>改想法</b>,或<b>找夥伴</b>一起想。選一個,寫下你的小計畫。') + srcBar('plan') +
       '<div class="card fade"><label class="font-black text-slate-700 text-sm">這個計畫是為了哪一個想法?</label><select id="plan-idea">' + ideaOptions(sel, cand) + '</select><p class="text-xs text-indigo-700 mt-1">💡 ' + planSuggest(i, c) + '</p>' + planPast(c) +
       '<div class="mt-4"><label for="plan-why">' + qlab('q5') + '</label>' + guideHtml('q5') + '<textarea id="plan-why" rows="2" maxlength="300" class="mt-1" placeholder="例如:我想把「影子為什麼會變長」想得更深,因為還沒有實驗證明。"' + (readonly ? ' disabled' : '') + '>' + esc(planWhy) + '</textarea></div>' +
-      '<div class="grid sm:grid-cols-3 gap-3 mt-4">' + cards + '</div>' +
+      pushHtml() + '<div class="grid sm:grid-cols-3 gap-3 mt-4">' + cards + '</div>' +
       '<div class="mt-4"><label for="plan-text">' + qlab('q6') + '</label><p class="text-xs text-slate-500">先選上面一個做法,再寫下你要怎麼做。</p></div>' +
       guideHtml('q6') + '<textarea id="plan-text" rows="3" maxlength="300" class="mt-1" placeholder="' + esc(chosenAct ? ACTS[chosenAct].ph : '先選一個做法,再寫下你要怎麼做') + '"' + (readonly ? ' disabled' : '') + '></textarea>' +
       '<div class="mt-1 text-xs"><span id="as-plan" class="text-slate-500">寫的時候會自動備份成草稿;寫好請按「訂好我的計畫」。</span></div>' + '<div class="flex flex-wrap gap-2 mt-3"><button type="button" class="btn p" id="plan-save"' + (readonly ? ' disabled' : '') + '><i class="fas fa-flag-checkered"></i> 訂好我的計畫</button>' + act + '</div>' + roNote() +
@@ -756,11 +901,11 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var i = ideaById(selIdea);
     var suggest = i.status === 'wait' ? '這個想法還沒人回應,可以考慮「找夥伴」。' : (i.status === 'check' ? '這個想法還沒有證據,可以考慮「補證據」。' : (i.status === 'ok' ? '這個想法有證據了,可以考慮「改想法」寫得更完整。' : '這個想法正在長大,可以繼續「改想法」或「找夥伴」。'));
     var cards = Object.keys(ACTS).map(function (k) { var a = ACTS[k]; return '<button type="button" class="act' + (chosenAct === k ? ' on' : '') + '" data-act="' + k + '"><div class="big"><i class="fas ' + a.icon + ' mr-2 text-indigo-500"></i>' + a.big + '</div><div class="text-sm text-slate-600 mt-1">' + a.tip + '</div></button>'; }).join('');
-    var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (p) { var t = ideaById(p.postId); return '<div class="idea mb-2"><div class="flex items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span>' + (p.open ? '<span class="pill warn">草稿(還沒按「訂好」)</span>' : '') + '</div>' + (p.q5 ? '<div class="text-xs text-slate-500 mt-1">想深化:' + esc(p.q5) + '</div>' : '') + '<div class="text-sm text-slate-800 mt-1">' + esc(p.text) + '</div>' + (t ? '<div class="text-xs text-slate-500 mt-1">想法:' + esc(cut(t.title, 24)) + '</div>' : '') + '</div>'; }).join('');
+    var plans = S.plans.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (p) { var t = ideaById(p.postId); return '<div class="idea mb-2"><div class="flex items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span>' + pushChip(p) + '<span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span>' + (p.open ? '<span class="pill warn">草稿(還沒按「訂好」)</span>' : '') + '</div>' + (p.q5 ? '<div class="text-xs text-slate-500 mt-1">想深化:' + esc(p.q5) + '</div>' : '') + '<div class="text-sm text-slate-800 mt-1">' + esc(p.text) + '</div>' + (t ? '<div class="text-xs text-slate-500 mt-1">想法:' + esc(cut(t.title, 24)) + '</div>' : '') + '</div>'; }).join('');
     return head(4, '決定下一步', 'Self-regulation · 自我調整', '', '想完了,就要自己決定接下來怎麼做!你可以<b>補證據</b>、<b>改想法</b>,或<b>找夥伴</b>一起想。選一個,寫下你的小計畫。') +
       '<div class="card fade"><label class="font-black text-slate-700 text-sm">這個計畫是為了哪一個想法?</label><select id="plan-idea">' + opts + '</select><p class="text-xs text-indigo-700 mt-1">💡 ' + suggest + '</p>' +
       '<div class="mt-4"><label for="plan-why">' + qlab('q5') + '</label>' + guideHtml('q5') + '<textarea id="plan-why" rows="2" maxlength="300" class="mt-1" placeholder="例如:我想把「影子為什麼會變長」想得更深,因為還沒有實驗證明。"' + (readonly ? ' disabled' : '') + '>' + esc(planWhy) + '</textarea></div>' +
-      '<div class="grid sm:grid-cols-3 gap-3 mt-4">' + cards + '</div>' +
+      pushHtml() + '<div class="grid sm:grid-cols-3 gap-3 mt-4">' + cards + '</div>' +
       '<div class="mt-4"><label for="plan-text">' + qlab('q6') + '</label><p class="text-xs text-slate-500">先選上面一個做法,再寫下你要怎麼做。</p></div>' +
       guideHtml('q6') + '<textarea id="plan-text" rows="3" maxlength="300" class="mt-1" placeholder="' + esc(chosenAct ? ACTS[chosenAct].ph : '先選一個做法,再寫下你要怎麼做') + '"' + (readonly ? ' disabled' : '') + '></textarea>' +
       '<div class="mt-1 text-xs"><span id="as-plan" class="text-slate-500">寫的時候會自動備份成草稿;寫好請按「訂好我的計畫」。</span></div>' + '<div class="flex flex-wrap gap-2 mt-3"><button type="button" class="btn p" id="plan-save"' + (readonly ? ' disabled' : '') + '><i class="fas fa-flag-checkered"></i> 訂好我的計畫</button><a class="btn g" id="plan-forum" href="' + esc(link(i)) + '"><i class="fas fa-comments"></i> 去論壇行動</a></div>' + roNote() +
@@ -783,7 +928,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
       var off = !!(p.srcType && p.srcType !== 'forum');
       var t = ideaById(p.postId) || { title: p.ideaTitle || '(想法)', topicId: '', id: p.postId }, f = off ? { mine: 0, replies: 0, evid: 0, acted: false } : ASRA.followUp(nodes, uid, p), last = p.reeval && p.reeval.length ? p.reeval[p.reeval.length - 1] : null;
       var msg = off ? '這個想法不在論壇裡(' + esc(KBAsra.describe(p).src || '論壇外') + '),系統不能自動看出有沒有進步。請你自己檢查:<b>你做了什麼?有什麼證據?</b>寫在下面,再按「變好了」或「還要再努力」。' : f.acted ? '太棒了!計畫訂好後,你在這個討論區又發了 <b>' + f.mine + '</b> 則貼文' + (f.replies ? ',還有 <b>' + f.replies + '</b> 則同學的新回應' : '') + (f.evid ? ',其中 ' + f.evid + ' 則有寫證據' : '') + '。' : '計畫訂好之後,還沒有看到新的貼文或回應。去論壇做一做吧!';
-      return '<div class="idea mb-3" data-plan="' + esc(p.id) + '"><div class="flex flex-wrap items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span><span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span><span class="text-xs text-slate-500">想法:' + esc(cut(t.title, 22)) + '</span>' + (last ? '<span class="pill ' + (last.result === 'better' ? 'ok' : 'warn') + '">' + (last.result === 'better' ? '已改善' : '還要努力') + '</span>' : '') + '</div>' +
+      return '<div class="idea mb-3" data-plan="' + esc(p.id) + '"><div class="flex flex-wrap items-center gap-2"><span class="pill todo">' + ACTS[p.act].big + '</span>' + pushChip(p) + '<span class="text-xs text-slate-500">' + KBAsra.fmtTime(p.ts) + '</span><span class="text-xs text-slate-500">想法:' + esc(cut(t.title, 22)) + '</span>' + (last ? '<span class="pill ' + (last.result === 'better' ? 'ok' : 'warn') + '">' + (last.result === 'better' ? '已改善' : '還要努力') + '</span>' : '') + '</div>' +
         (p.q5 ? '<div class="text-xs text-slate-500 mt-1">想深化:' + esc(p.q5) + '</div>' : '') + '<div class="text-sm text-slate-800 mt-1">我的計畫:' + esc(p.text) + '</div><div class="say mt-2" style="font-size:.9rem">' + msg + effectMsg(p) + '</div>' +
         (off ? guideHtml('note:' + p.id) + '<textarea id="note-' + esc(p.id) + '" data-note="' + esc(p.id) + '" rows="2" maxlength="300" class="mt-3" placeholder="例如:我做了小實驗,量了三次,結果是…"' + (readonly ? ' disabled' : '') + '></textarea>' : '') + '<div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-sm font-black text-slate-700">再評估:原來的問題有變好嗎?</span><button type="button" class="btn g" style="padding:.3rem .8rem;font-size:.82rem" data-re="better" data-id="' + esc(p.id) + '"' + (readonly ? ' disabled' : '') + '>🌟 變好了</button><button type="button" class="btn g" style="padding:.3rem .8rem;font-size:.82rem" data-re="more" data-id="' + esc(p.id) + '"' + (readonly ? ' disabled' : '') + '>💪 還要再努力</button></div>' +
         (last && last.result === 'more' ? '<div class="mt-2"><button type="button" class="btn p" style="padding:.3rem .9rem;font-size:.82rem" data-again="' + esc(p.postId) + '">再來一輪:回到第 3 步反思 <i class="fas fa-rotate-right"></i></button></div>' : '') + '</div>';
@@ -871,7 +1016,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var why = pw ? pw.value.trim() : '', txt = pt.value.trim(), act = chosenAct, pid = selIdea, snap = ideaSnap(pid);
     autoSchedule(adKey('plan', pid), function () {
       if (!act || txt.length < 3) return null;                 // 還沒選做法、或還沒寫內容:還不算一個計畫
-      return { sig: [act, why, txt].join('\u0001'), entry: Object.assign({ kind: 'plan', postId: pid, act: act, text: txt, q5: why || undefined }, snap) };
+      return { sig: [act, why, txt].join('\u0001'), entry: Object.assign({ kind: 'plan', postId: pid, act: act, text: txt, q5: why || undefined, push: pushMark(txt) }, snap) };
     }, 'as-plan');
   }
   function manInput() {
@@ -910,6 +1055,9 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     if (k === 'plan') {
       var pi = q('#plan-idea'); if (pi) pi.onchange = function () { selIdea = pi.value; SRC.pref = famOf(selIdea); planWhy = ''; renderPanel(); };
       var pw = q('#plan-why'); if (pw) pw.oninput = function () { planWhy = pw.value; planInput(); };
+      var pa = q('#push-ai'); if (pa) pa.onclick = pushAsk;
+      qa('[data-push]').forEach(function (b) { b.onclick = function () { pushPick(b.getAttribute('data-from'), Number(b.getAttribute('data-push'))); }; });
+      var pbz = q('#push-busy'); if (pbz && PS.busy && window.kbAiBusy) kbAiBusy.show(pbz, 'AI 助教正在看你的資料、排計畫…', { expect: 12 });
       var ptx = q('#plan-text'); if (ptx && !readonly) ptx.oninput = planInput;
       var pd0 = planDraft(selIdea); if (pd0 && !readonly) { if (ptx && !ptx.value) ptx.value = pd0.text || ''; adStatus('as-plan', '↻ 接著上次寫的(已自動存下 ' + hhmm(pd0.updTs) + ')'); }
       qa('[data-act]').forEach(function (b) { b.onclick = function () { if (readonly) return; chosenAct = b.getAttribute('data-act'); var keep = (q('#plan-text') || {}).value; renderPanel(); if (keep) q('#plan-text').value = keep; planInput(); }; });
@@ -917,7 +1065,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
         var tx2 = q('#plan-text'), v = tx2.value.trim();
         if (!chosenAct) { toast('先選一個做法喔 👆'); return; }
         if (!v) { tx2.focus(); return; }
-        var why = (q('#plan-why') || { value: '' }).value.trim(); autoFinish(adKey('plan', selIdea), Object.assign({ kind: 'plan', postId: selIdea, act: chosenAct, text: v, q5: why || undefined }, ideaSnap(selIdea))); chosenAct = null; planWhy = ''; renderStepper(); renderPanel(); toast('計畫訂好了!去論壇做做看 🚀');
+        var why = (q('#plan-why') || { value: '' }).value.trim(); autoFinish(adKey('plan', selIdea), Object.assign({ kind: 'plan', postId: selIdea, act: chosenAct, text: v, q5: why || undefined, push: pushMark(v) }, ideaSnap(selIdea))); PS.pick = null; chosenAct = null; planWhy = ''; renderStepper(); renderPanel(); toast('計畫訂好了!去論壇做做看 🚀');
       };
     }
     if (k === 'iter') {
@@ -936,7 +1084,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     ov.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:80;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:1rem';
     ov.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:42rem;width:100%;max-height:82vh;overflow:auto;padding:1.1rem 1.2rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">' +
       '<div class="flex items-start gap-2"><div class="flex-1 min-w-0"><div class="text-xs text-slate-500">' + esc(c.title) + '</div><div class="mt-1"><h5 style="display:inline-block;font-weight:900;font-size:.9rem;padding:.1rem .7rem;border-radius:99px;background:' + C.bg + ';color:' + C.color + '">' + esc(C.name) + '</h5> <span class="text-[11px] text-slate-400">' + esc(C.zh) + '</span></div></div><button type="button" id="cat-close" aria-label="關閉" class="btn g" style="padding:.2rem .7rem">✕</button></div>' +
-      '<p class="text-xs text-slate-500 mt-2"><i class="fas fa-circle-info mr-1"></i>這些是你<b>當時</b>寫的(' + esc(KBSrc.viewText(v)) + '),只當作反思的材料,不是你現在的答案。</p>' +
+      '<p class="text-xs text-slate-500 mt-2"><i class="fas fa-circle-info mr-1"></i>這些是你<b>當時</b>寫的(' + esc(KBSrc.viewText(v)) + '),只當作反思的材料,不是你現在的想法。</p>' +
       (recs.length ? recs.map(recHtml).join('') : '<p class="text-sm text-slate-400 py-3">在目前的時間方式下,沒有這一類的回答。</p>') +
       '<div class="flex flex-wrap gap-2 mt-4"><button type="button" class="btn p" id="cat-go">拿這個去反思 <i class="fas fa-arrow-right"></i></button><button type="button" class="btn g" id="cat-close2">關閉</button></div></div>';
     var close = function () { document.removeEventListener('keydown', onKey); if (ov.parentNode) ov.parentNode.removeChild(ov); };
@@ -958,6 +1106,16 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     var us = q('#src-unit'); if (us) us.onchange = function () { SRC.unit = us.value; SRC.pref = 'ws'; selIdea = null; redraw(); };
     qa('[data-mode]').forEach(function (b) { b.onclick = function () { var v = curView(); SRC.mode = b.getAttribute('data-mode'); SRC.asOf = v.asOf; SRC.a = v.a; SRC.b = v.b; SRC.pref = 'ws'; if (famOf(selIdea) !== 'ws') selIdea = null; redraw(); }; });
     var so = q('#src-asof'); if (so) so.onchange = function () { SRC.asOf = +so.value; SRC.pref = 'ws'; redraw(); };
+    var pEd = q('#pair-editor'); if (pEd) {
+      var setPairs = function (fn) { var cur = curView().pairs.map(function (p) { return [p[0], p[1]]; }); fn(cur); SRC.pairs = cur; SRC.pref = 'ws'; redraw(); };
+      qa('[data-pa]').forEach(function (e) { e.onchange = function () { var i = +e.getAttribute('data-pa'); setPairs(function (c) { c[i][0] = +e.value; }); }; });
+      qa('[data-pb]').forEach(function (e) { e.onchange = function () { var i = +e.getAttribute('data-pb'); setPairs(function (c) { c[i][1] = +e.value; }); }; });
+      qa('[data-pdel]').forEach(function (e) { e.onclick = function () { var i = +e.getAttribute('data-pdel'); setPairs(function (c) { c.splice(i, 1); }); }; });
+      var pad = q('#pair-add'); if (pad) pad.onclick = function () { var ds = KBSrc.stagesWithData(uid); setPairs(function (c) { if (c.length >= 6) return; var def = KBSrc.defaultPairs(ds).concat([[ds[0], ds[ds.length - 1]]]), pick = def.filter(function (d) { return !c.some(function (x) { return x[0] === d[0] && x[1] === d[1]; }); })[0] || [ds[0], ds[ds.length - 1]]; c.push(pick); }); };
+      var prs = q('#pair-reset'); if (prs) prs.onclick = function () { SRC.pairs = null; SRC.pref = 'ws'; redraw(); };
+    }
+    var cab = q('#cmp-ai-btn'); if (cab) cab.onclick = cmpAsk;
+    var cbz = q('#cmp-ai-busy'); if (cbz && CAI.busy && window.kbAiBusy) kbAiBusy.show(cbz, 'AI 助教正在比較這幾組前後對照…', { expect: 14 });
     var sa = q('#src-a'), sb = q('#src-b'); if (sa) sa.onchange = function () { SRC.a = +sa.value; SRC.pref = 'ws'; redraw(); }; if (sb) sb.onchange = function () { SRC.b = +sb.value; SRC.pref = 'ws'; redraw(); };
     var mo = q('#man-open'); if (mo) mo.onclick = function () { flushAll(); AD[adKey('idea', 'new')] = null; SRC.openMan = !SRC.openMan; renderPanel(); };
     var mc = q('#man-cancel'); if (mc) mc.onclick = function () { flushAll(); AD[adKey('idea', 'new')] = null; SRC.openMan = false; renderPanel(); };

@@ -227,6 +227,8 @@
 <script src="kb-asra-core.js"></script>
 <script src="kb-asra-src.js"></script>
 <script src="kb-asra.js"></script>
+<script src="kb-asra-push.js"></script>
+<script src="kb-asra-refs.js"></script>
 <script src="kb-asra-teacher.js"></script>
 <script src="kb-netlab-core.js"></script>
 <script src="kb-netlab.js"></script>
@@ -1040,7 +1042,10 @@ async function geminiPickModels(key) {
     try { localStorage.setItem('kb_ai_models', JSON.stringify({ tail: tail, t: Date.now(), list: list })); } catch (e) {}
     return list;
 }
-async function geminiFetch(key, init) {
+async function geminiFetch(key, init) {   // 送出前加上「不使用『答案』」的用字規則,回來的內容也過濾一次
+    const K = window.KBAI; const r = await geminiFetchRaw(key, K && K.guard ? K.guard(init) : init); return K && K.wrap ? K.wrap(r) : r;
+}
+async function geminiFetchRaw(key, init) {
     if (window.KBAI && key === KBAI.SENT) return KBAI.proxyFetch(init);   // 本機沒有金鑰、但老師已把金鑰存到雲端:改由伺服器代為呼叫
     let stored = ''; try { stored = localStorage.getItem('kb_ai_model') || ''; } catch (e) {}
     const discovered = await geminiPickModels(key);
@@ -2826,7 +2831,7 @@ async function geminiFetch(key, init) {
                  current: '這個主題共有 ' + globalAllNotes.length + ' 篇貼文(' + Object.keys(tcnt).map(k => k + ' ' + tcnt[k] + ' 篇').join('、') + ')。以下只附前 30 篇。',
                  data: notesToAnalyze,
                  question: '1. 大家目前達成的核心共識是什麼? 2. 有哪些值得再深究的衝突或迷思? 3. 老師下一步可以怎麼引導?',
-                 extraRules: '請像跟同事聊天一樣用白話敘述,以短段落為主,不要把答案寫成三條死板的清單;全文約 300~450 字;最後給 2~3 個老師馬上能用的做法。'
+                 extraRules: '請像跟同事聊天一樣用白話敘述,以短段落為主,不要把內容寫成三條死板的清單;全文約 300~450 字;最後給 2~3 個老師馬上能用的做法。'
              });
 
              let aiResult = await callGeminiAPI(prompt), fromAI = true;
@@ -3070,7 +3075,7 @@ async function geminiFetch(key, init) {
                 { key: 'kb12_sources', title: 'Constructive Uses of Authoritative Sources', pass: (srcCount / nz) >= AN.kbSources,
                   desc: '是否有建設性地引用文獻、官方資料或實測紀錄(貼文占比 ≥ 5%)',
                   val: `引用資料的貼文 ${pct(srcCount / nz)}(${srcCount} 篇)`,
-                  meaning: '權威資料要用來「支撐或挑戰想法」,而不是直接貼上答案。占比太低代表討論多半靠個人想像;太高則要確認學生是否真的消化資料。此項以關鍵字判斷,僅供參考。' },
+                  meaning: '權威資料要用來「支撐或挑戰想法」,而不是直接貼上現成的說法。占比太低代表討論多半靠個人想像;太高則要確認學生是否真的消化資料。此項以關鍵字判斷,僅供參考。' },
                 { key: 'kb12_democratize', title: 'Democratizing Knowledge', pass: giniVal < 0.4,
                   desc: '發言是否分佈平均(發言量吉尼係數 < 0.4)',
                   val: `吉尼係數 ${giniVal.toFixed(2)}`,
@@ -3937,7 +3942,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
             },
             'kb12_real': {
                 title: 'Real Ideas, Authentic Problems',
-                theory: '真實想法與真實問題:知識建構從學生真正想解決的問題出發,而不是練習題或老師預設的答案。',
+                theory: '真實想法與真實問題:知識建構從學生真正想解決的問題出發,而不是練習題或老師預設的說法。',
                 source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
                 how: "疑問型貼文占比 ≥ 15%,且人均發文 ≥ 3 篇。",
                 diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。",
@@ -3988,7 +3993,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 theory: '權威資料的建設性使用:引用專家與文獻不是為了取代思考,而是用來支撐、挑戰或深化社群的想法。',
                 source: "Scardamalia, M. (2002). Collective cognitive responsibility for the advancement of knowledge. In B. Smith (Ed.), <i>Liberal education in a knowledge society</i> (pp. 67–98). Open Court. <a class=\"text-indigo-600 underline\" href=\"https://ikit.org/fulltext/inpressCollectiveCog.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">免費全文(作者機構 ikit.org,送印前版本)</a>",
                 how: "以關鍵字(如「文獻、研究顯示、根據、查到、網站、實測、紀錄、網址」)判斷有引用資料的貼文占比 ≥ 5%。",
-                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。 關鍵字判斷無法分辨是「建設性使用」還是單純貼上答案。",
+                diff: "這項原則本身出自 Scardamalia(2002)。至於「怎樣算達標」的百分比,是平台依班級情境自己訂的參考值(可在設定中心調整),不是論文給定的標準;判斷多半依貼文類型或關鍵字,請當作提醒,不要當作評分。 關鍵字判斷無法分辨是「建設性使用」還是單純貼上現成的說法。",
                 ai_prompt: '如何引導學生建設性地使用文獻與外部資料?'
             },
             'kb12_democratize': {
@@ -4267,7 +4272,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
             else if (key === 'scaffold_transition') {
                 dynamicVal = '看大家怎麼接話';
                 dynamicStatus = '鷹架接龍健診';
-                meaningText = '如果圖表中充滿「提問 -> 提問」的顏色，代表大家都在鬼打牆發問，沒人給答案；如果是「提問 -> 改進」，這就是知識建構的黃金方程式，請大力稱讚這種行為！';
+                meaningText = '如果圖表中充滿「提問 -> 提問」的顏色，代表大家都在鬼打牆發問，沒人提出自己的想法；如果是「提問 -> 改進」，這就是知識建構的黃金方程式，請大力稱讚這種行為！';
             }
             else if (['radar', 'ego', 'balance', 'lexical_fingerprint', 'depth_trajectory'].includes(key)) {
                 const activeStudentEl = document.querySelector('.active-student');

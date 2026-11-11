@@ -105,11 +105,11 @@
       tile(T.plans, '計畫個數', T.usersPlan + ' 位學生訂過', 'bg-emerald-50 border-emerald-200') + tile(pct(T.planActed, T.plans) + '%', '計畫後有行動', T.planActed + ' / ' + T.plans + ' 個', 'bg-emerald-50 border-emerald-200') +
       tile(T.reeval, '再評估次數', '') + tile(pct(T.better, T.reeval) + '%', '回報「變好了」', T.better + ' / ' + T.reeval + ' 次', 'bg-amber-50 border-amber-200') + '</div>' +
       '<div class="grid lg:grid-cols-2 gap-4 mt-4">' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">ASRA 走到哪一步?<span class="ml-2 text-xs font-bold text-slate-400">監控 → 反思 → 調整 → 再評估</span></h4><p class="text-xs text-slate-500 mb-2">長條是人數,滿格代表全班。看哪一步卡住最多人。</p>' + funnel + '<div data-ai="funnel" class="mt-3"></div></section>' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">大家在做哪些思考?<span class="ml-2 text-xs font-bold text-slate-400">貼文類型(近似「認知動作」)</span></h4><p class="text-xs text-slate-500 mb-2">「改進」+「昇華」占 <b>' + pct(D.improve, T.posts) + '%</b>。這兩種越多,代表越常把想法變得更好、把大家的想法合起來。</p>' + types + '<div data-ai="types" class="mt-3"></div></section>' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">想法走多遠了?<span class="ml-2 text-xs font-bold text-slate-400">知識進展評估</span></h4><p class="text-xs text-slate-500 mb-2">全班共 ' + D.ideas + ' 個想法;其中 ' + D.ideasEvid + ' 個(' + pct(D.ideasEvid, D.ideas) + '%)作者自己寫了證據。</p>' + stat + '<div data-ai="ideas" class="mt-3"></div></section>' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">教學小建議<span class="ml-2 text-xs font-bold text-slate-400">由上面的數字自動整理</span></h4><div class="mt-2">' + tips + '</div><div data-ai="tips" class="mt-3"></div></section></div>' +
-      '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">這週建議多關心<span class="ml-2 text-xs font-bold text-slate-400">規則見「指標說明」</span></h4>' + att + '<div data-ai="attention" class="mt-3"></div></section>';
+      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">ASRA 走到哪一步?<span class="ml-2 text-xs font-bold text-slate-400">監控 → 反思 → 調整 → 再評估</span></h4><p class="text-xs text-slate-500 mb-2">長條是人數,滿格代表全班。看哪一步卡住最多人。</p>' + funnel + '<div data-ai="funnel" class="mt-3"></div>' + refsBox('funnel') + '</section>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">大家在做哪些思考?<span class="ml-2 text-xs font-bold text-slate-400">貼文類型(近似「認知動作」)</span></h4><p class="text-xs text-slate-500 mb-2">「改進」+「昇華」占 <b>' + pct(D.improve, T.posts) + '%</b>。這兩種越多,代表越常把想法變得更好、把大家的想法合起來。</p>' + types + '<div data-ai="types" class="mt-3"></div>' + refsBox('types') + '</section>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">想法走多遠了?<span class="ml-2 text-xs font-bold text-slate-400">知識進展評估</span></h4><p class="text-xs text-slate-500 mb-2">全班共 ' + D.ideas + ' 個想法;其中 ' + D.ideasEvid + ' 個(' + pct(D.ideasEvid, D.ideas) + '%)作者自己寫了證據。</p>' + stat + '<div data-ai="ideas" class="mt-3"></div>' + refsBox('ideas') + '</section>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">教學小建議<span class="ml-2 text-xs font-bold text-slate-400">由上面的數字自動整理</span></h4><div class="mt-2">' + tips + '</div><div data-ai="tips" class="mt-3"></div>' + refsBox('tips') + '</section></div>' +
+      '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">這週建議多關心<span class="ml-2 text-xs font-bold text-slate-400">規則見「指標說明」</span></h4>' + att + '<div data-ai="attention" class="mt-3"></div>' + refsBox('attention') + '</section>';
   }
 
   /* ---------- 分頁:計畫 → 行動 → 想法前進 ---------- */
@@ -128,7 +128,7 @@
       var did = off ? '這個想法來自' + esc((KBAsra.describe(p).src) || '論壇外') + ',系統看不到後續的討論;請看學生的「再評估」,或直接問他做了什麼。' : '計畫之後:他在這個討論區新發 <b>' + e.follow.mine + '</b> 則;這則想法底下多了 <b>' + e.events.length + '</b> 則貼文' + (e.events.length ? '(同學 ' + e.byOthers + '、他自己 ' + e.bySelf + (e.typeText ? ';類型:' + e.typeText : '') + ')' : '');
       return '<div class="flex flex-wrap items-start gap-3 py-3 border-t border-slate-100"><div class="w-36 shrink-0 font-bold text-slate-800">' + nameOf({ u: x.u }) + '</div><div class="flex-1 min-w-[15rem]">' +
         '<div class="text-sm">' + (off ? '<span class="font-bold text-indigo-700">想法:' + esc(cut(idea, 26)) + '</span>' : '<button type="button" data-act="view" data-id="' + esc(p.postId) + '" class="font-bold text-indigo-700 underline text-left">想法:' + esc(cut(idea, 26)) + '</button>') + ' <span class="text-xs text-slate-400">' + KBAsra.fmtDate(p.ts) + ' 訂計畫</span></div>' +
-        '<div class="text-sm text-slate-700 mt-0.5">' + pill(esc(KBAsra.ACT_NAME[p.act] || p.act || ''), 'bg-emerald-50 text-emerald-700') + (p.open ? ' ' + pill('草稿(還沒按「訂好」)', 'bg-amber-50 text-amber-700') : '') + ' ' + esc(cut(p.text, 70)) + '</div>' +
+        '<div class="text-sm text-slate-700 mt-0.5">' + pill(esc(KBAsra.ACT_NAME[p.act] || p.act || ''), 'bg-emerald-50 text-emerald-700') + (p.push ? ' ' + pill('🚀 ' + (p.push.from === 'ai' ? 'AI 助教排的' : '系統排的') + (p.push.edited ? '・自己改過' : ''), 'bg-violet-50 text-violet-700') : '') + (p.open ? ' ' + pill('草稿(還沒按「訂好」)', 'bg-amber-50 text-amber-700') : '') + ' ' + esc(cut(p.text, 70)) + '</div>' +
         '<div class="text-xs text-slate-600 mt-1">' + st + '</div><div class="text-xs text-slate-600">' + did + '</div></div>' +
         '<div class="w-44 shrink-0">' + pill(o.name, o.pill) + (old ? '<div class="text-[11px] text-rose-600 font-bold mt-1">已超過 3 天</div>' : '') + '</div></div>';
     }).join('');
@@ -232,7 +232,8 @@
       ['反思文字(含日期時間)', '反思單與訪談的質性編碼:後設認知、調節、認知主體性。', '這裡提供原文與日期,編碼要由研究者人工做;可匯出 CSV。'],
       ['核心 / 邊緣概念追問', '概念網絡裡,中心的節點是討論的焦點,邊緣的節點可能是被忽略、還沒發展、或關係不大的方向(Yang 等人 2026 圖 7 教師引導全班這樣讀圖);學生要自己解釋為什麼。', '平台的核心/邊緣是簡單規則(連到的詞數前 25% 且至少 3 個為核心;只連 0~1 個為邊緣;雲裡要有 5 個以上的詞),詞是自動從貼文抓出來的,可能抓不準。「在中間」不代表比較重要或比較正確。這裡記下學生自己的解釋,沒有判斷對錯。'],
       ['計畫 → 行動 → 再評估', '自我調整與持續改進:反思之後有沒有真的行動、結果有沒有變好。', '每次再評估會一併記下當時計畫後的新貼文與新回應數,可追蹤個人層級的前後變化。「計畫→行動→想法前進」分頁再多比較「訂計畫當時」和「現在」想法的狀態,分成四種結果;但想法前進只是「可能」與計畫有關,也可能是同學自己回應的。'],
-      ['尚未收集', '認知情緒問卷、領域前後測、認知主體性問卷。', '目前平台沒有這些資料;若要做研究,需另外施測再合併。']
+      ['學習單自評、前後測(「我給自己的評分」)', '形成性自評(self-assessment):讓學生看自己的評分,再跟想法、證據一起想。前後測為各循環一次的問卷平均。', '這些分數是研究者整理後匯入的資料包,不是平台自己施測;只放個人原始平均,不做檢定。詳見下方「我給自己的評分有哪些項目?」。'],
+      ['尚未收集', '認知情緒問卷、認知主體性問卷。', '目前平台沒有這些資料;若要做研究,需另外施測再合併。']
     ];
     var aim = [
       ['讓學生自己用資料想一想', '分析工具常常是研究者在看;這裡讓學生自己看自己的貼文與回應,再寫下反思。'],
@@ -242,6 +243,7 @@
       ['不綁定特定軟體', '用我們自己的討論平台就能做,不需要另外的分析工具。'],
       ['國小學生看得懂的說法', '用「看看走過的路」這類說法,不用專有名詞。']
     ];
+    var scaleHtml = global.KBSrc && KBSrc.scaleHelp ? '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4" id="asra-scale-help"><h4 class="font-black text-slate-800 mb-2"><i class="fas fa-chart-simple text-indigo-500 mr-1"></i>「我給自己的評分」有哪些項目?怎麼算出來的?</h4>' + KBSrc.scaleHelp(true) + '</section>' : '';
     var aimHtml = '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-2">這個設計想補什麼?</h4><ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">' + aim.map(function (a) { return '<li><b>' + a[0] + '</b>:' + a[1] + '</li>'; }).join('') + '</ul><p class="text-xs text-slate-400 mt-2">這是設計的方向,不是已經證明有效。效果要靠實際使用的資料來檢驗。</p></section>';
     var qsHtml = '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-1">學生的六個反思題(三個階段)</h4><p class="text-xs text-slate-500 mb-2">改寫自國際研究使用的反思單(Yang 等人,2026,附錄 B),把題目換成國小學生看得懂的說法,並放進本平台的五個步驟。原研究的對象是大學職前教師、以小組為單位,反思單是請學生看 KBDeX 的「累積度中心性曲線」與「關鍵詞網絡圖」來回答;本平台沒有那兩張圖,改用「哪幾天有發言」與想法清單當依據,而且是個人填寫。這個改寫還沒有驗證過成效。</p><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-slate-500 text-left"><th class="pb-2 pr-3">階段</th><th class="pb-2 pr-3">學生看到的題目</th><th class="pb-2 pr-3">在第幾步</th><th class="pb-2">原研究的題目(意譯)</th></tr></thead><tbody>' +
       ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'].map(function (k) { var q = KBAsra.QS[k], ph = KBAsra.PHASE[q.phase]; return '<tr class="border-t border-slate-100 align-top"><td class="py-2 pr-3 text-xs font-bold text-slate-600 whitespace-nowrap">' + ph[0] + '<br><span class="text-slate-400">' + ph[1] + '</span></td><td class="py-2 pr-3 font-bold text-slate-800">第 ' + q.no + ' 題 ' + esc(q.zh) + '</td><td class="py-2 pr-3 text-slate-600 whitespace-nowrap">第 ' + q.step + ' 步</td><td class="py-2 text-slate-500">' + esc(q.orig) + '</td></tr>'; }).join('') + '</tbody></table></div></section>';
@@ -252,7 +254,7 @@
       '有計畫訂了超過 3 天,之後沒有新貼文或新回應',
       '最近一次再評估選的是「還要再努力」'
     ];
-    return '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800 mb-1">匯出給研究用(CSV,可用 Excel 開啟)</h4><p class="text-xs text-slate-500 mb-3">包含日期時間、學號、姓名、班級、類型、想法標題、內容、做法、再評估結果與計畫後的行動數。檔案只存在你的電腦,不會上傳。</p>' +
+    return scaleHtml + '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-1">匯出給研究用(CSV,可用 Excel 開啟)</h4><p class="text-xs text-slate-500 mb-3">包含日期時間、學號、姓名、班級、類型、想法標題、內容、做法、再評估結果與計畫後的行動數。檔案只存在你的電腦,不會上傳。</p>' +
       '<div class="flex flex-wrap gap-2"><button type="button" data-act="csv" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold"><i class="fas fa-download mr-1"></i>匯出目前範圍的全部紀錄</button><span class="text-xs text-slate-500 self-center">範圍:' + (UI.stu === 'all' ? '目前畫面上的全部學生' : '只有選取的學生(到「反思與計畫紀錄」分頁選)') + '</span></div></section>' +
       '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800 mb-2">每個指標對應哪些國際研究的概念?<span class="ml-2 text-xs font-bold text-slate-400">與限制</span></h4><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-slate-500 text-left"><th class="pb-2 pr-3">本平台指標</th><th class="pb-2 pr-3">研究裡的對應概念</th><th class="pb-2">目前的限制</th></tr></thead><tbody>' +
       rows.map(function (r) { return '<tr class="border-t border-slate-100 align-top"><td class="py-2 pr-3 font-bold text-slate-800">' + r[0] + '</td><td class="py-2 pr-3 text-slate-600">' + r[1] + '</td><td class="py-2 text-slate-500">' + r[2] + '</td></tr>'; }).join('') + '</tbody></table></div></section>' + qsHtml + aimHtml +
@@ -296,14 +298,135 @@
       }
     };
   }
+
+  /* ---------- 每個分頁:AI 白話說明 + 理論依據與期刊 ---------- */
+  function refsBox(key) { return global.KBAsraRefs ? KBAsraRefs.box(key) : ''; }
+  var AI_TABS = { class: '全班總覽(整頁)', students: '學生一覽', effect: '計畫→行動→想法前進', src: '學習單資料', log: '反思與計畫紀錄' };
+  function extras(tab, html) {
+    var add = '';
+    if (AI_TABS[tab]) add += '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800"><i class="fas fa-robot text-violet-500 mr-1"></i>AI 白話說明<span class="ml-2 text-xs font-bold text-slate-400">用自然的語言,說明這一頁最重要的訊息(只送數字與代號,不送姓名)</span></h4><div data-ai="' + tab + '" style="display:none;gap:8px;align-items:center;flex-wrap:wrap" class="my-2"></div>' + (tab === 'class' ? '' : refsBox(tab)) + '</section>';
+    else if (tab === 'push') add += '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4">' + refsBox('push') + '</section>';
+    else if (tab === 'method' && global.KBAsraRefs) add += KBAsraRefs.all();
+    return html + add;
+  }
+  function aiTables2(D) {
+    var NL = String.fromCharCode(10), T = D.T, rows = D.rows, n = rows.length, p = function (a, b) { return pct(a, b) + '%'; };
+    var avg = function (f) { return n ? (rows.reduce(function (a, r) { return a + f(r); }, 0) / n).toFixed(1) : '0'; };
+    return {
+      students: function () {
+        var po = rows.map(function (r) { return r.A.posts; }).sort(function (a, b) { return a - b; }), med = po.length ? po[Math.floor(po.length / 2)] : 0;
+        var top = rows.slice().sort(function (a, b) { return b.A.posts - a.A.posts; }).slice(0, 3).map(function (r) { return aiCode(r.u) + '(' + r.A.posts + ' 則)'; }).join('、');
+        var low = rows.slice().sort(function (a, b) { return a.A.posts - b.A.posts; }).slice(0, 3).map(function (r) { return aiCode(r.u) + '(' + r.A.posts + ' 則)'; }).join('、');
+        return ['學生一覽(目前範圍 ' + n + ' 位學生):',
+          '- 論壇貼文數:最少 ' + (po[0] || 0) + '、中位數 ' + med + '、最多 ' + (po[po.length - 1] || 0) + ' 則;沒發過貼文的有 ' + rows.filter(function (r) { return !r.A.posts; }).length + ' 位',
+          '- 平均每人回應別人 ' + avg(function (r) { return r.A.given; }) + ' 則、被回應 ' + avg(function (r) { return r.A.received; }) + ' 則、互動夥伴 ' + avg(function (r) { return r.A.partners; }) + ' 位',
+          '- 發言最多的三位:' + (top || '無') + ';最少的三位:' + (low || '無'),
+          '- 寫過反思 ' + T.usersRefl + ' 位、訂過計畫 ' + T.usersPlan + ' 位、做過再評估 ' + T.usersRe + ' 位',
+          '- 貼文 3 則以上卻沒人回應的學生 ' + rows.filter(function (r) { return r.A.posts >= 3 && r.A.received === 0; }).length + ' 位;系統建議多關心的 ' + D.attention.length + ' 位'].join(NL);
+      },
+      effect: function () {
+        var E = D.eff, N = D.plansAll.length, ps = pushStats(D), OUT = ASRA.OUT;
+        return ['計畫 → 行動 → 想法前進(目前範圍共 ' + N + ' 個計畫):'].concat(['acted_adv', 'acted_same', 'idle_adv', 'idle_same', 'offforum', 'unknown'].map(function (k) { return '- ' + OUT[k].name + ':' + E[k] + ' 個(' + p(E[k], N) + ')'; }),
+          ['想法的狀態是依規則推出來的(等同學回應 → 待查證 → 有證據 → 在發展),「想法前進」不一定是這個計畫造成的(可能是同學自己回應)。',
+            '計畫訂了超過 3 天還沒看到新行動的:' + T.planOld + ' 個;用過「推進建議」訂的計畫:' + (ps.local + ps.ai) + ' 個(其中 AI 助教排的 ' + ps.ai + ' 個)']).join(NL);
+      },
+      src: function () {
+        var K = global.KBSrc, sm = K && K.summary ? K.summary() : null;
+        if (!sm) return '目前這台電腦的瀏覽器裡沒有匯入學習單資料包,所以「學習單想法、前後對照、自評與前後測」都沒有資料。';
+        var have = rows.filter(function (r) { return K.has(r.u.id); }).length, cats = Object.keys(sm.cat).map(function (k) { return '- ' + (K.CATS[k] ? K.CATS[k].name : k) + ':' + sm.cat[k] + ' 則'; });
+        return ['學習單資料包(研究者整理好的原話):' + sm.packs + ' 個資料包,共 ' + sm.students + ' 位學生、' + sm.records + ' 則回答、' + sm.questions + ' 種題目;目前範圍的 ' + n + ' 位學生裡有 ' + have + ' 位有資料。',
+          '回答依題目性質分成這幾類(Q3~Q6 對照是系統先擬的,尚未逐題由研究者確認):'].concat(cats, ['老師自己列的關鍵想法線:' + sm.threads + ' 條(沒列時系統會自動找出來)。']).join(NL);
+      },
+      log: function () {
+        var kinds = { note: 0, refl: 0, plan: 0, reeval: 0, concept: 0, idea: 0 }, KN = { note: '一句話/題目回答', refl: '反思', plan: '計畫', reeval: '再評估', concept: '概念追問', idea: '自己新增的想法' }, now = Date.now(), week = 0, users = 0, last = 0;
+        rows.forEach(function (r) { if (r.E.length) users++; r.E.forEach(function (e) { if (kinds[e.kind] !== undefined) kinds[e.kind]++; if (now - e.ts < 7 * DAY) week++; if (e.ts > last) last = e.ts; }); });
+        return ['反思與計畫紀錄(目前範圍 ' + n + ' 位學生,每一筆都有日期時間,只增不改):', '- 有留下紀錄的學生 ' + users + ' 位;最近 7 天新增 ' + week + ' 筆;最近一筆是 ' + (last ? fmtDT(last) : '(還沒有)')].concat(Object.keys(kinds).map(function (k) { return '- ' + KN[k] + ':' + kinds[k] + ' 筆'; })).join(NL);
+      },
+      class: function () {
+        var tb = aiTables(D); return ['全班總覽的五個區塊(下面每一段是一個區塊):'].concat(['funnel', 'types', 'ideas', 'tips', 'attention'].map(function (k) { return '【' + { funnel: 'ASRA 走到哪一步', types: '大家在做哪些思考', ideas: '想法走多遠了', tips: '教學小建議', attention: '這週建議多關心' }[k] + '】' + NL + tb[k](); })).join(NL + NL);
+      },
+      push: function () { return pushAiTable(D); }
+    };
+  }
   function wireAi(D) {
-    if (UI.tab !== 'class' || typeof global.kbAddExplain !== 'function') return;
-    var tb = aiTables(D), defs = [['funnel', 'ASRA 走到哪一步'], ['types', '大家在做哪些思考'], ['ideas', '想法走多遠了'], ['tips', '教學小建議'], ['attention', '這週建議多關心']];
+    if (typeof global.kbAddExplain !== 'function') return;
+    var tb = Object.assign({}, aiTables(D), aiTables2(D));
+    var defs = {
+      class: [['funnel', 'ASRA 走到哪一步'], ['types', '大家在做哪些思考'], ['ideas', '想法走多遠了'], ['tips', '教學小建議'], ['attention', '這週建議多關心'], ['class', '全班總覽(整頁)']],
+      students: [['students', '學生一覽']], effect: [['effect', '計畫→行動→想法前進']], src: [['src', '學習單資料']], log: [['log', '反思與計畫紀錄']],
+      push: [['push', '想法推進:卡住的想法與可以怎麼推一把']]
+    }[UI.tab] || [];
     defs.forEach(function (d) {
-      var wrap = UI.root.querySelector('[data-ai="' + d[0] + '"]'); if (!wrap) return;
+      var wrap = UI.root.querySelector('[data-ai="' + d[0] + '"]'); if (!wrap || !tb[d[0]]) return;
       wrap.style.display = 'flex';
-      global.kbAddExplain(wrap, { title: 'ASRA 反思歷程:' + d[1], table: tb[d[0]], label: '🤖 AI 解說', kind: 'snapshot' }, 'asra-' + d[0]);
+      global.kbAddExplain(wrap, { title: 'ASRA 反思歷程:' + d[1], table: tb[d[0]], label: d[0] === 'class' ? '🤖 請 AI 說明整頁' : '🤖 AI 解說', kind: 'snapshot' }, 'asra-' + d[0]);
     });
+  }
+
+
+  /* ---------- 分頁:想法推進(PUSH)— 哪些想法卡住了、可以怎麼推一把;學生在 ASRA 第 4 步可請 AI 助教排計畫 ---------- */
+  var PUSH_KIND = {
+    idle: { name: '訂了計畫還沒開始', cls: 'bg-rose-100 text-rose-700' },
+    same: { name: '做了但想法沒前進', cls: 'bg-amber-100 text-amber-700' },
+    noplan: { name: '想法還沒有下一步', cls: 'bg-sky-100 text-sky-700' }
+  };
+  function pushItems(D) {
+    var now = Date.now(), items = [], K = global.KBPush;
+    D.rows.forEach(function (r) {
+      var planFor = {}; r.S.plans.forEach(function (p) { (planFor[p.postId] = planFor[p.postId] || []).push(p); });
+      r.S.plans.forEach(function (p) {
+        var e = p._e; if (!e || p.open) return;
+        if (e.outcome === 'idle_same' && now - p.ts >= 3 * DAY) items.push({ r: r, kind: 'idle', rank: 0, title: p.ideaTitle || '(想法)', plan: p, status: e.now, info: { src: 'forum', title: p.ideaTitle, status: e.now || 'wait' } });
+        else if (e.outcome === 'acted_same') items.push({ r: r, kind: 'same', rank: 1, title: p.ideaTitle || '(想法)', plan: p, status: e.now, info: { src: 'forum', title: p.ideaTitle, status: e.now || 'check', ownEvid: e.now === 'ok' || e.now === 'grow' } });
+      });
+      r.A.ideas.forEach(function (i) {
+        if ((i.status === 'wait' || i.status === 'check') && !planFor[i.id]) items.push({ r: r, kind: 'noplan', rank: i.status === 'check' ? 2 : 3, title: i.title, status: i.status, info: { src: 'forum', title: i.title, status: i.status, replies: i.replies, diff: i.diff, ownEvid: i.ownEvid } });
+      });
+    });
+    items.sort(function (a, b) { return a.rank - b.rank || String(a.r.u.name).localeCompare(String(b.r.u.name), 'zh-Hant', { numeric: true }); });
+    items.forEach(function (it) {
+      var list = K.local(it.info), pick = it.kind === 'same' && it.plan ? (list.filter(function (x) { return x.act !== it.plan.act; })[0] || list[0]) : list[0];
+      it.sug = pick;
+    });
+    return items;
+  }
+  function pushStats(D) {
+    var st = { ai: 0, local: 0, edited: 0, better: 0, re: 0, plans: 0 };
+    D.rows.forEach(function (r) { r.S.plans.forEach(function (p) {
+      st.plans++; if (!p.push) return;
+      if (p.push.from === 'ai') st.ai++; else st.local++; if (p.push.edited) st.edited++;
+      var re = p.reeval && p.reeval.length ? p.reeval[p.reeval.length - 1].result : ''; if (re) { st.re++; if (re === 'better') st.better++; }
+    }); });
+    return st;
+  }
+  function tabPush(D) {
+    var K = global.KBPush; if (!K) return '<section class="rounded-xl bg-white border border-slate-200 p-5 text-sm text-slate-500">想法推進模組(kb-asra-push.js)沒有載入。</section>';
+    var items = pushItems(D), st = pushStats(D), people = {}; items.forEach(function (it) { people[it.r.u.id] = 1; });
+    var per = {}, listed = items.filter(function (it) { var k = it.r.u.id; per[k] = (per[k] || 0) + 1; return per[k] <= 2; });   // 每位學生最多列 2 個(最需要處理的),才看得到更多學生
+    var shown = listed.slice(0, UI.pushLimit || 30);
+    var tiles = '<div class="grid grid-cols-2 md:grid-cols-4 gap-3">' + tile(items.length, '卡住的想法', '分布在 ' + Object.keys(people).length + ' 位學生;下面每位學生最多列 2 個最需要處理的', 'bg-white border-slate-200') +
+      tile(st.local + st.ai, '用了「推進建議」的計畫', '占全部 ' + st.plans + ' 個計畫的 ' + pct(st.local + st.ai, st.plans) + '%', 'bg-violet-50 border-violet-200') +
+      tile(st.ai, '其中 AI 助教排的', '學生自己改過的有 ' + st.edited + ' 個', 'bg-white border-slate-200') +
+      tile(st.re ? pct(st.better, st.re) + '%' : '—', '推進後回報「變好了」', st.re ? st.better + ' / ' + st.re + ' 次再評估' : '還沒有再評估', 'bg-emerald-50 border-emerald-200') + '</div>';
+    var list = shown.map(function (it) {
+      var k = PUSH_KIND[it.kind], s = it.sug, A = K.acts[s.act];
+      var why = it.kind === 'idle' ? '計畫:' + esc(cut(it.plan.text, 40)) + '(訂了 ' + Math.floor((Date.now() - it.plan.ts) / DAY) + ' 天)。先請他做第一步。' : it.kind === 'same' ? '上次選「' + esc(K.acts[it.plan.act] || it.plan.act) + '」,想法沒前進,可以換個方向試試。' : (it.status === 'wait' ? '這個想法還沒有人回應。' : '有人回應了,但還看不到證據。');
+      return '<div class="flex flex-wrap items-start gap-3 py-3 border-t border-slate-100"><div class="w-36 shrink-0 font-bold text-slate-800">' + nameOf(it.r) + '</div><div class="flex-1 min-w-[15rem]">' +
+        '<div class="text-sm font-bold text-indigo-700">想法:' + esc(cut(it.title, 28)) + '</div><div class="mt-1">' + pill(k.name, k.cls) + ' <span class="text-xs text-slate-500">' + why + '</span></div>' +
+        '<div class="rounded-lg bg-violet-50 border border-violet-100 px-3 py-2 mt-2 text-sm"><b class="text-violet-800">🚀 建議這樣推:' + esc(A) + ' — ' + esc(s.title) + '</b><ol class="list-decimal pl-5 text-xs text-slate-600 mt-1">' + s.steps.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol><div class="text-[11px] text-slate-500 mt-1">為什麼:' + esc(s.why) + '</div></div></div>' +
+        '<div class="w-40 shrink-0 text-right"><a href="' + asraHref(it.r.u.id) + '" target="_blank" rel="noopener" class="text-xs font-bold text-indigo-600 underline">打開他的 ASRA ↗</a></div></div>';
+    }).join('');
+    return tiles + '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800"><i class="fas fa-rocket text-violet-500 mr-1"></i>想法推進 <span class="ml-2 text-xs font-bold text-slate-400">讓想法繼續往前走</span></h4>' +
+      '<p class="text-xs text-slate-500 mt-1">系統從論壇回應、證據、計畫與再評估,找出<b>卡住</b>的想法,並依資料排出建議的下一步(補證據、改想法、找夥伴)。學生在 ASRA 第 4 步也能看到這類建議,還可以請 AI 助教看他的論壇、學習單與自己新增的想法來排計畫,由學生自己挑、自己改。</p>' +
+      '<div data-ai="push" style="display:none;gap:8px;align-items:center;flex-wrap:wrap" class="my-2"></div>' +
+      (items.length ? list + (listed.length > shown.length ? '<button type="button" data-act="pushmore" class="mt-3 w-full text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-2">再看 ' + Math.min(30, listed.length - shown.length) + ' 個(共 ' + listed.length + ' 個)</button>' : '') : '<p class="text-sm text-slate-500 py-3">目前沒有看到卡住的想法。(想法等同學回應、待查證、或計畫還沒行動時才會出現。)</p>') + '</section>';
+  }
+  function pushAiTable(D) {
+    var items = pushItems(D), K = global.KBPush, st = pushStats(D), NL = String.fromCharCode(10);
+    var lines = items.slice(0, 15).map(function (it) { return '- ' + aiCode(it.r.u) + ':想法「' + cut(it.title, 20) + '」,' + PUSH_KIND[it.kind].name + ';系統建議「' + K.acts[it.sug.act] + '」(' + it.sug.title + ')'; });
+    var t = ['全班卡住的想法共 ' + items.length + ' 個(判斷:想法等同學回應或待查證且沒有計畫;計畫訂了超過 3 天沒行動;行動後想法沒前進),下面列出前 ' + Math.min(15, items.length) + ' 個。',
+      '學生用了「推進建議」訂計畫:' + (st.local + st.ai) + ' / ' + st.plans + ' 個(AI 助教排的 ' + st.ai + ' 個、自己改過 ' + st.edited + ' 個);推進後回報「變好了」' + st.better + ' / ' + st.re + ' 次。'].concat(lines.length ? lines : ['(目前沒有卡住的想法)']).join(NL);
+    return global.kbAiScrub ? global.kbAiScrub(t) : t;
   }
 
   /* ---------- 分頁:學習單資料(多來源想法) ---------- */
@@ -336,7 +459,7 @@
     var S = K.summary(), msg = UI.srcMsg ? '<span class="text-xs font-bold ' + (UI.srcMsgBad ? 'text-rose-600' : 'text-emerald-700') + '">' + esc(UI.srcMsg) + '</span>' : '';
     var intro = '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">學習單資料(讓沒有論壇的班級也能用 ASRA)<span class="ml-2 text-xs font-bold text-slate-400">多來源想法</span></h4>' +
       '<p class="text-sm text-slate-600 mt-1">ASRA 不一定要先有論壇貼文。只要有「一個可以被反思的想法」就能進行五個步驟。想法可以來自<b>論壇</b>、<b>學習單</b>(在這裡匯入),或由<b>學生自己新增</b>。</p>' +
-      '<ul class="text-xs text-slate-500 mt-2 list-disc pl-5 space-y-0.5"><li>資料包只存在<b>這台電腦的瀏覽器</b>,不會上傳到雲端或任何網站。學生要在自己的電腦用,請匯出「個別學生資料包」,再讓學生在 ASRA 頁自己匯入。</li><li>資料包由 <code>build_asra_pack.py</code> 從研究資料 Excel 轉出,內容只有:學生原話、題目、各階段自評平均、各循環前後測平均。<b>不含</b>質性主題編碼、教師觀察與反思。</li><li>歷史原話只當「反思的材料」給學生看,不會自動變成學生現在的答案;學生寫下的反思會另外存成新的紀錄,並標明用的是哪一種時間方式。</li></ul>' +
+      '<ul class="text-xs text-slate-500 mt-2 list-disc pl-5 space-y-0.5"><li>資料包只存在<b>這台電腦的瀏覽器</b>,不會上傳到雲端或任何網站。學生要在自己的電腦用,請匯出「個別學生資料包」,再讓學生在 ASRA 頁自己匯入。</li><li>資料包由 <code>build_asra_pack.py</code> 從研究資料 Excel 轉出,內容只有:學生原話、題目、各階段自評平均、各循環前後測平均。<b>不含</b>質性主題編碼、教師觀察與反思。</li><li>歷史原話只當「反思的材料」給學生看,不會自動變成學生現在的想法;學生寫下的反思會另外存成新的紀錄,並標明用的是哪一種時間方式。</li></ul>' +
       '<div class="flex flex-wrap items-center gap-3 mt-3"><label class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold cursor-pointer"><i class="fas fa-file-import mr-1"></i>匯入資料包(.json,可一次選好幾個)<input type="file" accept=".json,application/json" multiple data-act="src-file" class="hidden"></label>' + msg + '</div></section>';
     if (!S) return intro;
     var cmax = Math.max.apply(null, K.CAT_ORDER.map(function (k) { return S.cat[k] || 0; }).concat([1]));
@@ -424,12 +547,13 @@
   }
 
   /* ---------- 組合 ---------- */
-  var TABS = [['class', '全班總覽', 'fa-chart-pie'], ['students', '學生一覽', 'fa-users'], ['effect', '計畫→行動→想法前進', 'fa-route'], ['src', '學習單資料', 'fa-file-lines'], ['log', '反思與計畫紀錄', 'fa-book-open'], ['method', '指標說明與匯出', 'fa-circle-info']];
+  var TABS = [['class', '全班總覽', 'fa-chart-pie'], ['students', '學生一覽', 'fa-users'], ['effect', '計畫→行動→想法前進', 'fa-route'], ['push', '想法推進 (PUSH)', 'fa-rocket'], ['src', '學習單資料', 'fa-file-lines'], ['log', '反思與計畫紀錄', 'fa-book-open'], ['method', '指標說明與匯出', 'fa-circle-info']];
   function draw() {
     if (!UI.root || !UI.ctx) return;
     var D = UI.D = compute(UI.ctx);
     var tabs = '<div class="flex flex-wrap gap-2 mb-4" role="tablist">' + TABS.map(function (t) { return '<button type="button" role="tab" data-act="tab" data-tab="' + t[0] + '" aria-selected="' + (UI.tab === t[0]) + '" class="px-4 py-2 rounded-full text-sm font-bold border ' + (UI.tab === t[0] ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50') + '"><i class="fas ' + t[2] + ' mr-1"></i>' + t[1] + '</button>'; }).join('') + '</div>';
-    var body = UI.tab === 'effect' ? tabEffect(D) : UI.tab === 'src' ? tabSrc(D) : UI.tab === 'students' ? tabStudents(D) : UI.tab === 'log' ? tabLog(D) : UI.tab === 'method' ? tabMethod(D) : tabClass(D);
+    var body0 = UI.tab === 'push' ? tabPush(D) : UI.tab === 'effect' ? tabEffect(D) : UI.tab === 'src' ? tabSrc(D) : UI.tab === 'students' ? tabStudents(D) : UI.tab === 'log' ? tabLog(D) : UI.tab === 'method' ? tabMethod(D) : tabClass(D);
+    var body = extras(UI.tab, body0);
     UI.root.innerHTML = '<header class="mb-3"><h2 class="text-xl md:text-2xl font-bold text-slate-800">ASRA 反思歷程 <span class="text-sm font-bold text-slate-400">Analytics-Supported Reflective Assessment</span></h2><p class="text-sm text-slate-500">看全班與每位學生:走過的路 → 想法走多遠 → 用證據反思 → 決定下一步 → 回頭再檢查</p></header>' +
       '<div class="mb-3">' + cloudBanner() + '</div>' + tabs + '<div id="asra-t-body">' + body + '</div>';
     try { wireAi(D); } catch (e) { if (global.console) console.error(e); }
@@ -440,6 +564,7 @@
     if (a === 'tab') { UI.tab = el.getAttribute('data-tab'); draw(); }
     else if (a === 'log') { ev.preventDefault(); UI.stu = el.getAttribute('data-id'); UI.kind = 'all'; UI.limit = 40; UI.tab = 'log'; draw(); }
     else if (a === 'more') { UI.limit += 40; draw(); }
+    else if (a === 'pushmore') { UI.pushLimit = (UI.pushLimit || 30) + 30; draw(); }
     else if (a === 'view') {
       ev.preventDefault(); var cx = UI.ctx || {};
       if (global.KBUI && global.KBUI.postViewer) global.KBUI.postViewer.open(el.getAttribute('data-id'), { nodes: cx.nodes || [], topics: cx.topics || [], nameOf: function (u) { var x = (cx.userList || {})[u]; return (x && x.name) || '同學'; } });

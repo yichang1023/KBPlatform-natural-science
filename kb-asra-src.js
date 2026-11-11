@@ -324,6 +324,16 @@
     }
     return { A: recs.map(function (r) { return tag(r, r.ord > asOf); }), B: [], hidden: 0 };
   }
+  // 前後對照最多 6 組。沒指定時,用「每個循環的開頭↔結尾(3 組)」+「跨循環同階段(測試↔測試 2 組、頭尾 1 組)」,只留下雙方都有資料的組合
+  var MAX_PAIRS = 6;
+  function defaultPairs(ds) {
+    ds = ds || []; var has = function (o) { return o >= 0 && ds.indexOf(o) >= 0; }, out = [], seen = {};
+    var add = function (a, b) { if (!has(a) || !has(b) || a === b) return; if (a > b) { var t = a; a = b; b = t; } var k = a + ':' + b; if (seen[k]) return; seen[k] = 1; out.push([a, b]); };
+    [['C1E', 'C1T'], ['C2E', 'C2T'], ['C3E', 'C3T'], ['C1T', 'C2T'], ['C2T', 'C3T'], ['C1E', 'C3T']].forEach(function (p) { add(ordOf(p[0]), ordOf(p[1])); });
+    for (var i = 0; i + 1 < ds.length && out.length < MAX_PAIRS; i++) add(ds[i], ds[i + 1]);   // 不夠 6 組時,補相鄰兩個有資料的階段
+    if (!out.length && ds.length) out.push([ds[0], ds[ds.length - 1]]);
+    return out.slice(0, MAX_PAIRS);
+  }
   function tag(r, later) { var o = {}; Object.keys(r).forEach(function (k) { o[k] = r[k]; }); o.later = !!later; return o; }
   function groupByCat(recs) { var g = {}; CAT_ORDER.forEach(function (k) { g[k] = []; }); recs.forEach(function (r) { (g[r.cat] || g.none).push(r); }); return g; }
   // 這張卡在目前時間方式下看得到的筆數(用來決定列表是否顯示該卡)
@@ -334,7 +344,7 @@
   }
   function viewText(view) {
     var v = view || { mode: 'all' }, m = MODES[v.mode] || MODES.all;
-    if (v.mode === 'compare') return m.name + '(' + (STAGES[v.a] ? STAGES[v.a].name : '?') + ' ↔ ' + (STAGES[v.b] ? STAGES[v.b].name : '?') + ')';
+    if (v.mode === 'compare') return m.name + '(' + (STAGES[v.a] ? STAGES[v.a].name : '?') + ' ↔ ' + (STAGES[v.b] ? STAGES[v.b].name : '?') + (v.pairs && v.pairs.length > 1 ? ' 等 ' + v.pairs.length + ' 組' : '') + ')';
     return m.name + (STAGES[v.asOf] ? '(' + STAGES[v.asOf].name + ')' : '');
   }
 
@@ -350,6 +360,16 @@
     var NM = { C1: '第一循環', C2: '第二循環', C3: '第三循環' };
     return ['C1', 'C2', 'C3'].filter(function (k) { return p.prepost[c][k]; }).map(function (k) { return { k: k, name: NM[k], pre: p.prepost[c][k][0], post: p.prepost[c][k][1] }; });
   }
+  // 「我給自己的評分」有哪些項目、怎麼算出來(學生頁與老師頁共用同一份說明)
+  function scaleHelp(forTeacher) {
+    return '<div class="text-sm text-slate-700 space-y-2 leading-relaxed">' +
+      '<p><b>一共有兩類評分</b>,都是「學生自己填的問卷平均」,不是老師打的分數:</p>' +
+      '<ol class="list-decimal pl-5 space-y-1.5">' +
+      '<li><b>學習單自評(五點量表,1~5 分)</b>:每個階段有三種學習單,<b>回饋單(FB)</b>、<b>成就單(AC)</b>、<b>省思單(RF)</b>。每一種單,把那個階段<b>有填的題目</b>算出平均;畫面上每一根柱子 = 這三種單的平均再取平均(只算有填的那幾種),滿分 5。滑鼠停在柱子上可以看到三種各自的平均。</li>' +
+      '<li><b>前測 / 後測(問卷平均,1~5 分)</b>:每一個循環做一次前測、一次後測,畫面寫成「前測 → 後測」,是那個循環前後的問卷平均。各循環的題目與構面不完全相同,所以<b>不能把第一循環和第三循環的分數直接比大小</b>,要和自己同一個循環的前後比。</li></ol>' +
+      '<p><b>資料從哪裡來?</b>來自研究者整理好的資料包:階段平均出自「三個循環學習單五點量表量化整理」的學生階段摘要,前後測平均出自「三循環前後測完整統計分析」的個人跨循環表;不是平台自己施測的。平台只放<b>個人原始平均</b>,不放檢定、增益指數(Hake\'s g)與追查提示。</p>' +
+      '<p><b>要注意:</b>分數是當時的感覺或問卷結果,<b>不代表想法有多深</b>;高低沒有對錯,重點是和自己前後比,再跟原話一起看。' + (forTeacher ? '全班只有匯入過資料包的學生才有這些分數,人數很少時(例如 17 人)只適合描述,不適合做推論。' : '') + '</p></div>';
+  }
   function summary() {
     var p = load(); if (!p) return null;
     var codes = Object.keys(p.students), n = 0, cat = {};
@@ -364,6 +384,6 @@
     ordOf: ordOf, stageName: stageName, records: records, latestOrd: latestOrd, stagesWithData: stagesWithData,
     cards: cards, cardById: cardById, manualCards: manualCards, counts: counts, visibleCard: visibleCard,
     autoThreads: autoThreads, threadsFor: threadsFor, groupsInPack: groupsInPack, topTerms: topTerms,
-    applyView: applyView, groupByCat: groupByCat, viewText: viewText, scale: scale, prepost: prepost, summary: summary, cutText: cutText
+    applyView: applyView, defaultPairs: defaultPairs, MAX_PAIRS: MAX_PAIRS, groupByCat: groupByCat, viewText: viewText, scale: scale, prepost: prepost, scaleHelp: scaleHelp, summary: summary, cutText: cutText
   };
 })(typeof window !== 'undefined' ? window : globalThis);

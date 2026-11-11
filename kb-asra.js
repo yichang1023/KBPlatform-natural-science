@@ -24,10 +24,10 @@
   // 反思/計畫是從哪一種想法、用哪一種時間方式寫的(研究時要分得清「當時」與「現在重新看」)
   function srcInfo(e) {
     var K = global.KBSrc, vt = '';
-    if (e.timeMode && K && K.viewText) vt = K.viewText({ mode: e.timeMode, asOf: e.asOf, a: e.cmpA, b: e.cmpB });
+    if (e.timeMode && K && K.viewText) vt = K.viewText({ mode: e.timeMode, asOf: e.asOf, a: e.cmpA, b: e.cmpB, pairs: e.cmpPairs });
     return { src: SRC_NAME[e.srcType] || '', view: vt, unit: e.unit || '' };
   }
-  function pickSrc(e) { return { srcType: e.srcType, srcRef: e.srcRef, timeMode: e.timeMode, asOf: e.asOf, cmpA: e.cmpA, cmpB: e.cmpB, unit: e.unit }; }
+  function pickSrc(e) { return { srcType: e.srcType, srcRef: e.srcRef, timeMode: e.timeMode, asOf: e.asOf, cmpA: e.cmpA, cmpB: e.cmpB, cmpPairs: e.cmpPairs, unit: e.unit }; }
   var ROLE_NAME = { core: '核心概念', edge: '邊緣概念' };
   var CHOICE_NAME = { ignored: '被忽略了', undeveloped: '還沒發展', weak: '關係不大', unsure: '還不確定' };
   var ACT_NAME = { evidence: '補證據', revise: '改想法', team: '找夥伴' };
@@ -134,7 +134,7 @@
       else if (e.kind === 'idea') S.ideas.push({ id: e.id, title: e.title || '', text: e.text || '', srcFrom: e.srcFrom || 'other', stageKey: e.stageKey || '', ts: e.ts, open: !!e._open, versions: e._versions || 1 });
       else if (e.kind === 'refl') S.refl.push(Object.assign({ id: e.id, postId: e.postId, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle, q3: e.q3 || '', q4: e.q4 || '', open: !!e._open, versions: e._versions || 1, firstTs: e._firstTs || e.ts }, pickSrc(e)));
       else if (e.kind === 'concept') S.concepts.push({ id: e.id, term: e.term, role: e.role, choice: e.choice || '', text: e.text || '', ts: e.ts });
-      else if (e.kind === 'plan') { var p = Object.assign({ id: e.id, postId: e.postId, act: e.act, text: e.text, q5: e.q5 || '', ts: e._firstTs || e.ts, updTs: e.ts, open: !!e._open, versions: e._versions || 1, ideaTitle: e.ideaTitle, ideaStatus: (e._first || e).ideaStatus, reeval: [] }, pickSrc(e)); S.plans.push(p); byPlan[e.id] = p; }
+      else if (e.kind === 'plan') { var p = Object.assign({ id: e.id, postId: e.postId, act: e.act, text: e.text, q5: e.q5 || '', ts: e._firstTs || e.ts, updTs: e.ts, open: !!e._open, versions: e._versions || 1, ideaTitle: e.ideaTitle, ideaStatus: (e._first || e).ideaStatus, push: e.push || null, reeval: [] }, pickSrc(e)); S.plans.push(p); byPlan[e.id] = p; }
     });
     list.forEach(function (e) { if (e.kind === 'reeval' && byPlan[e.planId]) byPlan[e.planId].reeval.push({ result: e.result, ts: e.ts, follow: e.follow, note: e.note || '' }); });
     return S;

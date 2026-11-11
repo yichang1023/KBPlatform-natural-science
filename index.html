@@ -443,7 +443,10 @@ async function geminiPickModels(key) {
     try { localStorage.setItem('kb_ai_models', JSON.stringify({ tail: tail, t: Date.now(), list: list })); } catch (e) {}
     return list;
 }
-async function geminiFetch(key, init) {
+async function geminiFetch(key, init) {   // 送出前加上「不使用『答案』」的用字規則,回來的內容也過濾一次
+    const K = window.KBAI; const r = await geminiFetchRaw(key, K && K.guard ? K.guard(init) : init); return K && K.wrap ? K.wrap(r) : r;
+}
+async function geminiFetchRaw(key, init) {
     if (window.KBAI && key === KBAI.SENT) return KBAI.proxyFetch(init);   // 本機沒有金鑰、但老師已把金鑰存到雲端:改由伺服器代為呼叫
     let stored = ''; try { stored = localStorage.getItem('kb_ai_model') || ''; } catch (e) {}
     const discovered = await geminiPickModels(key);
