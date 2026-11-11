@@ -6,9 +6,17 @@
  * ===================================================================== */
 (function (global) {
   'use strict';
-  var W = 760, H = 500;
+  var W = 760, H = 500, DISC_R = 188, FLOOR_R = 222;   // 圓盤:球最多放到半徑 188,盤面半徑 222
   var UI = { topic: 'all', dayIdx: null, minW: 1, metric: 'between', ex: 'none', sel: null, sort: 'between', dir: -1, limit: 8, ctx: null, root: null, timer: null, layoutKey: '', pos: null, logKey: '', logRows: null, ai: null };
   var SPEEDS = [0.5, 1, 2, 4];
+  UI.view = { x: 0, y: 0, s: 1 };                 // 滾輪縮放、平移:目前看到的範圍(圖的座標)
+  var rigObj = null;
+  function rig() { if (!rigObj && global.KB3D) rigObj = new global.KB3D.Rig({ cx: W / 2, cy: H / 2, ext: 300 }); return rigObj; }   // 3D 旋轉(kb-3d.js)
+  function rigOn() { var r = rig(); return !!(r && r.active()); }
+  function clampView() {
+    var v = UI.view, w = W / v.s, h = H / v.s;
+    v.x = Math.max(-w / 2, Math.min(W - w / 2, v.x)); v.y = Math.max(-h / 2, Math.min(H - h / 2, v.y));
+  }
   function clampPos(p) { p.x = Math.max(24, Math.min(W - 24, p.x)); p.y = Math.max(24, Math.min(H - 34, p.y)); }
   function clonePos(o) { var c = {}; Object.keys(o || {}).forEach(function (k) { c[k] = { x: o[k].x, y: o[k].y }; }); return c; }
   function radii(D) {
@@ -47,13 +55,59 @@
   // 拖動圓球:
   //  浮動 = 其他圓球像被橡皮筋拉過來(有連線的拉得多、其他的拉得少),放開後再散開到各自相對的位置;
   //  固定 = 只有被拖的圓球動。圓球永遠不會疊在一起。「還原位置」可以回到最初的排列。
-  var DRAG = null;
+  var DRAG = null, VG = null;
   function onDown(ev) {
-    var g = ev.target.closest ? ev.target.closest('#nl-svg g[data-act="node"]') : null; if (!g || !UI.root.contains(g) || (ev.button != null && ev.button !== 0)) return;
-    var id = g.getAttribute('data-id'), p = UI.D && UI.D.pos[id]; if (!p) return;
+    if (ev.button != null && ev.button > 2) return;
+    var g = ev.target.closest ? ev.target.closest('#nl-svg g[data-act="node"]') : null;
+    if (g && UI.root.contains(g) && (ev.button == null || ev.button === 0)) {
+      var id = g.getAttribute('data-id'), p = UI.D && UI.D.pos[id]; if (!p) return;
+      if (anim) { cancelAnimationFrame(anim); anim = null; }
+      DRAG = { id: id, x: ev.clientX, y: ev.clientY, moved: false, start: { x: p.x, y: p.y }, home: clonePos(UI.D.pos), nb: neighborsOf(UI.D, id), shift: { x: 0, y: 0 }, zr: rigOn() ? rig().project(p.x, p.y, id).z : 0 };
+      document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp); document.addEventListener('pointercancel', onUp);
+      return;
+    }
+    // 空白處(或線)按住拖曳:旋轉整張圖(3D)或平移,看「拖空白處」的選擇;Shift / 右鍵 / 中鍵 = 換成另一個
+    var sv = ev.target.closest ? ev.target.closest('#nl-svg') : null; if (!sv || !UI.root.contains(sv) || !global.KB3D) return;
+    var onEdge = !!(ev.target.closest && ev.target.closest('[data-act="edge"]'));
+    VG = { x: ev.clientX, y: ev.clientY, moved: false, pan: global.KB3D.dragMode.isPan(ev), snap: rig().snap(), v: { x: UI.view.x, y: UI.view.y }, tap: (ev.button == null || ev.button === 0) && !ev.shiftKey && !onEdge, ev: { clientX: ev.clientX, clientY: ev.clientY } };
+    document.addEventListener('pointermove', onViewMove); document.addEventListener('pointerup', onViewUp); document.addEventListener('pointercancel', onViewUp);
+  }
+  function onViewMove(ev) {
+    if (!VG) return; var dx = ev.clientX - VG.x, dy = ev.clientY - VG.y;
+    if (!VG.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+    VG.moved = true; ev.preventDefault();
     if (anim) { cancelAnimationFrame(anim); anim = null; }
-    DRAG = { id: id, x: ev.clientX, y: ev.clientY, moved: false, start: { x: p.x, y: p.y }, home: clonePos(UI.D.pos), nb: neighborsOf(UI.D, id), shift: { x: 0, y: 0 } };
-    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp); document.addEventListener('pointercancel', onUp);
+    if (VG.pan) {
+      var svg = UI.root.querySelector('#nl-svg'), m = svg && svg.getScreenCTM(), k = m && m.a ? 1 / m.a : 1;      // 每個螢幕像素 = 多少圖的單位
+      UI.view.x = VG.v.x - dx * k; UI.view.y = VG.v.y - dy * k; clampView();
+    } else rig().drag(VG.snap, dx, dy);
+    paintGraph();
+  }
+  function onViewUp() {
+    document.removeEventListener('pointermove', onViewMove); document.removeEventListener('pointerup', onViewUp); document.removeEventListener('pointercancel', onViewUp);
+    var v = VG; VG = null; if (v && v.moved) { UI.suppressClick = true; setTimeout(function () { UI.suppressClick = false; }, 60); }
+    // 空白處點一下(沒有拖動):連點 2 下 = 換「旋轉/平移」;連點 3 下 = 回正
+    else if (v && v.tap && global.KB3D) global.KB3D.dragMode.tap(v.ev, UI.root && UI.root.querySelector('#nl-graph'), rotReset);
+  }
+  function rotReset() { if (rig()) rig().reset(); paintGraph(); }
+  // 放大視窗:圖區塊填滿整個畫面(同一份畫面,操作一樣);✕ / ESC 關閉
+  function setZoom(on) { UI.zoomed = !!on; draw(); }
+  // 滑鼠(或畫面)座標 → 圖的座標;圖放大縮小、放大視窗時四周有留白,都用 SVG 自己的換算
+  function svgPoint(svg, cx, cy) {
+    var m = svg.getScreenCTM(); if (!m) return null; var pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy; return pt.matrixTransform(m.inverse());
+  }
+  // 滑鼠移到圖上,用滾輪放大縮小(以滑鼠位置為中心)
+  function zoomBy(f, fx, fy) {
+    var v = UI.view, ns = Math.max(0.6, Math.min(5, v.s * f)); if (ns === v.s) return;
+    var w = W / v.s, h = H / v.s, ux = v.x + fx * w, uy = v.y + fy * h;
+    v.s = ns; v.x = ux - fx * (W / ns); v.y = uy - fy * (H / ns); clampView(); paintGraph();
+  }
+  function onWheel(ev) {
+    var sv = ev.target.closest ? ev.target.closest('#nl-svg') : null; if (!sv || !UI.root.contains(sv)) return;
+    ev.preventDefault();
+    var q = svgPoint(sv, ev.clientX, ev.clientY); if (!q) return;
+    var w = W / UI.view.s, h = H / UI.view.s;
+    zoomBy(ev.deltaY < 0 ? 1.15 : 1 / 1.15, (q.x - UI.view.x) / w, (q.y - UI.view.y) / h);
   }
   function onMove(ev) {
     if (!DRAG || !UI.D) return;
@@ -61,6 +115,7 @@
     DRAG.moved = true; ev.preventDefault();
     var svg = UI.root.querySelector('#nl-svg'); if (!svg) return;
     var m = svg.getScreenCTM(); if (!m) return; var inv = m.inverse(), pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; var q = pt.matrixTransform(inv);
+    if (rigOn()) q = rig().unproject(q.x, q.y, DRAG.zr);           // 圖轉過了:畫面上的位置換回平面位置
     var p = UI.D.pos[DRAG.id]; if (!p) return; p.x = q.x; p.y = q.y; clampPos(p);
     DRAG.shift = { x: p.x - DRAG.start.x, y: p.y - DRAG.start.y };
     if ((global.kbMove ? global.kbMove.get() : 'float') === 'float') {
@@ -85,6 +140,7 @@
   function resetPos() {
     if (!UI.D || !UI.base) return;
     if (anim) cancelAnimationFrame(anim);
+    UI.view.x = 0; UI.view.y = 0; UI.view.s = 1; if (rig()) rig().reset();      // 角度、縮放、平移也一起回到最初
     glideTo(clonePos(UI.base), null, 50, function () { Object.keys(UI.base).forEach(function (u) { if (UI.pos[u]) { UI.pos[u].x = UI.base[u].x; UI.pos[u].y = UI.base[u].y; } }); paintGraph(); });
   }
   function getSpeed() { var v = 1; try { v = Number(global.localStorage.getItem('kb_net_speed')) || 1; } catch (e) {} return SPEEDS.indexOf(v) >= 0 ? v : 1; }
@@ -154,15 +210,24 @@
     }
     var minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
     for (i = 0; i < n; i++) { minx = Math.min(minx, x[i]); maxx = Math.max(maxx, x[i]); miny = Math.min(miny, y[i]); maxy = Math.max(maxy, y[i]); }
-    // 左右、上下各自拉開到畫面可用範圍(圖通常比較寬,不要只用中間一小塊)
-    var sx = (maxx - minx) > 1 ? Math.min((W - 120) / (maxx - minx), 3) : 1, sy = (maxy - miny) > 1 ? Math.min((H - 110) / (maxy - miny), 3) : 1;
-    if (n < 4) { sx = sy = Math.min(sx, sy); }
-    var ox = W / 2 - (minx + maxx) / 2 * sx, oy = H / 2 - (miny + maxy) / 2 * sy - 6;
-    ids.forEach(function (u, i2) { pos[u] = { x: x[i2] * sx + ox, y: y[i2] * sy + oy }; });
+    // 整個大環境是一個圓盤:等比例放大到圓盤裡(不再左右、上下各自拉伸,球之間的遠近才不會被扭曲)
+    var mx = (minx + maxx) / 2, my = (miny + maxy) / 2, mr = 0;
+    for (i = 0; i < n; i++) mr = Math.max(mr, Math.hypot(x[i] - mx, y[i] - my));
+    var s = mr > 1 ? Math.min(DISC_R / mr, 3) : 1;
+    ids.forEach(function (u, i2) { pos[u] = { x: W / 2 + (x[i2] - mx) * s, y: H / 2 + (y[i2] - my) * s }; });
     return pos;
   }
 
   /* ---------- 小元件 ---------- */
+  // 組別顏色(老師在設定平台選的;沒選就依順序配色):同一組的圓球同一個顏色
+  function groupColors() { try { return (global.KB && global.KB.classes && global.KB.classes.groupColorMap) ? global.KB.classes.groupColorMap() : {}; } catch (x) { return {}; } }
+  function gcolor(D, id) { var u = D.info[id], g = u && u.groupId, m = D.__gm || (D.__gm = groupColors()); return g && m[g] ? m[g] : '#0f766e'; }
+  function groupLegend(D) {
+    var m = D.__gm || (D.__gm = groupColors()), seen = {}, out = '', names = {};
+    try { (global.KB.classes.groups() || []).forEach(function (g) { names[g.id] = g.name; }); } catch (x) {}
+    D.ids.forEach(function (id) { var u = D.info[id], g = u && u.groupId; if (g && !seen[g] && m[g]) { seen[g] = 1; out += '<span class="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + m[g] + '"></i>' + esc(names[g] || '組') + '</span>'; } });
+    return out ? '<span class="w-full flex flex-wrap items-center gap-x-3 gap-y-0.5"><span class="text-[11px] text-slate-500">顏色 = 組別(老師在設定平台選的顏色):</span>' + out + '</span><span class="w-full text-[11px] text-slate-500">位置:常互動的靠得近;高度:互動過的同學越多,球越高;貼在盤面上(虛線空心球)= 還沒有互動。轉動可以看出高低。</span>' : '';
+  }
   function nm(D, id) { var u = D.info[id]; return u ? u.name || id : id; }
   function tile(n, label, sub) { return '<div class="rounded-xl border border-slate-200 bg-white p-3"><div class="text-2xl font-black text-slate-800">' + n + '</div><div class="text-xs font-bold text-slate-600">' + label + '</div><div class="text-[11px] text-slate-400 mt-0.5 leading-snug">' + sub + '</div></div>'; }
   function typePill(n) {
@@ -235,14 +300,33 @@
 
   /* ---------- 圖 ---------- */
   function graphSVG(D) {
-    var g = D.g, m = D.m, pos = D.pos, ids = g.nodes, sel = UI.sel;
+    var g = D.g, m = D.m, ids = g.nodes.slice(), sel = UI.sel, vw = UI.view;
     var maxv = 0; ids.forEach(function (u) { maxv = Math.max(maxv, metricVal(D, u)); });
-    var rad = {}; ids.forEach(function (u) { rad[u] = 11 + (maxv > 0 ? 13 * metricVal(D, u) / maxv : 0); });
+    var rad = {}; ids.forEach(function (u) { rad[u] = 9 + (maxv > 0 ? 10 * metricVal(D, u) / maxv : 0); });
+    // 3D:圖轉過之後,每顆圓球在畫面上的位置、前後與遠近大小;沒轉的時候就是原本的平面
+    var pos = D.pos, zz = {};
+    if (rigOn()) {
+      pos = {}; ids.forEach(function (u) { var p0 = D.pos[u]; if (!p0) return; var P = rig().project(p0.x, p0.y, u); pos[u] = { x: P.x, y: P.y }; zz[u] = P.z; rad[u] *= P.f; });
+      ids.sort(function (a, b) { return (zz[a] || 0) - (zz[b] || 0); });                  // 遠的先畫,近的蓋在上面
+    }
     var maxw = 1; g.edges.forEach(function (e) { maxw = Math.max(maxw, e.w); });
     var focus = sel && sel.kind === 'node' ? sel.id : null;
-    var out = '<svg id="nl-svg" viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto block" role="img" aria-label="全班回覆關係網絡圖:圓圈是學生,箭頭從回應的人指向被回應的人">' +
-      '<defs><marker id="nl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" fill="#64748b"/></marker>' +
-      '<marker id="nl-arrow-sel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d97706"/></marker></defs>';
+    var out = '<svg id="nl-svg" viewBox="' + vw.x.toFixed(1) + ' ' + vw.y.toFixed(1) + ' ' + (W / vw.s).toFixed(1) + ' ' + (H / vw.s).toFixed(1) + '" class="w-full h-auto block" style="cursor:grab' + (UI.zoomed ? ';height:calc(100vh - 200px)' : '') + '" role="img" aria-label="全班回應關係網絡圖:圓圈是學生,箭頭從回應的人指向被回應的人">' +
+      '<defs><radialGradient id="nl-floor" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff"/><stop offset=".75" stop-color="#e9eef7" stop-opacity=".85"/><stop offset="1" stop-color="#e9eef7" stop-opacity="0"/></radialGradient><marker id="nl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" fill="#64748b"/></marker>' +
+      '<marker id="nl-arrow-sel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d97706"/></marker>@@SPDEFS@@</defs>';
+    // 立體空間:每顆球的高度 = 互動過的夥伴越多越高(沒有互動的貼在盤面上);位置 = 誰跟誰常互動誰就靠近
+    var KS = global.KBSphere, MW = KS ? KS.mixWhite : function (c) { return c; }, DK = KS ? KS.darker : function (c) { return c; }, heights = {}, rgx = rig();
+    ids.forEach(function (u) { var pr = m.per[u]; heights[u] = pr && pr.partners > 0 ? 16 + 72 * pr.degree : 0; });
+    if (rgx) { rgx.flat = true; rgx.zmap = heights; }
+    var spDefs = '', spSeen = {};
+    function spId(col, hollow) { var k = 'nl-sp-' + String(col).replace('#', '') + (hollow ? 'h' : ''); if (!spSeen[k]) { spSeen[k] = 1; spDefs += '<radialGradient id="' + k + '" cx=".36" cy=".32" r=".78">' + (hollow ? '<stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="' + MW(col, .78) + '"/><stop offset="1" stop-color="' + MW(col, .45) + '"/>' : '<stop offset="0" stop-color="' + MW(col, .82) + '"/><stop offset=".38" stop-color="' + MW(col, .12) + '"/><stop offset=".78" stop-color="' + col + '"/><stop offset="1" stop-color="' + DK(col, .42) + '"/>') + '</radialGradient>'; } return k; }
+    var on3 = rigOn(), Pf = function (x, y) { return on3 ? rig().projectFlat(x, y) : { x: x, y: y, f: 1 }; };
+    function ringPts(r, dy) { var s = '', k, n = 72; for (k = 0; k <= n; k++) { var a = 2 * Math.PI * k / n, q = Pf(W / 2 + Math.cos(a) * r, H / 2 + Math.sin(a) * r); s += (k ? 'L' : 'M') + q.x.toFixed(1) + ' ' + (q.y + (dy || 0)).toFixed(1); } return s + 'Z'; }
+    var c0 = Pf(W / 2, H / 2), rs = (FLOOR_R + 14) * 1.05;
+    // 外面的球殼、圓盤邊線、虛線圈都不畫(看起來像把同學綁住);只留淡淡的底色,外緣淡出
+    var bg = '<path d="' + ringPts(FLOOR_R + 14) + '" fill="url(#nl-floor)" stroke="none"/>';
+    if (on3) ids.forEach(function (u) { var p0 = D.pos[u], q = pos[u]; if (!p0 || !q) return; var gp = rig().projectFlat(p0.x, p0.y); bg += '<line x1="' + gp.x.toFixed(1) + '" y1="' + gp.y.toFixed(1) + '" x2="' + q.x.toFixed(1) + '" y2="' + q.y.toFixed(1) + '" stroke="rgba(71,85,105,.32)" stroke-dasharray="2 3"/><ellipse cx="' + gp.x.toFixed(1) + '" cy="' + gp.y.toFixed(1) + '" rx="' + (rad[u] * .85).toFixed(1) + '" ry="' + (rad[u] * .38).toFixed(1) + '" fill="rgba(15,23,42,.16)"/>'; });
+    out += bg;
     var lines = '', hits = '';
     g.edges.forEach(function (e) {
       var p1 = pos[e.a], p2 = pos[e.b]; if (!p1 || !p2) return;
@@ -263,14 +347,15 @@
       var per = m.per[u], iso = per.partners === 0, isSel = sel && sel.kind === 'node' && sel.id === u;
       var dim = focus && focus !== u && !g.edges.some(function (e) { return (e.a === focus && e.b === u) || (e.b === focus && e.a === u); });
       out += '<g data-act="node" data-id="' + esc(u) + '" tabindex="0" role="button" style="cursor:grab;touch-action:none" opacity="' + (dim ? 0.35 : 1) + '" aria-label="' + esc(nm(D, u)) + '">' +
-        '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + rad[u].toFixed(1) + '" fill="' + (iso ? '#e2e8f0' : '#0f766e') + '" stroke="' + (isSel ? '#d97706' : (iso ? '#94a3b8' : '#fff')) + '" stroke-width="' + (isSel ? 4 : 2) + '"' + (iso ? ' stroke-dasharray="4 3"' : '') + '/>' +
+        '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + rad[u].toFixed(1) + '" fill="url(#' + spId(gcolor(D, u), iso) + ')" stroke="' + (isSel ? '#d97706' : (iso ? gcolor(D, u) : DK(gcolor(D, u), .3))) + '" stroke-width="' + (isSel ? 4 : 1.6) + '"' + (iso ? ' stroke-dasharray="4 3"' : '') + '/>' +
+        '<ellipse cx="' + (p.x - rad[u] * .34).toFixed(1) + '" cy="' + (p.y - rad[u] * .4).toFixed(1) + '" rx="' + (rad[u] * .3).toFixed(1) + '" ry="' + (rad[u] * .18).toFixed(1) + '" fill="rgba(255,255,255,' + (iso ? .75 : .58) + ')" transform="rotate(-34 ' + (p.x - rad[u] * .34).toFixed(1) + ' ' + (p.y - rad[u] * .4).toFixed(1) + ')" pointer-events="none"/>' +
         '<text x="' + p.x.toFixed(1) + '" y="' + (p.y + rad[u] + 13).toFixed(1) + '" font-size="11" font-weight="700" text-anchor="middle" fill="#334155">' + esc(cut(nm(D, u), 6)) + '</text>' +
         '<title>' + esc(nm(D, u) + '|回應別人 ' + per.out + ' 次、被回應 ' + per['in'] + ' 次、夥伴 ' + per.partners + ' 位(點一下看原文、點兩下看說明)') + '</title></g>';
     });
     if (!ids.length) out += '<text x="' + W / 2 + '" y="' + H / 2 + '" text-anchor="middle" fill="#94a3b8" font-size="14">這個範圍還沒有學生</text>';
     else if (!D.postCount) out += '<g><text x="' + W / 2 + '" y="' + (H / 2 - 6) + '" text-anchor="middle" font-size="46">🌱</text><text x="' + W / 2 + '" y="' + (H / 2 + 34) + '" text-anchor="middle" fill="#64748b" font-size="14" font-weight="700">還沒有人發言,有人回應同學後,這裡就會長出線</text></g>';
     else if (!g.edges.length) out += '<text x="' + W / 2 + '" y="28" text-anchor="middle" fill="#94a3b8" font-size="13">目前這個範圍還沒有任何「回應別人」的關係</text>';
-    return out + '</svg>';
+    return (out + '</svg>').replace('@@SPDEFS@@', spDefs);
   }
 
   /* ---------- 右側:原始貼文 ---------- */
@@ -382,14 +467,15 @@
     var banner = '<div class="rounded-xl bg-teal-50 border border-teal-200 text-teal-900 text-sm px-4 py-2.5 mb-3 leading-relaxed"><b>這張圖呈現「誰回應了誰」。</b>透過動態社會網絡分析,呈現全班學生的互動關係、社群連結與參與歷程,並能追溯每一項互動的原始發言證據。每個圓圈和每條線都可以點開看原始貼文,<b>點兩下</b>會跳出說明;圓球也可以拖動。箭頭從「回應的人」指向「被回應的人」。<span class="block text-[12px] text-teal-800/80 mt-1">提醒:光看這張圖只知道「誰跟誰互動」,<b>不能</b>判斷某個想法是不是真的被改進、被證據檢驗或被別人採用,要點開線看原始發言才知道。</span></div>';
     var legend = '<div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 mt-2"><span><i class="inline-block w-3 h-3 rounded-full align-middle" style="background:#0f766e"></i> 有回覆關係</span><span><i class="inline-block w-3 h-3 rounded-full align-middle border border-dashed border-slate-400 bg-slate-200"></i> 沒有回覆關係</span><span>圓圈大小 = ' + METRICS[UI.metric][0] + '(' + esc(METRICS[UI.metric][1]) + ')</span><span>線越粗 = 回應越多次</span>' + (D.g.edges.length > 80 ? '<span class="text-teal-700 font-bold">線很多時,把「只畫回應」調成至少 2、3 次,比較看得出主要的關係。</span>' : '') + (D.g.hiddenEdges ? '<span class="text-amber-700 font-bold">已隱藏 ' + D.g.hiddenEdges + ' 條少於 ' + UI.minW + ' 次的線</span>' : '') + '</div>';
     UI.root.innerHTML = '<header class="mb-3"><h2 class="text-xl md:text-2xl font-bold text-slate-800">網絡實驗室 <span class="text-sm font-bold text-slate-400">Network Lab</span>' + (UI.ctx.scope ? ' <span class="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5 align-middle">' + esc(UI.ctx.scope.replace(/^\(|\)$/g, '')) + '</span>' : '') + '</h2><p class="text-sm text-slate-500">看全班「誰回應了誰」,並隨時回到原始貼文查證。</p></header>' + banner + controls +
-      '<div class="grid grid-cols-1 lg:grid-cols-5 gap-4"><section class="lg:col-span-3 rounded-xl bg-white border border-slate-200 p-3"><div class="rounded-lg bg-slate-50 overflow-x-auto" id="nl-graph"><div style="min-width:600px">' + graphSVG(D) + '</div></div><p class="text-[11px] text-slate-400 mt-1 md:hidden">圖比較寬,可以左右滑動看全圖</p>' +
-      '<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 mt-2"><span class="font-bold">👆 拖拖看圓球・點兩下看說明</span><span id="nl-move-slot" class="flex items-center gap-1"></span><button type="button" data-act="resetpos" class="px-2 py-0.5 rounded-full border border-slate-300 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-100" title="把圓球移回最初的排列">↺ 還原位置</button></div>' + legend + '</section>' +
+      '<div class="grid grid-cols-1 lg:grid-cols-5 gap-4"><section id="nl-graph-sec" class="lg:col-span-3 rounded-xl bg-white border border-slate-200 p-3"' + (UI.zoomed ? ' role="dialog" aria-modal="true" aria-label="全班回應關係網絡圖(放大視窗)" style="position:fixed;inset:2.5vh 2vw;z-index:9998;overflow:auto;box-shadow:0 0 0 100vmax rgba(15,23,42,.74),0 20px 60px rgba(0,0,0,.45)"' : '') + '><div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-2" id="nl-graph-title"><h3 class="font-black text-slate-800 text-base">🕸️ 全班回應關係網絡圖 <span class="text-xs font-bold text-slate-400">Reply Network</span></h3><span class="text-[11px] text-slate-500">圓圈 = 學生・箭頭 = 誰回應了誰・線越粗 = 回應越多次</span>' + groupLegend(D) + (UI.zoomed ? '<span class="text-[11px] text-slate-500">放大視窗・操作和原本一樣・按 ESC 或 ✕ 關閉</span><button type="button" data-act="unzoom" aria-label="關閉放大視窗" title="關閉(ESC)" class="ml-auto w-8 h-8 rounded-full border border-slate-300 bg-slate-50 text-slate-700 font-black text-lg leading-none hover:bg-slate-100">✕</button>' : '') + '</div><div class="rounded-lg bg-slate-50 overflow-x-auto relative" id="nl-graph"><div style="min-width:600px">' + graphSVG(D) + '</div></div><p class="text-[11px] text-slate-400 mt-1 md:hidden">圖比較寬,可以左右滑動看全圖</p>' +
+      '<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 mt-2"><span class="font-bold">👆 拖拖看圓球・點兩下看說明・滾輪縮放</span>' + (UI.zoomed ? '' : '<button type="button" data-act="zoom" class="px-2.5 py-0.5 rounded-full border border-indigo-600 bg-indigo-50 text-[11px] font-black text-indigo-700 hover:bg-indigo-100" title="放大視窗:整個視窗放大來看,操作和原本一樣" aria-label="放大視窗">⤢ 放大</button>') + '<span id="nl-move-slot" class="flex items-center gap-1"></span><span id="nl-drag-slot" class="flex items-center gap-1"></span><span class="inline-flex items-center gap-1"><button type="button" data-act="zoomout" class="w-6 h-6 rounded-full border border-slate-300 bg-white text-[13px] font-black text-slate-600 hover:bg-slate-100" title="縮小" aria-label="縮小">－</button><button type="button" data-act="zoomin" class="w-6 h-6 rounded-full border border-slate-300 bg-white text-[13px] font-black text-slate-600 hover:bg-slate-100" title="放大" aria-label="放大">＋</button></span><button type="button" data-act="resetpos" class="px-2 py-0.5 rounded-full border border-slate-300 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-100" title="把圓球、旋轉角度、縮放和位置都回到最初的樣子">↺ 還原</button></div>' + legend + '</section>' +
       '<aside class="lg:col-span-2 rounded-xl bg-white border border-slate-200 p-3 max-h-[640px] overflow-y-auto" id="nl-inspector">' + inspector(D) + '</aside></div>' +
       '<div class="mt-3">' + replay + '</div>' +
       '<div class="kb-ai-body rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 mb-3" id="nl-story" style="font-size:13px">' + storyHtml(D) + '</div><div id="nl-ai-slot" class="mb-3"></div>' + cards +
       logHtml(D) + '<section class="rounded-xl bg-white border border-slate-200 p-3 mt-4"><h3 class="font-black text-slate-800 mb-1">每位學生的回覆關係</h3><p class="text-xs text-slate-500 mb-2">點表頭排序,點一列看他的原始貼文,點兩下看說明。顏色越深 = 在全班越高。</p>' + table(D) + '</section>' + method(D);
     mountAI();
     var ms = UI.root.querySelector('#nl-move-slot'); if (ms && global.kbMove && global.kbMove.ctl) ms.appendChild(global.kbMove.ctl());
+    var ds = UI.root.querySelector('#nl-drag-slot'); if (ds && global.KB3D) ds.appendChild(global.KB3D.dragMode.ctl(rotReset, resetPos));
   }
 
   /* ---------- 互動 ---------- */
@@ -433,6 +519,10 @@
     else if (a === 'all') { stopPlay(); UI.dayIdx = null; draw(); }
     else if (a === 'play') { play(); }
     else if (a === 'resetpos') { ev.preventDefault(); resetPos(); }
+    else if (a === 'zoom') { ev.preventDefault(); setZoom(true); }
+    else if (a === 'unzoom') { ev.preventDefault(); setZoom(false); }
+    else if (a === 'zoomin') { ev.preventDefault(); zoomBy(1.3, 0.5, 0.5); }
+    else if (a === 'zoomout') { ev.preventDefault(); zoomBy(1 / 1.3, 0.5, 0.5); }
     else if (a === 'jumpday') { stopPlay(); UI.dayIdx = Number(el.getAttribute('data-i')); UI.limit = 8; draw(); }
   }
   // 點兩下:圓圈 → 這位學生的說明;連線 → 誰回給誰、內容是什麼
@@ -468,8 +558,11 @@
   var bound = false;
   function render(root, ctx) {
     stopPlay();
-    UI.root = root; UI.ctx = ctx;
-    if (!bound) { bound = true; root.addEventListener('click', onClick); root.addEventListener('pointerdown', onDown); root.addEventListener('dblclick', onDbl); root.addEventListener('change', onChange); root.addEventListener('input', onInput); root.addEventListener('keydown', onKey); }
+    UI.root = root; UI.ctx = ctx; UI.zoomed = false;
+    if (!bound) { bound = true; document.addEventListener('keydown', function (e) {
+        if (!UI.zoomed || (e.key !== 'Escape' && e.key !== 'Esc')) return;
+        if (document.querySelector('#kb-ego-dialog,.kbui-overlay,.kbui-pv')) return;      // 上面還有說明視窗:先讓它關
+        e.preventDefault(); setZoom(false); }, true); root.addEventListener('click', onClick); root.addEventListener('pointerdown', onDown); root.addEventListener('wheel', onWheel, { passive: false }); root.addEventListener('contextmenu', function (e) { if (e.target.closest && e.target.closest('#nl-svg')) e.preventDefault(); }); root.addEventListener('dblclick', onDbl); root.addEventListener('change', onChange); root.addEventListener('input', onInput); root.addEventListener('keydown', onKey); }
     draw();
   }
   global.KBNetLab = { render: render, compute: compute, layout: layout, state: function () { return UI; } };

@@ -67,7 +67,7 @@
         m[k].count++; if (e.type) m[k].types[e.type] = (m[k].types[e.type] || 0) + 1;
       });
       cache[i] = Object.keys(m).map(function (k) {
-        var e = m[k], ed = { id: k, from: e.from, to: e.to, arrows: 'to', width: Math.min(6, 1 + e.count / 6), title: e.count + ' 次回應' };
+        var e = m[k], ed = { id: k, from: e.from, to: e.to, arrows: 'to', width: Math.min(6, 1 + e.count / 6), title: e.count + ' 次回應', count: e.count, types: e.types };
         if (colors) { var dom = Object.keys(e.types).sort(function (a, b) { return e.types[b] - e.types[a]; })[0]; if (dom && colors[dom]) ed.color = { color: colors[dom] }; }
         return ed;
       });
@@ -141,6 +141,7 @@
       net.once('stabilized', function () { lastW = 0; setTimeout(refit, 60); });
       setTimeout(function () { lastW = 0; refit(); }, 1800);
     } catch (e) {}
+    try { if (window.KB3D) window.KB3D.vis(net); } catch (e) {}      // 拖空白處 3D 旋轉(kb-3d.js)
     return net;
   };
   window.kbAttachPlayer = function (o) {
@@ -185,7 +186,7 @@
       seek.value = i; label.textContent = o.labels[i];
       if (guide) guide.update(i);
       if (o.onStep) { try { o.onStep(i); } catch (e) { console.error(e); } }
-      if (animate) { physOn(); physOffLater(1500); }
+      if (animate && !o.noPhysics) { physOn(); physOffLater(1500); }
     }
     function stopTimer() { clearTimeout(st.timer); st.timer = null; }
     function setPlaying(p) { st.playing = p; btn.textContent = p ? '⏸ 暫停' : '▶ 播放'; if (!p) stopTimer(); }
@@ -223,6 +224,10 @@
 <script src="kb-core.js"></script>
 <script src="kb-cloud.js"></script>
     <script src="kb-ui.js"></script>
+    <script src="kb-3d.js"></script>
+    <script src="kb-tip.js"></script>
+    <script src="kb-ego.js"></script>
+    <script src="kb-stream.js"></script>
     <script src="kb-ai.js"></script>
 <script src="kb-asra-core.js"></script>
 <script src="kb-asra-src.js"></script>
@@ -237,7 +242,10 @@
 <script src="kb-vocab.js"></script>
 <script src="kb-ai-story.js"></script>
 <script src="kb-forest.js"></script>
-    <style>@media (min-width: 768px) { #main-scroll-area { padding-top: 3.6rem !important; } }</style>
+    <style>@media (min-width: 768px) { #main-scroll-area { padding-top: 3.6rem !important; } }        /* 深度對話透視鏡:左邊的歷程說明可以長高一點(左邊還有空位),上限約等於右邊關係圖的高度 */
+        #lens-left .kbg-log{ max-height:260px }
+        @media (min-width:1024px){ #lens-left .kbg-log{ max-height:340px } }
+    </style>
 
     <!-- 核心函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -592,7 +600,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
                 <div class="lg:col-span-2 card">
                     <div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800"><i class="fas fa-share-alt text-blue-500 mr-2"></i>社群互動結構 (SNA)</h3><button class="ref-btn" onclick="openRef('sna')"><i class="fas fa-book"></i> Ref:</button></div>
-                    <div id="overview-network-container" class="h-[250px] md:h-[300px] bg-slate-50 rounded border border-slate-100"></div>
+                    <div id="overview-network-container" class="h-[420px] md:h-[600px] bg-slate-50 rounded border border-slate-100"></div>
                 </div>
                 <div class="card">
                     <div>
@@ -638,15 +646,16 @@
                             </div>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="card">
                             <div class="flex justify-between items-center mb-4"><h4 class="font-bold text-sm text-slate-700 uppercase">KB 核心能力 (Core Competency)</h4><button class="ref-btn" onclick="openRef('radar')"><i class="fas fa-book"></i> Ref:</button></div>
                             <div class="h-48 relative"><canvas id="radarChart"></canvas></div>
                         </div>
-                        <div class="card">
+                        <div class="card md:col-span-2">
                             <div class="flex justify-between items-center mb-2"><h4 class="font-bold text-sm text-slate-700 uppercase mr-2">自我互動圈 (Ego Network)</h4><button class="ref-btn" onclick="openRef('ego')"><i class="fas fa-book"></i> Ref:</button></div>
-                            <div class="h-72 bg-slate-50 rounded border border-slate-100 relative"><div id="ego-network-container" class="absolute inset-0"></div></div>
-                            <div id="ego-legend" class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] mt-2 text-slate-600 font-medium">
+                            <div id="ego-grp-legend" class="hidden flex-wrap justify-center items-center gap-x-3 gap-y-1 text-[14px] mb-2 text-slate-700"></div>
+                            <div class="h-72 lg:h-[600px] bg-slate-50 rounded border border-slate-100 relative"><div id="ego-network-container" class="absolute inset-0"></div></div>
+                            <div id="ego-legend" class="flex flex-wrap gap-x-3 gap-y-1 text-[13px] mt-2 text-slate-600 font-medium">
                                 <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6"></i>提問</span>
                                 <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#eab308"></i>延伸</span>
                                 <span class="flex items-center gap-1"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#22c55e"></i>改進</span>
@@ -705,7 +714,8 @@
                     </select>
                 </div>
             </header>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                <div class="space-y-6 min-w-0">
                 <div class="card h-[350px] md:h-[400px]">
                     <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">1. 觀點關注度分布圖</h3><p class="text-xs text-slate-500">回覆數 × 貼文類型(並非學生評選)</p></div><button class="ref-btn" onclick="openRef('promisingness')"><i class="fas fa-book"></i> Ref:</button></div>
                     <div class="relative flex-1 bg-slate-50 border border-slate-200 rounded-lg p-4" id="promisingness-container"></div>
@@ -714,18 +724,21 @@
                     <div class="flex justify-between items-center mb-4"><div><h3 class="font-bold text-slate-800">2. 專業詞彙成長 (Domain Vocabulary)</h3><p class="text-xs text-slate-500">全班用到幾種單元專業詞(不重複,依詞庫比對)</p></div><button class="ref-btn" onclick="openRef('lexical_growth')"><i class="fas fa-book"></i> Ref:</button></div>
                     <div id="vocab-summary" class="mb-2 text-xs text-slate-600 leading-relaxed"></div><div class="relative" style="height:190px"><canvas id="lexicalChart"></canvas></div>
                 </div>
+                <div class="card h-[350px] md:h-[400px] overflow-y-auto custom-scrollbar">
+                    <div class="flex justify-between items-center mb-6"><div><h3 class="font-bold text-slate-800">4. 觀點演化路徑 (Evolution)</h3><p class="text-xs text-slate-500">從發散到整合</p></div><button class="ref-btn" onclick="openRef('rise_above')"><i class="fas fa-book"></i> Ref:</button></div>
+                    <div class="relative pl-8 space-y-10" id="evolution-timeline-container"></div>
+                </div>
+                </div>
+                <div class="min-w-0 lg:sticky lg:top-4">
                 <div class="card" id="concept-card">
                     <div class="flex justify-between items-center mb-4">
                         <div><h3 class="font-bold text-slate-800">3. 概念語義網絡 (Concept Space)</h3><p class="text-xs text-slate-500">互動式共現網絡：<span class='text-red-500 font-bold'>●</span> 熱點觀點 | 點擊查看</p></div>
                         <button class="ref-btn" onclick="openRef('concept_network')"><i class="fas fa-book"></i> Ref:</button>
                     </div>
-                    <div id="concept-network-container" class="bg-slate-50 rounded border border-slate-100" style="height:280px"></div>
+                    <div id="concept-network-container" class="bg-slate-50 rounded border border-slate-100" style="height:640px"></div>
                     <div id="concept-story" class="kb-ai-body mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3" style="font-size:13px"></div>
                     <div id="concept-story-ai"></div>
                 </div>
-                <div class="card h-[350px] md:h-[400px] overflow-y-auto custom-scrollbar">
-                    <div class="flex justify-between items-center mb-6"><div><h3 class="font-bold text-slate-800">4. 觀點演化路徑 (Evolution)</h3><p class="text-xs text-slate-500">從發散到整合</p></div><button class="ref-btn" onclick="openRef('rise_above')"><i class="fas fa-book"></i> Ref:</button></div>
-                    <div class="relative pl-8 space-y-10" id="evolution-timeline-container"></div>
                 </div>
             </div>
 
@@ -801,7 +814,7 @@
             </header>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="card">
+                <div class="card lg:col-span-2" id="lens-card">
                     <div class="flex flex-col justify-between items-start mb-4 gap-2">
                         <div>
                             <h3 class="font-bold text-slate-800 flex items-center"><i class="fas fa-search-plus text-purple-600 mr-2"></i> 深度對話透視鏡</h3>
@@ -809,15 +822,21 @@
                         </div>
                         <button class="ref-btn" onclick="openRef('lens')"><i class="fas fa-book"></i> Ref:</button>
                     </div>
-                    <div class="h-[290px] bg-slate-50 rounded border border-slate-100 relative"><div id="lens-network-container" class="absolute inset-0"></div></div>
-                    <div id="lens-detail" class="mt-2 text-xs text-black p-2 bg-slate-50 rounded">點擊節點查看詳情...</div>
+                    <!-- 左邊:播放、說明;右邊:關係圖(視野比較大) -->
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+                        <div id="lens-left" class="min-w-0 order-2 lg:order-1 lg:col-span-2 space-y-2"></div>
+                        <div class="min-w-0 order-1 lg:order-2 lg:col-span-3">
+                            <div class="h-[340px] lg:h-[500px] bg-slate-50 rounded border border-slate-100 relative"><div id="lens-network-container" class="absolute inset-0"></div></div>
+                            <div id="lens-detail" class="mt-2 text-sm text-black p-3 bg-slate-50 rounded">點擊節點查看詳情...</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="card">
+                <div class="card lg:col-span-2">
                     <div class="flex justify-between items-center mb-4">
-                        <div><h3 class="font-bold text-slate-800 flex items-center"><i class="fas fa-stream text-blue-500 mr-2"></i> 關鍵對話流</h3><p class="text-xs text-slate-500">對話時序熱度分佈</p></div>
+                        <div><h3 class="font-bold text-slate-800 flex items-center"><i class="fas fa-stream text-blue-500 mr-2"></i> 關鍵對話流</h3><p class="text-xs text-slate-600">對話時序熱度分佈・每一天、每一種發言的數量</p></div>
                         <button class="ref-btn" onclick="openRef('stream')"><i class="fas fa-book"></i> Ref:</button>
                     </div>
-                    <div class="h-[250px] w-full relative"><canvas id="streamChart"></canvas></div>
+                    <div id="stream-slot"></div>
                 </div>
             </div>
 
@@ -1691,7 +1710,10 @@ async function geminiFetchRaw(key, init) {
         const seqUI = { view: 'all', m: null, z: 1, px: 0, py: 0 };
         const SEQ_HOME = {}; SEQ_TYPES.forEach(t => { SEQ_HOME[t.k] = { x: t.x, y: t.y }; });
         const SEQ_W = 460, SEQ_H = 300;
-        const SEQ_TOOLS = '<div class="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500"><span>👆 拖拖看圓球!選「浮動」別的球會跟著跑,選「固定」只有你拖的那顆會動。滾輪(或兩個按鈕)放大縮小,拖背景可以移動畫面。</span><button type="button" data-seq-z="in" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" aria-label="放大">＋</button><button type="button" data-seq-z="out" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" aria-label="縮小">－</button><button type="button" data-seq-z="reset" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold">還原位置</button><span data-seq-mv></span></div>';
+        const seqRig = window.KB3D ? new window.KB3D.Rig({ cx: SEQ_W / 2, cy: SEQ_H / 2, ext: 200 }) : null;      // 3D 旋轉(kb-3d.js)
+        window.__seqRig = seqRig;
+        if (seqRig) { seqRig.flat = true; seqRig.zmap = { question: 0, extend: 40, improve: 70, counter: 70, riseabove: 105 }; }   // 高度 = 想法的深度:提問在盤面上,延伸、改進/不同觀點、昇華越來越高(不是隨機)
+        const SEQ_TOOLS = '<div class="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500"><span>👆 拖拖看圓球!選「浮動」別的球會跟著跑,選「固定」只有你拖的那顆會動。滾輪(或兩個按鈕)放大縮小;按住空白處拖曳,可以平移或 3D 旋轉整張圖(右邊選;空白處連點兩下切換、連點三下回正)。</span><button type="button" data-seq-z="in" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" aria-label="放大">＋</button><button type="button" data-seq-z="out" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" aria-label="縮小">－</button><button type="button" data-seq-z="reset" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" title="圓球、旋轉角度、縮放和位置都回到最初的樣子">還原位置</button><span data-seq-mv></span><span data-seq-dm></span><button type="button" data-seq-zoom class="px-2 py-0.5 rounded-full border border-indigo-600 bg-indigo-50 text-indigo-700 font-black" title="放大視窗:整個視窗放大來看,操作和原本一樣" aria-label="放大視窗">⤢ 放大</button></div>';
         const seqKey = t => t === 'counter' ? 'improve' : t;
         function seqCompute(nodes) {
             const list = (nodes || []).slice().sort((a, b) => trajTs(a) - trajTs(b)), byId = {};
@@ -1723,6 +1745,15 @@ async function geminiFetchRaw(key, init) {
             if (an === '改進' || bn === '改進') parts.push('「反例」併在「改進」裡一起算。');
             return seqEsc(parts.join('||'));
         }
+        const SEQ_HEIGHT_WORD = { question: '提問在盤面上(想法的起點)', extend: '延伸比提問高', improve: '改進比延伸更高', riseabove: '整合最高(想法的整理與昇華)' };
+        function seqBallTip(t, m, colTot) {
+            const row = seqRowTotal(m, t.k), outs = SEQ_TYPES.filter(b => row && m[t.k][b.k]).map(b => ({ n: b.name, p: Math.round(m[t.k][b.k] / row * 100) })).sort((a, b) => b.p - a.p).slice(0, 3);
+            const parts = [t.name + '(這一類想法)', '被當作回應的貼文:' + colTot[t.k] + ' 則(球越大,這一類貼文越多)。', '被回應的次數:有 ' + row + ' 則貼文是在回應「' + t.name + '」。'];
+            if (outs.length) parts.push('回應「' + t.name + '」之後,最常接:' + outs.map(o => o.n + ' ' + o.p + '%').join('、') + '。');
+            parts.push('球的高度:' + (SEQ_HEIGHT_WORD[t.k] || '') + '。轉動可以看出高低。');
+            parts.push('拖曳這顆球,其他球會慢慢跟過來。');
+            return seqEsc(parts.join('||'));
+        }
         function seqChgTip(x) {
             const one = (lab, c, t, p) => lab + ':有 ' + t + ' 則是在回應「' + x.a.name + '」,其中 ' + c + ' 則是「' + x.b.name + '」 → ' + c + ' ÷ ' + t + ' = ' + Math.round(p) + '%';
             return seqEsc([x.a.name + ' → ' + x.b.name + ':前期 ' + Math.round(x.p0) + '% → 後期 ' + Math.round(x.p2) + '%',
@@ -1733,7 +1764,7 @@ async function geminiFetchRaw(key, init) {
         (function () {
             if (window.__kbSeqTip) return; window.__kbSeqTip = true;
             let tip = null, cur = null, timer = 0, down = false;
-            const ensure = () => { if (tip) return tip; tip = document.createElement('div'); tip.id = 'kbseq-tip'; tip.setAttribute('role', 'tooltip'); tip.style.cssText = 'position:fixed;z-index:9999;max-width:290px;background:#1e293b;color:#fff;font-size:12px;line-height:1.55;padding:9px 11px;border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.3);pointer-events:none;display:none;left:0;top:0'; document.body.appendChild(tip); return tip; };
+            const ensure = () => { if (tip) return tip; tip = document.createElement('div'); tip.id = 'kbseq-tip'; tip.setAttribute('role', 'tooltip'); tip.style.cssText = 'position:fixed;z-index:9999;max-width:340px;background:#1e293b;color:#fff;font-size:14px;line-height:1.6;padding:11px 13px;border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.3);pointer-events:none;display:none;left:0;top:0'; document.body.appendChild(tip); return tip; };
             const find = t => (t && t.closest) ? t.closest('[data-seqtip]') : null;
             const hide = () => { if (tip) tip.style.display = 'none'; cur = null; clearTimeout(timer); };
             const put = (x, y) => { const r = tip.getBoundingClientRect(); let L = x + 14, T = y + 18; if (L + r.width > window.innerWidth - 8) L = Math.max(8, x - r.width - 14); if (T + r.height > window.innerHeight - 8) T = Math.max(8, y - r.height - 14); tip.style.left = L + 'px'; tip.style.top = T + 'px'; };
@@ -1743,7 +1774,7 @@ async function geminiFetchRaw(key, init) {
                     cur = el; tip.textContent = '';
                     el.getAttribute('data-seqtip').split('||').forEach((txt, i) => {
                         const d = document.createElement('div'); d.textContent = txt;
-                        d.style.cssText = i === 0 ? 'font-weight:800;font-size:13px' : /^算式/.test(txt) ? 'margin-top:4px;background:rgba(255,255,255,.15);border-radius:6px;padding:2px 7px;font-weight:700' : /^⚠/.test(txt) ? 'margin-top:4px;color:#fde68a' : 'margin-top:3px;opacity:.92';
+                        d.style.cssText = i === 0 ? 'font-weight:800;font-size:16px' : /^算式/.test(txt) ? 'margin-top:4px;background:rgba(255,255,255,.15);border-radius:6px;padding:2px 7px;font-weight:700' : /^⚠/.test(txt) ? 'margin-top:4px;color:#fde68a' : 'margin-top:3px;opacity:.92';
                         tip.appendChild(d);
                     });
                 }
@@ -1775,11 +1806,18 @@ async function geminiFetchRaw(key, init) {
             return SEQ_TYPES.map(t => '<radialGradient id="seq-ball-' + t.k + '" cx="38%" cy="30%" r="80%" fx="32%" fy="24%"><stop offset="0" stop-color="' + seqShade(t.color, 0.66) + '"/><stop offset=".34" stop-color="' + seqShade(t.color, 0.14) + '"/><stop offset=".7" stop-color="' + t.color + '"/><stop offset="1" stop-color="' + seqShade(t.color, -0.4) + '"/></radialGradient>').join('')
                 + '<filter id="seq-sh" x="-35%" y="-30%" width="170%" height="185%"><feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#0f172a" flood-opacity=".32"/></filter>';
         }
+        // 圖轉過(3D)時:先把每顆球換成畫面上的位置與遠近大小再畫,畫完換回平面位置
         function seqInner(m) {
+            if (!seqRig || !seqRig.active()) return seqInnerRaw(m);
+            const keep = SEQ_TYPES.map(t => ({ x: t.x, y: t.y }));
+            SEQ_TYPES.forEach(t => { const P = seqRig.project(t.x, t.y, t.k); t.x = P.x; t.y = P.y; t.f = P.f; t.zz = P.z; });
+            try { return seqInnerRaw(m); } finally { SEQ_TYPES.forEach((t, i) => { t.x = keep[i].x; t.y = keep[i].y; t.f = 1; t.zz = 0; }); }
+        }
+        function seqInnerRaw(m) {
             const node = {}; SEQ_TYPES.forEach(t => { node[t.k] = t; });
             const mxs = SEQ_TYPES.reduce((s0, t) => s0 + t.x, 0) / SEQ_TYPES.length, mys = SEQ_TYPES.reduce((s0, t) => s0 + t.y, 0) / SEQ_TYPES.length;
             const colTot = {}; let grand = 0; SEQ_TYPES.forEach(b => { colTot[b.k] = SEQ_TYPES.reduce((s, a) => s + m[a.k][b.k], 0); grand += colTot[b.k]; });
-            SEQ_TYPES.forEach(t => { t.r = 26 + 22 * Math.sqrt(grand ? colTot[t.k] / grand : 0); });
+            SEQ_TYPES.forEach(t => { t.r = (26 + 22 * Math.sqrt(grand ? colTot[t.k] / grand : 0)) * (t.f || 1); });
             let defs = '<defs>' + SEQ_TYPES.map(t => '<marker id="seq-arr-' + t.k + '" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L9 5L1 9z" fill="' + t.color + '"/></marker>').join('') + seqBallDefs() + '</defs>';
             let edges = '', labels = '';
             SEQ_TYPES.forEach(a => SEQ_TYPES.forEach(b => {
@@ -1800,7 +1838,7 @@ async function geminiFetchRaw(key, init) {
                     labels += '<text' + tipA + ' x="' + mx.toFixed(1) + '" y="' + (my + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
                 }
             }));
-            const nodes = SEQ_TYPES.map(t => '<g data-seqn="' + t.k + '" style="cursor:grab"><title>' + t.name + ':被回應 ' + seqRowTotal(m, t.k) + ' 次;被當作回應 ' + colTot[t.k] + ' 次</title><circle cx="' + t.x.toFixed(1) + '" cy="' + t.y.toFixed(1) + '" r="' + t.r.toFixed(1) + '" fill="url(#seq-ball-' + t.k + ')" stroke="#fff" stroke-opacity=".9" stroke-width="2.5" filter="url(#seq-sh)"/><ellipse cx="' + (t.x - t.r * 0.27).toFixed(1) + '" cy="' + (t.y - t.r * 0.47).toFixed(1) + '" rx="' + (t.r * 0.5).toFixed(1) + '" ry="' + (t.r * 0.25).toFixed(1) + '" fill="#fff" opacity=".45" pointer-events="none" transform="rotate(-20 ' + (t.x - t.r * 0.27).toFixed(1) + ' ' + (t.y - t.r * 0.47).toFixed(1) + ')"/><ellipse cx="' + (t.x + t.r * 0.22).toFixed(1) + '" cy="' + (t.y + t.r * 0.62).toFixed(1) + '" rx="' + (t.r * 0.42).toFixed(1) + '" ry="' + (t.r * 0.13).toFixed(1) + '" fill="#fff" opacity=".16" pointer-events="none"/><text x="' + t.x.toFixed(1) + '" y="' + (t.y + 5).toFixed(1) + '" text-anchor="middle" class="seq-nm">' + t.name + '</text></g>').join('');
+            const nodes = SEQ_TYPES.slice().sort((a, b) => (a.zz || 0) - (b.zz || 0)).map(t => '<g data-seqn="' + t.k + '" style="cursor:grab" data-seqtip="' + seqBallTip(t, m, colTot) + '"><circle cx="' + t.x.toFixed(1) + '" cy="' + t.y.toFixed(1) + '" r="' + t.r.toFixed(1) + '" fill="url(#seq-ball-' + t.k + ')" stroke="#fff" stroke-opacity=".9" stroke-width="2.5" filter="url(#seq-sh)"/><ellipse cx="' + (t.x - t.r * 0.27).toFixed(1) + '" cy="' + (t.y - t.r * 0.47).toFixed(1) + '" rx="' + (t.r * 0.5).toFixed(1) + '" ry="' + (t.r * 0.25).toFixed(1) + '" fill="#fff" opacity=".45" pointer-events="none" transform="rotate(-20 ' + (t.x - t.r * 0.27).toFixed(1) + ' ' + (t.y - t.r * 0.47).toFixed(1) + ')"/><ellipse cx="' + (t.x + t.r * 0.22).toFixed(1) + '" cy="' + (t.y + t.r * 0.62).toFixed(1) + '" rx="' + (t.r * 0.42).toFixed(1) + '" ry="' + (t.r * 0.13).toFixed(1) + '" fill="#fff" opacity=".16" pointer-events="none"/><text x="' + t.x.toFixed(1) + '" y="' + (t.y + 5).toFixed(1) + '" text-anchor="middle" class="seq-nm">' + t.name + '</text></g>').join('');
             return defs + edges + nodes + labels;
         }
         function seqSvg(m) {
@@ -1815,7 +1853,7 @@ async function geminiFetchRaw(key, init) {
             const toWorld = p => ({ x: (p.x - seqUI.px) / seqUI.z, y: (p.y - seqUI.py) / seqUI.z });
             const applyView = () => { vp().setAttribute('transform', 'translate(' + seqUI.px.toFixed(1) + ' ' + seqUI.py.toFixed(1) + ') scale(' + seqUI.z.toFixed(3) + ')'); };
             const redraw = () => { if (seqUI.m) vp().innerHTML = seqInner(seqUI.m); };
-            let drag = null, pan = null, targets = {}, timer = 0;
+            let drag = null, pan = null, spin = null, targets = {}, timer = 0;
             const later = fn => { const raf = window.requestAnimationFrame; return raf ? raf(fn) : setTimeout(fn, 16); };
             function separate() {
                 for (let i = 0; i < SEQ_TYPES.length; i++) for (let j = i + 1; j < SEQ_TYPES.length; j++) {
@@ -1834,27 +1872,48 @@ async function geminiFetchRaw(key, init) {
             const kick = () => { if (!timer) timer = later(tick); };
             svg.addEventListener('pointerdown', e => {
                 const g = e.target && e.target.closest ? e.target.closest('[data-seqn]') : null, p = toSvg(e);
-                if (g) { const t = node(g.getAttribute('data-seqn')), w = toWorld(p); drag = { k: t.k, ox: t.x - w.x, oy: t.y - w.y, base: {}, x0: t.x, y0: t.y }; SEQ_TYPES.forEach(q => { drag.base[q.k] = { x: q.x, y: q.y }; }); targets = {}; svg.style.cursor = 'grabbing'; }
-                else { pan = { x: p.x, y: p.y, px: seqUI.px, py: seqUI.py }; svg.style.cursor = 'grabbing'; }
+                if (g) { const t = node(g.getAttribute('data-seqn')), w = toWorld(p), P = seqRig && seqRig.active() ? seqRig.project(t.x, t.y, t.k) : null; drag = { k: t.k, ox: (P ? P.x : t.x) - w.x, oy: (P ? P.y : t.y) - w.y, zr: P ? P.z : 0, base: {}, x0: t.x, y0: t.y }; SEQ_TYPES.forEach(q => { drag.base[q.k] = { x: q.x, y: q.y }; }); targets = {}; svg.style.cursor = 'grabbing'; }
+                else {
+                    const tapOk = (e.button == null || e.button === 0) && !e.shiftKey && !(e.target.closest && e.target.closest('[data-seqtip]')), ev0 = { clientX: e.clientX, clientY: e.clientY };
+                    if (!seqRig || window.KB3D.dragMode.isPan(e)) pan = { x: p.x, y: p.y, px: seqUI.px, py: seqUI.py, cx: e.clientX, cy: e.clientY, moved: false, tap: tapOk, ev: ev0 };
+                    else spin = { x: e.clientX, y: e.clientY, snap: seqRig.snap(), moved: false, tap: tapOk, ev: ev0 };       // 空白處拖曳 = 3D 旋轉整張圖
+                    svg.style.cursor = 'grabbing';
+                }
                 try { svg.setPointerCapture(e.pointerId); } catch (x) {}
                 if (e.preventDefault) e.preventDefault();
             });
             svg.addEventListener('pointermove', e => {
-                if (!drag && !pan) return; const p = toSvg(e);
+                if (!drag && !pan && !spin) return; const p = toSvg(e);
+                if (spin) { if (Math.abs(e.clientX - spin.x) + Math.abs(e.clientY - spin.y) > 3) spin.moved = true; if (spin.moved) { seqRig.drag(spin.snap, e.clientX - spin.x, e.clientY - spin.y); redraw(); } return; }
+                if (pan && Math.abs(e.clientX - pan.cx) + Math.abs(e.clientY - pan.cy) > 3) pan.moved = true;
                 if (drag) {
                     const w = toWorld(p), t = node(drag.k); t.x = w.x + drag.ox; t.y = w.y + drag.oy;
+                    if (seqRig && seqRig.active()) { const u = seqRig.unproject(t.x, t.y, drag.zr); t.x = u.x; t.y = u.y; }       // 圖轉過了:換回平面位置
                     if (window.kbMove && window.kbMove.get() === 'fixed') targets = {}; else SEQ_TYPES.forEach(q => { if (q.k !== drag.k) targets[q.k] = { x: drag.base[q.k].x + (t.x - drag.x0) * 0.55, y: drag.base[q.k].y + (t.y - drag.y0) * 0.55 }; });
                     kick();
                 } else { seqUI.px = pan.px + (p.x - pan.x); seqUI.py = pan.py + (p.y - pan.y); applyView(); }
             });
-            const up = () => { drag = null; pan = null; svg.style.cursor = 'grab'; kick(); };
+            const seqRotReset = () => { if (seqRig) { seqRig.reset(); redraw(); } };
+            const up = () => {
+                const was = pan || spin;
+                drag = null; pan = null; spin = null; svg.style.cursor = 'grab'; kick();
+                if (was && !was.moved && was.tap && window.KB3D) window.KB3D.dragMode.tap(was.ev, box, seqRotReset);       // 空白處點一下:連點 2 下換旋轉/平移、3 下回正
+            };
             svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
             const zoomAt = (f, p) => { const nz = Math.max(0.5, Math.min(3, seqUI.z * f)), k = nz / seqUI.z; seqUI.px = p.x - (p.x - seqUI.px) * k; seqUI.py = p.y - (p.y - seqUI.py) * k; seqUI.z = nz; applyView(); };
             svg.addEventListener('wheel', e => { if (e.preventDefault) e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, toSvg(e)); }, { passive: false });
             const mvBox = box.querySelector('[data-seq-mv]'); if (mvBox && window.kbMove) mvBox.appendChild(window.kbMove.ctl());
+            const dmBox = box.querySelector('[data-seq-dm]'); if (dmBox && window.KB3D) dmBox.appendChild(window.KB3D.dragMode.ctl(seqRotReset, () => { const rb = box.querySelector('[data-seq-z=reset]'); if (rb) rb.click(); }));
+            const zmBtn = box.querySelector('[data-seq-zoom]');
+            if (zmBtn && window.KB3D) zmBtn.addEventListener('click', () => {
+                if (window.KB3D.zoomOpen()) { window.KB3D.zoomClose(); return; }
+                const els = ['seq-controls', 'seq-network', 'seq-insight'].map(i => document.getElementById(i)).filter(Boolean);
+                window.KB3D.zoom({ title: '言談序列轉移網絡', els, opener: zmBtn });
+            });
+            svg.addEventListener('contextmenu', e => { if (e.preventDefault) e.preventDefault(); });
             Array.prototype.forEach.call(box.querySelectorAll('[data-seq-z]'), b => b.addEventListener('click', () => {
                 const z = b.getAttribute('data-seq-z');
-                if (z === 'reset') { SEQ_TYPES.forEach(t => { t.x = SEQ_HOME[t.k].x; t.y = SEQ_HOME[t.k].y; }); seqUI.z = 1; seqUI.px = 0; seqUI.py = 0; targets = {}; redraw(); applyView(); }
+                if (z === 'reset') { SEQ_TYPES.forEach(t => { t.x = SEQ_HOME[t.k].x; t.y = SEQ_HOME[t.k].y; }); seqUI.z = 1; seqUI.px = 0; seqUI.py = 0; targets = {}; if (seqRig) seqRig.reset(); redraw(); applyView(); }
                 else zoomAt(z === 'in' ? 1.25 : 0.8, { x: SEQ_W / 2, y: SEQ_H / 2 });
             }));
         }
@@ -2175,8 +2234,10 @@ async function geminiFetchRaw(key, init) {
 
             const container = document.getElementById('overview-network-container');
             if(overviewNetwork) { overviewNetwork.destroy(); overviewNetwork = null; }
-            const colorPalette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
-            const nodesData = stats.students.map((u, index) => ({ id: String(u.id), label: u.name || '?', color: colorPalette[index % colorPalette.length], shape: 'dot', size: 15, font: { color: '#1e293b' } }));
+            // 顏色 = 組別(老師在設定平台選的顏色;沒選就依順序配色);同一組的同學圍成一小圈,互動多的兩組排得近
+            const snaUL = (globalRawDB && globalRawDB.userList) || {}, snaGroups = (window.KB && KB.classes && KB.classes.groups) ? KB.classes.groups() : [], snaGM = window.KBEgo ? KBEgo.colorMap(snaGroups) : {};
+            const snaG = id => (snaUL[id] && snaUL[id].groupId) || '';
+            const nodesData = stats.students.map(u => ({ id: String(u.id), label: u.name || '?', color: { background: snaGM[snaG(u.id)] || '#94a3b8', border: '#ffffff', highlight: { background: snaGM[snaG(u.id)] || '#94a3b8', border: '#334155' }, hover: { background: snaGM[snaG(u.id)] || '#94a3b8', border: '#334155' } }, shape: 'dot', size: 15, borderWidth: 3, font: { color: '#1e293b' }, grp: snaG(u.id) }));
             const studentIds = stats.students.map(u => String(u.id));
             const idSet = new Set(studentIds);
             const byIdN = {}; stats.nodes.forEach(n => { byIdN[n.id] = n; });
@@ -2187,22 +2248,126 @@ async function geminiFetchRaw(key, init) {
                 const d = snaDays.index(n.date, snaPos(n.id)), a = String(n.author);
                 if (idSet.has(a)) (postDays[a] = postDays[a] || []).push(d);
                 const p = n.parentId ? byIdN[n.parentId] : null;
-                if (p && String(p.author) !== a && idSet.has(a) && idSet.has(String(p.author))) snaEvents.push({ from: a, to: String(p.author), d: d });
+                if (p && String(p.author) !== a && idSet.has(a) && idSet.has(String(p.author))) snaEvents.push({ from: a, to: String(p.author), d: d, type: n.type });
             });
-            const snaEdgeFrame = kbEdgeFrames(snaEvents);
-            const snaBuild = i => ({
-                nodes: nodesData.map(nd => { const c = (postDays[nd.id] || []).filter(x => x <= i).length; return Object.assign({}, nd, { size: 12 + Math.min(18, c / 6), title: nd.label + ':累計 ' + c + ' 篇' }); }),
-                edges: snaEdgeFrame(i)
-            });
+            const SNA_COL = { question: '#3b82f6', extend: '#eab308', improve: '#22c55e', counter: '#ef4444', riseabove: '#a855f7' }, SNA_FALLBACK = '#64748b';
+            const snaEdgeFrame0 = kbEdgeFrames(snaEvents, SNA_COL);
+            // 線:依回應類型上色(同一方向有多種類型時用最多的那種)、箭頭加大、來回兩個方向用弧線分開;說明改用滑鼠移上去的大泡泡
+            const snaEdgeFrame = i => snaEdgeFrame0(i).map(ed => { const col = (ed.color && ed.color.color) || SNA_FALLBACK; return Object.assign({}, ed, { title: undefined, color: { color: col, highlight: col, hover: col, opacity: (ed.count || 1) >= 4 ? 0.85 : 0.55 }, width: Math.min(5.5, 1.5 + (ed.count || 1) / 5), arrows: { to: { enabled: true, scaleFactor: 1.25, type: 'arrow' } }, smooth: { enabled: true, type: 'curvedCW', roundness: 0.16 }, selectionWidth: 2, hoverWidth: 1.6 }); });
+            // 位置有兩種:①依互動結構(預設,看誰跟誰真的有互動;同組的人不一定靠在一起)②依組別(同組圍成一圈,方便對照組別)。顏色永遠是組別。
+            let snaClusters = [], snaPosGroup = {}, snaPosNet = {}, snaMode = 'net';
+            try {
+                const pw = {}; snaEvents.forEach(ev => { const k = ev.from < ev.to ? ev.from + '|' + ev.to : ev.to + '|' + ev.from; pw[k] = (pw[k] || 0) + 1; });
+                const pairs = Object.keys(pw).map(k => { const s = k.split('|'); return { a: s[0], b: s[1], w: pw[k] }; });
+                if (window.KBNetLab && KBNetLab.layout) snaPosNet = KBNetLab.layout(studentIds.slice().sort(), pairs) || {};
+            } catch (e) { console.error(e); }
+            if (window.KBEgo) {
+                const gw = {}; snaEvents.forEach(ev => { const ga = snaG(ev.from), gb = snaG(ev.to); if (ga !== gb) { gw[ga + '>' + gb] = (gw[ga + '>' + gb] || 0) + 1; } });
+                const CL = KBEgo.clusterLayout({ members: nodesData.map(nd => ({ id: nd.id, groupId: nd.grp })), groups: snaGroups, weight: (a, b) => gw[a + '>' + b] || 0 });
+                snaPosGroup = CL.pos || {}; window.__snaClustersAll = CL.clusters;
+            }
+            if (!Object.keys(snaPosNet).length) snaMode = 'group';
+            const snaApplyPos = () => { const P = snaMode === 'net' ? snaPosNet : snaPosGroup; snaClusters = snaMode === 'group' ? (window.__snaClustersAll || []) : []; window.__snaClusters = snaClusters; nodesData.forEach(nd => { const pp = P[nd.id]; if (pp) { nd.x = pp.x; nd.y = pp.y; nd.physics = false; } }); };
+            snaApplyPos();
+            window.__snaClusters = snaClusters;
+            const snaFixed = Object.keys(snaPosNet).length > 0 || Object.keys(snaPosGroup).length > 0;
+            // 3D 空間的大小(圓盤中心與半徑):依目前的排法算,球與組別圈都要放得進去
+            const snaGeo = () => {
+                let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; nodesData.forEach(nd => { if (nd.x == null) return; x0 = Math.min(x0, nd.x); x1 = Math.max(x1, nd.x); y0 = Math.min(y0, nd.y); y1 = Math.max(y1, nd.y); });
+                if (!isFinite(x0)) return { cx: 0, cy: 0, R: 220 };
+                const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2; let R = 0; nodesData.forEach(nd => { if (nd.x != null) R = Math.max(R, Math.hypot(nd.x - cx, nd.y - cy)); });
+                (snaClusters || []).forEach(c => { R = Math.max(R, Math.hypot(c.x - cx, c.y - cy) + c.r + 32); });
+                return { cx, cy, R: Math.max(150, R + 38) };
+            };
+            const snaZ = {};   // 每顆球的高度:互動過的同學越多越高;沒有互動的貼在盤面上(不是隨機的)
+            const snaBuild = i => {
+                const eds = snaEdgeFrame(i), mates = {}; eds.forEach(ed => { (mates[ed.from] = mates[ed.from] || new Set()).add(String(ed.to)); (mates[ed.to] = mates[ed.to] || new Set()).add(String(ed.from)); });
+                const G = snaGeo(), nN = Math.max(1, nodesData.length - 1), sph = window.KBSphere;
+                return {
+                    nodes: nodesData.map(nd => {
+                        const c = (postDays[nd.id] || []).filter(x => x <= i).length, pr = mates[nd.id] ? mates[nd.id].size : 0; snaZ[nd.id] = pr > 0 ? G.R * 0.07 + G.R * 0.3 * pr / nN : 0;
+                        const o = Object.assign({}, nd, { size: 12 + Math.min(18, c / 6), title: undefined, posts: c, partners: pr });
+                        if (sph) { o.shape = 'custom'; o.ctxRenderer = sph.sphereRenderer(snaGM[nd.grp] || '#94a3b8', pr === 0, nd.label, '#334155', false); }
+                        return o;
+                    }),
+                    edges: eds
+                };
+            };
             const snaLast = snaDays.labels.length - 1;
             const snaNodesDS = new vis.DataSet(snaBuild(snaLast).nodes), snaEdgesDS = new vis.DataSet(snaBuild(snaLast).edges);
-            overviewNetwork = new vis.Network(container, { nodes: snaNodesDS, edges: snaEdgesDS }, { nodes: { font: { face: 'Noto Sans TC' } }, physics: { stabilization: { enabled: true, iterations: 150, updateInterval: 50, fit: true }, barnesHut: { damping: 0.6 } } });
+            overviewNetwork = new vis.Network(container, { nodes: snaNodesDS, edges: snaEdgesDS }, snaFixed ? { nodes: { font: { face: 'Noto Sans TC' } }, physics: false, interaction: { hover: true } } : { nodes: { font: { face: 'Noto Sans TC' } }, physics: { stabilization: { enabled: true, iterations: 150, updateInterval: 50, fit: true }, barnesHut: { damping: 0.6 } } });
+            // 整個關係圖是同一個 3D 空間:玻璃球殼 + 圓盤地板(平移、旋轉、放大都不會消失)
+            const snaSetup3D = () => { try { const G = snaGeo(); window.__snaGeo = G; window.KBSphere && KBSphere.setup3D(overviewNetwork, G.cx, G.cy, G.R, snaZ); } catch (x) {} };
+            const snaFitView = () => { try { const G = snaGeo(), cv = overviewNetwork.canvas.frame.canvas, s = Math.min(cv.clientWidth, cv.clientHeight - 64) / (2 * (G.R * 1.05 + 20)); overviewNetwork.moveTo({ position: { x: G.cx, y: G.cy }, scale: s, offset: { x: 0, y: -30 }, animation: false }); } catch (x) {} };
+            if (window.KBSphere) {
+                overviewNetwork.on('beforeDrawing', ctx => { try { const G = snaGeo(), rg = overviewNetwork.__kb3d && overviewNetwork.__kb3d.rig, P = KBSphere.projector(overviewNetwork), on = !!(rg && rg.active()); KBSphere.drawGlobe(ctx, P, G.R, G.cx, G.cy); KBSphere.drawFloor(ctx, P, on, G.R, G.cx, G.cy); } catch (x) {} });
+            }
+            if (snaFixed && window.KBEgo) { KBEgo.drawClusters(overviewNetwork, () => window.__snaClusters); }
+            if (window.KBSphere) overviewNetwork.on('beforeDrawing', ctx => { try { const rg = overviewNetwork.__kb3d && overviewNetwork.__kb3d.rig; if (rg && rg.active()) KBSphere.drawDrops(ctx, overviewNetwork, rg); } catch (x) {} });
+            setTimeout(() => { snaSetup3D(); snaFitView(); }, 60); setTimeout(snaFitView, 500); setTimeout(snaFitView, 1500);
+            try { const old = document.getElementById('sna-grp-legend'); if (old) old.remove(); const gids = [...new Set(nodesData.map(nd => nd.grp).filter(Boolean))]; if (gids.length) { const lg = document.createElement('div'); lg.id = 'sna-grp-legend'; lg.className = 'flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] mb-2 text-slate-700'; lg.innerHTML = '<span class="font-bold text-slate-500">組別顏色:</span>' + gids.map(g => { const gg = snaGroups.find(x => x.id === g); return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border" style="border-color:' + snaGM[g] + '"><i style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' + snaGM[g] + '"></i><b>' + (gg ? gg.name : '組') + '</b></span>'; }).join('') + '<span class="w-full flex flex-wrap items-center gap-x-3 gap-y-1" id="sna-type-legend"><span class="font-bold text-slate-500">線的顏色(回應類型,箭頭指向被回應的人):</span>' + [['question','提問'],['extend','延伸'],['improve','改進'],['counter','反例'],['riseabove','昇華']].map(t => '<span class="inline-flex items-center gap-1"><i style="display:inline-block;width:18px;height:4px;border-radius:2px;background:' + SNA_COL[t[0]] + '"></i><b>' + t[1] + '</b></span>').join('') + '</span><span class="inline-flex items-center gap-1 ml-1"><span class="font-bold text-slate-500">排列方式:</span><button type="button" data-sna-mode="net" class="px-2 py-0.5 rounded-full border text-[11px] font-bold">依互動結構</button><button type="button" data-sna-mode="group" class="px-2 py-0.5 rounded-full border text-[11px] font-bold">依組別</button></span><span id="sna-mode-note" class="text-slate-500 text-[11px] w-full"></span>'; container.insertAdjacentElement('beforebegin', lg); const paint = () => { lg.querySelectorAll('[data-sna-mode]').forEach(b => { const on = b.dataset.snaMode === snaMode; b.className = 'px-2 py-0.5 rounded-full border text-[11px] font-bold ' + (on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300'); }); lg.querySelector('#sna-mode-note').textContent = snaMode === 'net' ? '位置依「誰跟誰真的有互動」排:常互動的靠近;球的高度 = 互動過的同學越多越高,貼在盤面(虛線空心球)= 還沒有互動;轉動就看得出高低。同一組的人不一定在一起,顏色才表示組別。' : '位置依組別排:同一組圍成一圈,方便對照組別;互動多的兩組排得比較近(不代表組內每個人都有互動)。球的高度仍然是「互動過的同學越多越高」。'; }; paint(); lg.querySelectorAll('[data-sna-mode]').forEach(b => b.addEventListener('click', () => { snaMode = b.dataset.snaMode; snaApplyPos(); try { snaNodesDS.update(nodesData.map(nd => ({ id: nd.id, x: nd.x, y: nd.y }))); overviewNetwork.redraw(); setTimeout(() => { snaSetup3D(); snaFitView(); }, 30); } catch (x) {} paint(); })); } } catch (e) {}
             // 排列穩定後就關閉物理運算,圖不會再一直晃動(仍可手動拖曳節點)
+            // 滑鼠移到圓球或線條:跳出大泡泡(誰、幾次、哪幾種回應類型)
+            try {
+                if (window.KBTip) {
+                    const card = container.closest('.card') || container.parentElement, tip = KBTip.create(card), H = KBTip.h; let ms = { x: 0, y: 0 };
+                    container.addEventListener('mousemove', ev => { const c = card.getBoundingClientRect(); ms = { x: ev.clientX - c.left, y: ev.clientY - c.top }; });
+                    const NM = id => { const nd = nodesData.find(x => x.id === String(id)); return nd ? nd.label : String(id); };
+                    const gnm = gid => { const g = snaGroups.find(x => x.id === gid); return g ? g.name : (gid ? '未命名組' : '未分組'); };
+                    const TN = { question: '提問', extend: '延伸', improve: '改進', counter: '反例', riseabove: '昇華' };
+                    const onN = p => {
+                        const nd = snaNodesDS.get().find(x => x.id === p.node); if (!nd) return; const eds = snaEdgesDS.get(); let out = 0, inn = 0; const mates = new Set();
+                        eds.forEach(ed => { if (String(ed.from) === nd.id) { out += ed.count || 0; mates.add(String(ed.to)); } if (String(ed.to) === nd.id) { inn += ed.count || 0; mates.add(String(ed.from)); } });
+                        tip.show(H('👤 ' + nd.label, gnm(nd.grp), snaGM[nd.grp] || '#64748b') + '<p>累計發文 <span class="hl">' + (nd.posts || 0) + '</span> 篇。</p><p>回應別人 <span class="hl">' + out + '</span> 次、被別人回應 <span class="hl">' + inn + '</span> 次,跟 <span class="hl">' + mates.size + '</span> 位同學互動過。</p><div class="nx">顏色 = 組別;位置:常互動的靠得近;高度:互動過的同學越多球越高(貼在盤面 = 還沒有互動)。點兩下連線可以看他們說了什麼。</div>', ms.x, ms.y, 'n:' + nd.id + ':' + (nd.posts || 0) + ':' + out + ':' + inn);
+                    };
+                    const onE = p => {
+                        const all = snaEdgesDS.get(), ed = all.find(x => x.id === p.edge); if (!ed) return; const rev = all.find(x => String(x.from) === String(ed.to) && String(x.to) === String(ed.from));
+                        const ts = Object.keys(ed.types || {}).sort((a, b) => ed.types[b] - ed.types[a]);
+                        const li = ts.map(t => '<li><span><i style="display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;background:' + (SNA_COL[t] || SNA_FALLBACK) + '"></i>' + (TN[t] || t) + '</span><b>' + ed.types[t] + ' 次</b></li>').join('');
+                        tip.show(H(NM(ed.from) + ' → ' + NM(ed.to), (ed.count || 1) + ' 次', (ed.color && ed.color.color) || SNA_FALLBACK) + '<p>' + NM(ed.from) + ' 回應了 ' + NM(ed.to) + ' <span class="hl">' + (ed.count || 1) + '</span> 次(箭頭指向被回應的人)。</p>' + (li ? '<ul>' + li + '</ul>' : '') + (rev ? '<p>反方向:' + NM(ed.to) + ' 也回應過 ' + NM(ed.from) + ' <span class="hl">' + (rev.count || 1) + '</span> 次。</p>' : '') + '<div class="nx">線的顏色 = 回應類型(多種時用最多的那種);線越粗,回應越多次。點兩下這條線,看他們說了什麼。</div>', ms.x, ms.y, 'e:' + ed.id + ':' + (ed.count || 1));
+                    };
+                    // 滑鼠移到某位同學:只留下他的線,其他線淡掉,線才看得清楚
+                    const focusOn = id => { try { snaEdgesDS.update(snaEdgesDS.get().map(ed => { const inc = id == null || String(ed.from) === id || String(ed.to) === id, c = ed.color || {}; return { id: ed.id, color: Object.assign({}, c, { opacity: inc ? ((ed.count || 1) >= 4 || id != null ? 0.95 : 0.55) : 0.06 }) }; })); } catch (x) {} };
+                    overviewNetwork.on('hoverNode', p => { onN(p); focusOn(String(p.node)); }); overviewNetwork.on('blurNode', () => { tip.hide(); focusOn(null); });
+                    overviewNetwork.on('hoverEdge', onE); overviewNetwork.on('blurEdge', () => tip.hide());
+                    window.__snaTip = { hoverNode: id => onN({ node: id }), hoverEdge: id => onE({ edge: id }), tip };
+                }
+            } catch (err) { console.error(err); }
             const stopSnaPhysics = () => { if (overviewNetwork) overviewNetwork.setOptions({ physics: false }); };
             overviewNetwork.once('stabilizationIterationsDone', stopSnaPhysics); kbLively(overviewNetwork);
             setTimeout(stopSnaPhysics, 2500);
             try { kbEgoTalk(overviewNetwork, { edgesOnly: true, me: '', nodes: stats.nodes, userList: (globalRawDB && globalRawDB.userList) || {}, typeLabel: t => kbTypeMap[t] || '' }); } catch (e) { console.error(e); }
-            kbAttachPlayer({ explainTitle: '全班互動網絡(誰回應了誰)的形成過程', id: 'sna', container: container, network: overviewNetwork, nodesDS: snaNodesDS, edgesDS: snaEdgesDS, labels: snaDays.stepLabels, steps: snaDays.steps, build: snaBuild });
+            kbAttachPlayer({ explainTitle: '全班互動網絡(誰回應了誰)的形成過程', id: 'sna', container: container, network: overviewNetwork, nodesDS: snaNodesDS, edgesDS: snaEdgesDS, labels: snaDays.stepLabels, steps: snaDays.steps, build: snaBuild, noPhysics: snaFixed });
+            // 指標摘要、跨組連線、孤立聲明(整段時間累計;只描述論壇裡的回應關係)
+            try {
+                const old = document.getElementById('sna-metrics'); if (old) old.remove();
+                if (window.KBNet && studentIds.length > 1) {
+                    const dm = {}; snaEvents.forEach(ev => { const k = ev.from + '\u0001' + ev.to; (dm[k] = dm[k] || { a: ev.from, b: ev.to, w: 0 }).w++; });
+                    const M = KBNet.metrics({ nodes: studentIds.slice(), edges: Object.keys(dm).map(k => dm[k]) });
+                    const nm = id => { const nd = nodesData.find(x => x.id === String(id)); return nd ? nd.label : String(id); };
+                    const gnm = gid => { const g = snaGroups.find(x => x.id === gid); return g ? g.name : (gid ? '未命名組' : '未分組'); };
+                    const pct = v => Math.round(v * 100) + '%';
+                    let cross = 0, within = 0; const pairW = {};
+                    snaEvents.forEach(ev => { const ga = snaG(ev.from), gb = snaG(ev.to); if (!ga || !gb) return; if (ga === gb) within++; else { cross++; const k = ga < gb ? ga + '|' + gb : gb + '|' + ga; pairW[k] = (pairW[k] || 0) + 1; } });
+                    const pairs = Object.keys(pairW).map(k => { const s = k.split('|'); return { a: s[0], b: s[1], w: pairW[k] }; }).sort((x, y) => y.w - x.w);
+                    const gids = [...new Set(nodesData.map(nd => nd.grp).filter(Boolean))], touched = new Set(); pairs.forEach(pp => { touched.add(pp.a); touched.add(pp.b); });
+                    const closed = gids.filter(g => !touched.has(g));
+                    const bridge = studentIds.slice().sort((x, y) => M.per[y].between - M.per[x].between)[0], hasBridge = bridge && M.per[bridge].between > 0;
+                    const tile = (v, t, s) => '<div class="rounded-xl border border-slate-200 bg-white p-3"><div class="text-2xl font-black text-slate-800">' + v + '</div><div class="text-xs font-bold text-slate-600">' + t + '</div><div class="text-[11px] text-slate-400 mt-0.5 leading-snug">' + s + '</div></div>';
+                    const totalG = cross + within, iso = M.isolates;
+                    const html = '<div id="sna-metrics" class="mt-4 border-t border-slate-100 pt-3">' +
+                        '<div class="text-sm font-bold text-slate-700 mb-2"><i class="fas fa-chart-pie text-indigo-500 mr-1"></i>指標摘要(整段時間累計)</div>' +
+                        '<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">' +
+                        tile(pct(M.density), '互動密度', '互動過的兩人組合 ÷ 全班所有可能的兩人組合') +
+                        tile(pct(M.reciprocity), '有來有往', '互動的組合中,雙方都回應過對方的比例') +
+                        tile(totalG ? pct(cross / totalG) : '—', '跨組回應', totalG ? '回應裡有 ' + cross + ' 次是回給別組同學(組內 ' + within + ' 次)' : '還沒有有組別的回應') +
+                        tile(iso.length + ' 位', '沒有回應紀錄', '論壇裡沒有回應別人、也沒被回應') + '</div>' +
+                        '<div class="grid md:grid-cols-2 gap-3 text-[13px] leading-relaxed text-slate-700">' +
+                        '<div class="rounded-xl bg-indigo-50/60 border border-indigo-100 p-3"><b>跨組連線:</b> ' + (pairs.length ? pairs.slice(0, 4).map(pp => '<span class="inline-block mr-2">' + gnm(pp.a) + ' ↔ ' + gnm(pp.b) + ' <b>' + pp.w + '</b> 次</span>').join('') : '還沒有跨組的回應。') + (closed.length ? '<div class="mt-1 text-amber-700">' + closed.map(gnm).join('、') + ' 目前沒有跟其他組互動過。</div>' : '') + (hasBridge ? '<div class="mt-1 text-slate-500">位置最像「橋」(連起不同夥伴)的是 ' + nm(bridge) + ';這只描述回應關係的位置,不是貢獻高低。</div>' : '') + '</div>' +
+                        '<div class="rounded-xl bg-amber-50 border border-amber-200 p-3"><b>關於「沒有互動」的同學:</b> ' + (iso.length ? '<span class="font-bold">' + iso.map(nm).join('、') + '</span> 在論壇裡沒有留下回應紀錄。' : '目前每位同學在論壇裡都有互動紀錄。') + '<div class="mt-1 text-slate-600">這只代表「<b>論壇裡沒有留下紀錄</b>」,不能直接當成「沒有參與學習」:他們可能在課堂上口頭討論、閱讀同學的想法、或用別的方式參與。請搭配課堂觀察,再決定要不要關心。</div></div></div></div>';
+                    const card = container.closest('.card') || container.parentElement; card.insertAdjacentHTML('beforeend', html);
+                }
+            } catch (err) { console.error(err); }
             const typeCounts = { question:0, extend:0, improve:0, counter:0, riseabove:0 };
             stats.nodes.forEach(n => { if (typeCounts[n.type] !== undefined) typeCounts[n.type]++; });
             try {
@@ -2440,10 +2605,10 @@ async function geminiFetchRaw(key, init) {
                 });
                 const full = {
                     nodes: [
-                        { id: 'Fact', label: '事實\nFact\n(' + c.Fact + ')', color: '#cbd5e1', shape: 'dot', size: getSize(c.Fact) },
-                        { id: 'Theory', label: '理論\nTheory\n(' + c.Theory + ')', color: '#3b82f6', shape: 'dot', size: getSize(c.Theory) },
-                        { id: 'Challenge', label: '挑戰\nChallenge\n(' + c.Challenge + ')', color: '#eab308', shape: 'dot', size: getSize(c.Challenge) },
-                        { id: 'Synthesis', label: '整合\nSynthesis\n(' + c.Synthesis + ')', color: '#22c55e', shape: 'dot', size: getSize(c.Synthesis) }
+                        { id: 'Fact', label: '事實\nFact\n(' + c.Fact + ')', color: '#cbd5e1', shape: 'dot', size: getSize(c.Fact), lv: 0 },
+                        { id: 'Theory', label: '理論\nTheory\n(' + c.Theory + ')', color: '#3b82f6', shape: 'dot', size: getSize(c.Theory), lv: 1 },
+                        { id: 'Challenge', label: '挑戰\nChallenge\n(' + c.Challenge + ')', color: '#eab308', shape: 'dot', size: getSize(c.Challenge), lv: 2 },
+                        { id: 'Synthesis', label: '整合\nSynthesis\n(' + c.Synthesis + ')', color: '#22c55e', shape: 'dot', size: getSize(c.Synthesis), lv: 3 }
                     ],
                     edges: [
                         { id: 'e1', from: 'Fact', to: 'Theory', arrows: 'to' },
@@ -2455,15 +2620,25 @@ async function geminiFetchRaw(key, init) {
                 };
                 // 還沒有任何貼文的類別先不出現;兩端都有貼文時,連線才會長出來
                 const cnt = { Fact: c.Fact, Theory: c.Theory, Challenge: c.Challenge, Synthesis: c.Synthesis };
-                return { nodes: full.nodes.filter(nd => cnt[nd.id] > 0), edges: full.edges.filter(ed => cnt[ed.from] > 0 && cnt[ed.to] > 0) };
+                return { nodes: full.nodes.filter(nd => cnt[nd.id] > 0).map(nd => window.KBSphere ? Object.assign({}, nd, { shape: 'custom', ctxRenderer: KBSphere.sphereRenderer(nd.color, false, nd.label, '#1e293b', false) }) : nd), edges: full.edges.filter(ed => cnt[ed.from] > 0 && cnt[ed.to] > 0) };
             };
             const lensLast = lensDays.labels.length - 1;
             const nodes = new vis.DataSet(lensBuild(lensLast).nodes), edges = new vis.DataSet(lensBuild(lensLast).edges);
             lensNetwork = new vis.Network(container, { nodes, edges }, { nodes: { font: { face: 'Noto Sans TC', color: '#000000', size: 14 } }, physics: { stabilization: { enabled: true, iterations: 100, updateInterval: 50, fit: true }, barnesHut: { damping: 0.6 } } });
             const stopLensPhysics = () => { if (lensNetwork) lensNetwork.setOptions({ physics: false }); };
             lensNetwork.once('stabilizationIterationsDone', stopLensPhysics); kbLively(lensNetwork);
+            try {
+                const LD = { Fact: ['事實 (Fact)', '#64748b', '描述現象、說出看到或查到了什麼。', '對話的起點。'], Theory: ['理論 (Theory)', '#2563eb', '提出自己的解釋(包含「延伸」和「改進」的貼文)。', '開始用想法解釋現象。'], Challenge: ['挑戰 (Challenge)', '#ca8a04', '提出反例或不同的看法,檢驗別人的想法。', '想法被檢驗,對話變深。'], Synthesis: ['整合 (Synthesis)', '#16a34a', '把不同的觀點歸納、整理成更大的想法。', '最深一層:想法被整理起來。'] };
+                const LDEP = { Fact: 0, Theory: 1, Challenge: 2, Synthesis: 3 }, LTXT = { 'Fact>Theory': '先有事實,才會有人試著解釋。', 'Theory>Challenge': '解釋被拿來檢驗、挑戰。', 'Challenge>Synthesis': '經過挑戰後,想法被整合起來。', 'Theory>Theory': '一個解釋接著另一個解釋(延伸、改進)。', 'Theory>Synthesis': '解釋直接被整理成更大的想法。' };
+                if (window.KBTip) KBTip.vis(lensNetwork, container, {
+                    node: id => { const nd = nodes.get().find(x => x.id === id); if (!nd) return null; const all = nodes.get(), num = s => parseInt((String(s.label).match(/\((\d+)\)/) || [0, 0])[1], 10) || 0, tot = all.reduce((s, x) => s + num(x), 0), c = num(nd), d = LD[id]; return { key: 'n:' + id + ':' + c, html: KBTip.h(d[0], c + ' 篇', d[1]) + '<p>' + d[2] + '</p><p>這一類有 <span class="hl">' + c + '</span> 篇,占全部的 <span class="hl">' + (tot ? Math.round(c / tot * 100) : 0) + '%</span>(球越大越多)。</p><p>球的高度:離「事實」<span class="hl">' + LDEP[id] + '</span> 層。' + d[3] + '</p><div class="nx">點一下這顆球,下面會顯示學生實例。</div>' }; },
+                    edge: id => { const ed = edges.get().find(x => x.id === id); if (!ed) return null; const nm = x => (LD[x] || [x])[0], key = ed.from + '>' + ed.to; return { key: 'e:' + id, html: KBTip.h(nm(ed.from) + ' → ' + nm(ed.to), '對話走向', '#6366f1') + '<p>' + (LTXT[key] || '對話常見的走向。') + '</p><div class="nx">箭頭 = 對話常見的走向:事實 → 理論 → 挑戰 → 整合。</div>' }; }
+                });
+            } catch (e) { console.error(e); }
+            try { const LV = { Fact: 0, Theory: 1, Challenge: 2, Synthesis: 3 }; if (window.KBSphere) KBSphere.attach(lensNetwork, (id, R) => (LV[id] || 0) * R * 0.16); } catch (e) {}   // 越往對話深處(事實→理論→挑戰→整合)球越高
             setTimeout(stopLensPhysics, 2500);
             kbAttachPlayer({ explainTitle: '深度對話透視鏡(事實、理論、挑戰、整合四類想法)的累積', id: 'lens', container: container, anchor: container.parentElement, network: lensNetwork, nodesDS: nodes, edgesDS: edges, labels: lensDays.stepLabels, steps: lensDays.steps, build: lensBuild });
+            try { const gw = container.parentElement, det = document.getElementById('lens-detail'), left = document.getElementById('lens-left'); if (left) { let nx = gw.nextElementSibling; while (nx && nx !== det) { const after = nx.nextElementSibling; left.appendChild(nx); nx = after; } } } catch (e) { console.error(e); }   // 播放、逐步說明搬到左邊,關係圖留在右邊
             lensNetwork.on("click", function (params) {
                 const detailBox = document.getElementById('lens-detail');
                 let info = null;
@@ -2505,20 +2680,20 @@ async function geminiFetchRaw(key, init) {
                 let color = { background: '#dbeafe', border: '#3b82f6' }; let font = { size: 14, color: '#1e3a8a' }; let shadow = false;
                 if (avgHeat >= 3.0) { color = { background: '#fee2e2', border: '#ef4444' }; font = { size: 16, color: '#b91c1c', face: 'Noto Sans TC', bold: true }; shadow = { enabled: true, color: 'rgba(239,68,68,0.5)', size: 10 }; }
                 else if (avgHeat >= 2.0) { color = { background: '#fef3c7', border: '#f59e0b' }; font = { size: 14, color: '#92400e' }; }
-                return { id: w, label: `${w}\n(${noteIds.length})`, value: noteIds.length, color: color, font: font, shape: 'dot', shadow: shadow };
+                return { id: w, label: `${w}\n(${noteIds.length})`, value: noteIds.length, color: color, font: font, shape: 'dot', shadow: shadow, heat: avgHeat };
             });
             const cpDays = kbMakeDays(globalAllNotes.map(n => n.dateTime));
             const cpPos = kbThreadPos(globalAllNotes, n => n.dateTime);
             const noteDay = {}; globalAllNotes.forEach(n => { noteDay[n.id] = cpDays.index(n.dateTime, cpPos(n.id)); });
             const kwSet = {}; sortedKeywords.forEach(w => { kwSet[w] = new Set(keywordMap[w]); });
             const cpBuild = i => {
-                const nds = nodesData.map(nd => { const c = keywordMap[nd.id].filter(id => noteDay[id] <= i).length; return Object.assign({}, nd, { value: Math.max(c, 0.1), label: nd.id + '\n(' + c + ')', hidden: c === 0 }); });
+                const nds = nodesData.map(nd => { const c = keywordMap[nd.id].filter(id => noteDay[id] <= i).length; const o = Object.assign({}, nd, { value: Math.max(c, 0.1), label: nd.id + '\n(' + c + ')', hidden: c === 0 }); if (window.KBSphere) { o.shape = 'custom'; o.ctxRenderer = KBSphere.sphereRenderer((nd.color && nd.color.border) || '#3b82f6', false, o.label, (nd.font && nd.font.color) || '#1e3a8a', false); } return o; });
                 const eds = [];
                 for (let a = 0; a < sortedKeywords.length; a++) {
                     for (let b = a + 1; b < sortedKeywords.length; b++) {
                         const w1 = sortedKeywords[a], w2 = sortedKeywords[b];
                         const inter = keywordMap[w1].filter(id => noteDay[id] <= i && kwSet[w2].has(id)).length;
-                        if (inter > 0) eds.push({ id: w1 + '|' + w2, from: w1, to: w2, value: inter, color: { color: '#94a3b8', opacity: 0.4 }, title: '共現於 ' + inter + ' 篇筆記' });
+                        if (inter > 0) eds.push({ id: w1 + '|' + w2, from: w1, to: w2, value: inter, color: { color: '#94a3b8', opacity: 0.4 } });
                     }
                 }
                 return { nodes: nds, edges: eds };
@@ -2528,6 +2703,13 @@ async function geminiFetchRaw(key, init) {
             conceptNetworkInstance = new vis.Network(container, { nodes: cpNodesDS, edges: cpEdgesDS }, { nodes: { scaling: { min: 10, max: 30 } }, edges: { scaling: { min: 1, max: 5 }, smooth: { type: 'continuous' } }, physics: { stabilization: { enabled: true, iterations: 150, updateInterval: 50, fit: true }, barnesHut: { gravitationalConstant: -2000, damping: 0.6 } } });
             const stopConceptPhysics = () => { if (conceptNetworkInstance) conceptNetworkInstance.setOptions({ physics: false }); };
             conceptNetworkInstance.once('stabilizationIterationsDone', stopConceptPhysics); kbLively(conceptNetworkInstance);
+            try {
+                if (window.KBTip) KBTip.vis(conceptNetworkInstance, container, {
+                    node: id => { const nd = cpNodesDS.get().find(x => x.id === id); if (!nd) return null; const c = Math.round(nd.value) || 0, heat = (nodesData.find(x => x.id === id) || {}).heat || 1, hot = heat >= 3 ? ['熱點觀點', '#ef4444', '含有這個詞的貼文,被提問、被回應、被昇華得特別多。'] : (heat >= 2 ? ['有討論', '#f59e0b', '含有這個詞的貼文有一些討論。'] : ['一般', '#3b82f6', '含有這個詞的貼文討論還不多。']); const mates = cpEdgesDS.get().filter(ed => ed.from === id || ed.to === id).map(ed => ({ w: ed.from === id ? ed.to : ed.from, n: ed.value })).sort((a, b) => b.n - a.n).slice(0, 4); return { key: 'n:' + id + ':' + c, html: KBTip.h('「' + id + '」', hot[0], hot[1]) + '<p>出現在 <span class="hl">' + c + '</span> 篇貼文。' + hot[2] + '</p>' + (mates.length ? '<p>最常跟它一起出現的詞:' + mates.map(x => '<span class="hl">' + x.w + '</span>(' + x.n + ' 篇)').join('、') + '。</p>' : '<p>目前還沒有跟其他詞一起出現。</p>') + '<p>球的高度 = 熱度(越高越是被討論的熱點)。</p><div class="nx">點一下這顆球,看含有這個詞的貼文清單。</div>' }; },
+                    edge: id => { const ed = cpEdgesDS.get().find(x => x.id === id); if (!ed) return null; return { key: 'e:' + id + ':' + ed.value, html: KBTip.h('「' + ed.from + '」+「' + ed.to + '」', ed.value + ' 篇', '#6366f1') + '<p>這兩個詞一起出現在同一篇貼文裡,共 <span class="hl">' + ed.value + '</span> 篇。</p><div class="nx">線越粗,表示它們常常被一起提到,是彼此相關的概念。</div>' }; }
+                });
+            } catch (e) { console.error(e); }
+            try { const heatOf = {}; nodesData.forEach(nd => { heatOf[nd.id] = nd.heat; }); if (window.KBSphere) KBSphere.attach(conceptNetworkInstance, (id, R) => Math.min(1, ((heatOf[id] || 1) - 1) / 3) * R * 0.34); } catch (e) {}   // 高度 = 熱度(被提問、被回應、昇華的想法越多越高)
             setTimeout(stopConceptPhysics, 2500);
             let cpCurve = null;
             try { cpCurve = conceptCurveDraw(document.getElementById('concept-card') || container.parentElement, container, cpDays.stepLabels, conceptCurveSeries(sortedKeywords, keywordMap, noteDay, cpDays.steps, globalAllNotes.length)); } catch (e) { console.error(e); }
@@ -2874,7 +3056,9 @@ async function geminiFetchRaw(key, init) {
 
         let streamChart;
         function initStreamChart() {
-            const ctx = document.getElementById('streamChart').getContext('2d'); if (streamChart) streamChart.destroy();
+            if (streamChart) { streamChart.destroy(); streamChart = null; }
+            const slot = document.getElementById('stream-slot'); if (slot) slot.innerHTML = KBStream.html();
+            const ctx = document.getElementById('streamChart').getContext('2d');
             if (globalAllNotes.length === 0) return;
             const sortedNotes = [...globalAllNotes].sort((a, b) => a.dateTime - b.dateTime); if(sortedNotes.length === 0) return;
             const bucketMap = buildDayBuckets(sortedNotes, () => ({ counts: { question: 0, extend: 0, improve: 0, riseabove: 0 }, notes: { question: [], extend: [], improve: [], riseabove: [] } }));
@@ -2886,27 +3070,19 @@ async function geminiFetchRaw(key, init) {
             });
             const labels = buckets.map(b => b.label);
             const scatterPoints = [];
+            // 關鍵發言:每天一個白點 = 當天「最深一層」的那類發言(整合 > 深化 > 延伸 > 提問)的第一則,放在那條色帶的正中間
             buckets.forEach((b, idx) => {
-                let currentY = 0;
-                ['riseabove', 'improve', 'extend', 'question'].forEach(type => { // 與圖上由下而上的疊加順序一致
-                    if(b.notes[type].length > 0) scatterPoints.push({ x: b.label, y: currentY + (b.counts[type] / 2), noteId: b.notes[type][0].id, title: b.notes[type][0].title });
+                let currentY = 0, pick = null;
+                ['question', 'extend', 'improve', 'riseabove'].forEach(type => { // 與圖上由下而上的疊加順序一致(提問在最下面)
+                    if (b.notes[type].length > 0) pick = { x: b.label, y: currentY + (b.counts[type] / 2), noteId: b.notes[type][0].id, title: b.notes[type][0].title };
                     currentY += b.counts[type];
                 });
+                if (pick) scatterPoints.push(pick);
             });
-            streamChart = new Chart(ctx, {
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { type: 'line', label: '整合', data: buckets.map(b => b.counts.riseabove), backgroundColor: 'rgba(168, 85, 247, 0.75)', borderColor: '#a855f7', borderWidth: 1.5, fill: 'origin', cubicInterpolationMode: 'monotone', pointRadius: 0 },
-                        { type: 'line', label: '深化', data: buckets.map(b => b.counts.improve), backgroundColor: 'rgba(34, 197, 94, 0.75)', borderColor: '#22c55e', borderWidth: 1.5, fill: '-1', cubicInterpolationMode: 'monotone', pointRadius: 0 },
-                        { type: 'line', label: '延伸', data: buckets.map(b => b.counts.extend), backgroundColor: 'rgba(59, 130, 246, 0.75)', borderColor: '#3b82f6', borderWidth: 1.5, fill: '-1', cubicInterpolationMode: 'monotone', pointRadius: 0 },
-                        { type: 'line', label: '提問', data: buckets.map(b => b.counts.question), backgroundColor: 'rgba(239, 68, 68, 0.75)', borderColor: '#ef4444', borderWidth: 1.5, fill: '-1', cubicInterpolationMode: 'monotone', pointRadius: 0 },
-                        { type: 'scatter', label: '關鍵發言', data: scatterPoints, backgroundColor: 'white', borderColor: '#475569', borderWidth: 2, pointRadius: 6, order: -1 }
-                    ]
-                },
-                options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 }, interaction: { mode: 'index', intersect: false }, scales: { y: { stacked: true, beginAtZero: true, title: { display: true, text: '當天貼文數', font: { size: 11 } } }, x: { title: { display: true, text: '發文日期(只列出有人發言的日子,不是每天都有)', font: { size: 11 } }, ticks: { autoSkip: true, maxRotation: 0, minRotation: 0 } } }, plugins: { tooltip: { callbacks: { title: items => { const b = buckets[items[0] ? items[0].parsed.x : 0]; if (!b) return ''; const d = new Date(b.start); return (d.getMonth() + 1) + '月' + d.getDate() + '日(週' + '日一二三四五六'[d.getDay()] + ')'; }, label: c => c.dataset.type === 'scatter' ? '關鍵發言:' + (c.raw && c.raw.title ? c.raw.title : '') : (c.dataset.label + ':' + c.parsed.y + ' 則') } } }, onClick: (e, activeEls) => { if (activeEls.length > 0) { const ds = streamChart.data.datasets[activeEls[0].datasetIndex]; if(ds.type === 'scatter') { const noteId = ds.data[activeEls[0].index].noteId; if(noteId) viewNote(noteId); } } } }
-            });
-            try { kbAttachSeriesPlayer({ id: 'stream', explainTitle: '關鍵對話流(提問、延伸、深化、整合如何交替出現)', chart: streamChart }); } catch (e) {}
+            const art = KBStream.create({ buckets, root: document.getElementById('stream-fig'), open: noteId => viewNote(noteId) });
+            streamChart = new Chart(ctx, { data: { labels: art.labels, datasets: art.datasets(scatterPoints) }, options: art.options(), plugins: [art.plugin] });
+            art.bind(streamChart);
+            try { const sp = kbAttachSeriesPlayer({ id: 'stream', explainTitle: '關鍵對話流(提問、延伸、深化、整合如何交替出現)', chart: streamChart, anchor: document.querySelector('#stream-fig .ks-cv'), onStep: k => art.setStep(k) }); art.afterPlayer(sp); art.setStep(art.labels.length); } catch (e) { console.error(e); }
         }
 
         // ⭐ KB 原則共用判斷工具
@@ -3431,15 +3607,24 @@ async function geminiFetchRaw(key, init) {
             const egoEdgeFrame = kbEdgeFrames(egoEvents, EGO_COL);
             const egoBuild = i => { const eds = egoEdgeFrame(i).map(ed => (ed.color && ed.color.color === EGO_COL.alter) ? Object.assign({}, ed, { width: 1, arrows: '' }) : ed); const present = new Set([String(userId)]); eds.forEach(ed => { present.add(String(ed.from)); present.add(String(ed.to)); }); return { nodes: data.visNodes.filter(nd => present.has(String(nd.id))), edges: eds }; };
             const egoLast = egoDays.labels.length - 1;
+            const egoLegend = document.getElementById('ego-grp-legend'); if (egoLegend) { egoLegend.classList.add('hidden'); egoLegend.classList.remove('flex'); egoLegend.innerHTML = ''; }
+            const dbU = db.userList || {}, meCls = (dbU[userId] || {}).classId;
+            const egoTalkOpts = { me: userId, nodes: db.nodes || [], userList: db.userList || {}, typeLabel: t => kbTypeMap[t] || '', meSummary: '<p>系統依發文類型判斷,' + (displayName) + '比較像「<b>' + data.role + '</b>」。</p>' };
+            const egoWhy = kbStuWhy(userId, displayName, egoDays.stepLabels, null, '有人回應了別人就會長出新的連線;同一對同學多次互動,線就變粗。');
+            const egoRing = window.KBEgo ? KBEgo.mountRing({ container: container, legendBox: egoLegend, me: String(userId), users: dbU, groups: (window.KB && KB.classes && KB.classes.groups) ? KB.classes.groups(meCls) : [], events: egoEvents, lastIdx: egoLast, edgeFrame: egoEdgeFrame, isAlter: ed => !!(ed.color && ed.color.color === EGO_COL.alter), nameOf: id => (dbU[id] && dbU[id].name) || String(id), meWord: displayName, myLabel: '他的組',
+                lively: net => { egoNetworkInstance = net; kbLively(net); }, talk: net => kbEgoTalk(net, egoTalkOpts),
+                attach: (net, nds, eds, build) => kbAttachPlayer({ explainTitle: '這位學生的自我互動圈(他和誰互動)的形成過程', id: 'ego-t', container: container, anchor: container.parentElement, network: net, nodesDS: nds, edgesDS: eds, labels: egoDays.stepLabels, steps: egoDays.steps, build: build, noPhysics: true, why: egoWhy }) }) : null;
+            document.getElementById('ego-metric').innerHTML = '互動對象 <b>' + (data.visNodes.length - 1) + '</b> 人 · 回應他人 <b>' + data.egoOut + '</b> 次 · 被回應 <b>' + data.egoIn + '</b> 次 · 對象之間另有 <b>' + data.alterLinkCount + '</b> 組互動<br><span style="color:#2563eb">■</span> 他回應別人 <span style="color:#16a34a">■</span> 別人回應他 <span style="color:#94a3b8">■</span> 其他人彼此互動' + (activeTopicFilter !== 'all' ? '<br><span class="text-slate-400">此圖不受討論區篩選影響,顯示全部論壇互動</span>' : '');
+            if (!egoRing) {   // 找不到同班同學(例如只有他自己):維持原本的排法
             const egoNodesDS = new vis.DataSet(egoBuild(egoLast).nodes), egoEdgesDS = new vis.DataSet(egoBuild(egoLast).edges);
             egoNetworkInstance = new vis.Network(container, { nodes: egoNodesDS, edges: egoEdgesDS }, { nodes: { shape: 'dot' }, edges: { smooth: false }, physics: { stabilization: { enabled: true, iterations: 160, updateInterval: 50, fit: true }, barnesHut: { gravitationalConstant: -3500, springLength: 120, damping: 0.6 } } });
-            document.getElementById('ego-metric').innerHTML = '互動對象 <b>' + (data.visNodes.length - 1) + '</b> 人 · 回應他人 <b>' + data.egoOut + '</b> 次 · 被回應 <b>' + data.egoIn + '</b> 次 · 對象之間另有 <b>' + data.alterLinkCount + '</b> 組互動<br><span style="color:#2563eb">■</span> 他回應別人 <span style="color:#16a34a">■</span> 別人回應他 <span style="color:#94a3b8">■</span> 其他人彼此互動' + (activeTopicFilter !== 'all' ? '<br><span class="text-slate-400">此圖不受討論區篩選影響,顯示全部論壇互動</span>' : '');
             // 排列穩定後就關閉物理運算,圖不會再一直晃動(仍可手動拖曳節點)
             const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
             egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics); kbLively(egoNetworkInstance);
             setTimeout(stopEgoPhysics, 2500);
-            try { kbEgoTalk(egoNetworkInstance, { me: userId, nodes: db.nodes || [], userList: db.userList || {}, typeLabel: t => kbTypeMap[t] || '', meSummary: '<p>系統依發文類型判斷,' + (displayName) + '比較像「<b>' + data.role + '</b>」。</p>' }); } catch (e) { console.error(e); }
+            try { kbEgoTalk(egoNetworkInstance, egoTalkOpts); } catch (e) { console.error(e); }
             kbAttachPlayer({ explainTitle: '這位學生的自我互動圈(他和誰互動)的形成過程', id: 'ego-t', container: container, anchor: container.parentElement, network: egoNetworkInstance, nodesDS: egoNodesDS, edgesDS: egoEdgesDS, labels: egoDays.stepLabels, steps: egoDays.steps, build: egoBuild, why: kbStuWhy(userId, displayName, egoDays.stepLabels, null, '有人回應了別人就會長出新的連線;同一對同學多次互動,線就變粗。') });
+            }
             const ctxB = document.getElementById('balanceChart').getContext('2d'); if(balanceChartInstance) balanceChartInstance.destroy();
             const totalBal = data.balanceData[0] + data.balanceData[1];
             document.getElementById('bal-init').innerText = totalBal > 0 ? Math.round(data.balanceData[0]/totalBal*100) + '%' : '0%';

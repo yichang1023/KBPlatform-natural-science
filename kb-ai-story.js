@@ -51,7 +51,7 @@
     show: function (el, text, o) {
       if (!el) return null; o = o || {};
       el.innerHTML = busyHtml(text);
-      var root = el.querySelector('.kb-busy'), pct = root.querySelector('.kb-busy-pct'), bar = root.querySelector('.kb-busy-bar i'), sec = root.querySelector('.kb-busy-s'), t0 = Date.now(), tau = (o.expect || 12) * 1000 / 2.2, timer;
+      var root = el.querySelector('.kb-busy'), pct = root.querySelector('.kb-busy-pct'), bar = root.querySelector('.kb-busy-bar i'), sec = root.querySelector('.kb-busy-s'), t0 = o.t0 || Date.now(), tau = (o.expect || 12) * 1000 / 2.2, timer;
       function tick() {
         if (!root.isConnected) { clearInterval(timer); return; }
         var ms = Date.now() - t0, p = Math.min(95, Math.round(96 * (1 - Math.exp(-ms / tau))));
@@ -140,7 +140,10 @@
     paint(); panel.__kbf = F; return F;
   }
 
-  function runExplain(panel, title, tableFn, force, kind) {
+  // AI 解說的「工作登記簿」:切換畫面、畫面被重畫(播放列與解說框會重建)時,已經在跑的 AI 解說不會中斷,
+  // 切回來時解說框會接著顯示「還在等」(計時接續)或直接顯示做好的結果。
+  var jobs = {}, lastRun = {};
+  function runExplain(panel, title, tableFn, force, kind, owner) {
     panel.style.display = 'block';
     var F = frame(panel, title), body = F.body; F.unfold();
     if (!global.kbAiAsk) { body.innerHTML = '<span style="color:#b45309">AI 功能尚未就緒。</span>'; return; }
@@ -148,20 +151,31 @@
     try { table = tableFn(); } catch (e) { if (global.console) console.error(e); }
     if (!table) { body.innerHTML = '<span style="color:#64748b">資料不足,無法產生解說。</span>'; return; }
     var key = title + '|' + table.length + '|' + hash(table);
+    if (owner) lastRun[owner] = { title: title, key: key };
     function show(txt, fromCache) {
       if (global.kbAiUnscrub) txt = global.kbAiUnscrub(txt);
       body.innerHTML = '<div class="kb-ai-body">' + md(txt) + '</div>' +
         '<div style="margin-top:6px;color:#94a3b8;font-size:10px">AI 依上方資料推論,僅供教學參考;姓名已用代號取代。' + (fromCache ? '(沿用先前結果)' : '') + ' <a href="#" data-a="again" style="color:#6366f1;text-decoration:underline">重新產生</a></div>';
       var again = body.querySelector('[data-a=again]');
-      if (again) again.onclick = function (e) { e.preventDefault(); runExplain(panel, title, tableFn, true, kind); };
+      if (again) again.onclick = function (e) { e.preventDefault(); runExplain(panel, title, tableFn, true, kind, owner); };
     }
     if (aiCache[key] && !force) { show(aiCache[key], true); return; }
-    global.kbAiBusy.show(body, kind === 'snapshot' ? 'AI 正在整理這份資料…' : 'AI 正在從最初讀到最後,整理這段歷程…', { expect: kind === 'snapshot' ? 10 : 18 });
-    Promise.resolve(global.kbAiAsk(buildHead(kind) + '【分析對象】' + title + (kind === 'snapshot' ? '\n【資料(目前這一刻)】\n' : '\n【資料(由最初到最後)】\n') + table)).then(function (txt) {
-      txt = String(txt || '');
-      if (!txt || txt.indexOf('⚠️') === 0) { body.innerHTML = '<span style="color:#b91c1c">' + esc(txt || 'AI 沒有回應,請稍後再試。') + '</span>'; return; }
-      aiCache[key] = txt; show(txt, false);
-    }).catch(function (e) { body.innerHTML = '<span style="color:#b91c1c">AI 解說失敗:' + esc((e && e.message) || e) + '</span>'; });
+    var job = jobs[key];
+    if (!job || force || job.status === 'error') {
+      job = jobs[key] = { status: 'running', t0: Date.now() };
+      job.promise = Promise.resolve(global.kbAiAsk(buildHead(kind) + '【分析對象】' + title + (kind === 'snapshot' ? '\n【資料(目前這一刻)】\n' : '\n【資料(由最初到最後)】\n') + table)).then(function (txt) {
+        txt = String(txt || '');
+        if (!txt || txt.indexOf('⚠️') === 0) { job.status = 'error'; job.msg = txt || 'AI 沒有回應,請稍後再試。'; return job; }
+        aiCache[key] = txt; job.status = 'done'; job.txt = txt; return job;
+      }, function (e) { job.status = 'error'; job.msg = 'AI 解說失敗:' + ((e && e.message) || e); return job; });
+    }
+    // 同一份工作可以有好幾個解說框(舊的、重建後的)在等;誰還在畫面上就顯示給誰
+    global.kbAiBusy.show(body, kind === 'snapshot' ? 'AI 正在整理這份資料…' : 'AI 正在從最初讀到最後,整理這段歷程…', { expect: kind === 'snapshot' ? 10 : 18, t0: job.t0 });
+    var mine = job;
+    mine.promise.then(function (j) {
+      if (!panel.contains(body) || panel.__kbf !== F) return;                         // 這個解說框已被新的取代:交給新的那個
+      if (j.status === 'done') show(j.txt, false); else body.innerHTML = '<span style="color:#b91c1c">' + esc(j.msg) + '</span>';
+    });
   }
 
   // 在播放控制列加上「AI 解說歷程」按鈕;ex = { title, table: function → 文字資料, label?: 按鈕文字 }
@@ -178,7 +192,10 @@
     panel.setAttribute('data-kbai', id || '');
     panel.style.cssText = 'display:none;margin-top:6px;padding:10px 12px;border:1px solid #ddd6fe;background:#f5f3ff;border-radius:10px;font-size:12px;line-height:1.7;color:#334155;text-align:left';
     wrap.insertAdjacentElement('afterend', panel);
-    btn.onclick = function () { runExplain(panel, ex.title, ex.table, false, ex.kind); };
+    var owner = id || ex.title;
+    btn.onclick = function () { runExplain(panel, ex.title, ex.table, false, ex.kind, owner); };
+    // 這個位置之前有開過 AI 解說(畫面被重畫、或切換畫面又切回來):接著顯示(還在等就繼續等、做好了就直接顯示)
+    try { var lr = lastRun[owner]; if (lr && lr.title === ex.title) { var k0 = lr.key; setTimeout(function () { if (!panel.isConnected) return; var t = ''; try { t = ex.table(); } catch (e) {} if (t && ex.title + '|' + t.length + '|' + hash(t) === k0 && (jobs[k0] || aiCache[k0])) runExplain(panel, ex.title, ex.table, false, ex.kind, owner); }, 0); } } catch (e) {}
     return { panel: panel, button: btn };
   };
 

@@ -139,6 +139,7 @@
       net.once('stabilized', function () { lastW = 0; setTimeout(refit, 60); });
       setTimeout(function () { lastW = 0; refit(); }, 1800);
     } catch (e) {}
+    try { if (window.KB3D) window.KB3D.vis(net); } catch (e) {}      // 拖空白處 3D 旋轉(kb-3d.js)
     return net;
   };
   window.kbAttachPlayer = function (o) {
@@ -182,7 +183,7 @@
       o.edgesDS.update(f.edges);
       seek.value = i; label.textContent = o.labels[i];
       if (guide) guide.update(i);
-      if (animate) { physOn(); physOffLater(1500); }
+      if (animate && !o.noPhysics) { physOn(); physOffLater(1500); }
     }
     function stopTimer() { clearTimeout(st.timer); st.timer = null; }
     function setPlaying(p) { st.playing = p; btn.textContent = p ? '⏸ 暫停' : '▶ 播放'; if (!p) stopTimer(); }
@@ -220,6 +221,9 @@
 <script src="kb-core.js"></script>
 <script src="kb-cloud.js"></script>
     <script src="kb-ui.js"></script>
+    <script src="kb-3d.js"></script>
+    <script src="kb-tip.js"></script>
+    <script src="kb-ego.js"></script>
     <script src="kb-ai.js"></script>
 <script src="kb-replay.js"></script>
 <script src="kb-why.js"></script>
@@ -482,7 +486,7 @@
                 </div>
                 <div class="flex-1 flex items-end gap-3 pt-4 pb-2" id="scaffold-bars"></div>
                 <div class="flex justify-between text-[11px] font-bold text-slate-400 border-t border-slate-100 pt-2 px-1">
-                    <span class="w-full text-center">提問</span><span class="w-full text-center">延伸</span><span class="w-full text-center">改進</span><span class="w-full text-center">反例</span><span class="w-full text-center">昇華</span>
+                    <span class="w-full text-center" data-kbtip="sc:question" tabindex="0">提問</span><span class="w-full text-center" data-kbtip="sc:extend" tabindex="0">延伸</span><span class="w-full text-center" data-kbtip="sc:improve" tabindex="0">改進</span><span class="w-full text-center" data-kbtip="sc:counter" tabindex="0">反例</span><span class="w-full text-center" data-kbtip="sc:riseabove" tabindex="0">昇華</span>
                 </div>
             </div>
 
@@ -512,7 +516,7 @@
         <section class="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
             <!-- 最近思考軌跡 (Span 3) -->
-            <div class="card lg:col-span-3 flex flex-col">
+            <div class="card lg:col-span-2 flex flex-col">
                 <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                     <h3 class="section-title mb-0"><i class="fas fa-stream text-emerald-500 mr-2"></i> 思考演化軌跡</h3>
                     <button onclick="openRefModal('evolution')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
@@ -526,13 +530,13 @@
             </div>
 
             <!-- Ego Network (Span 2) -->
-            <div class="card lg:col-span-2 flex flex-col relative overflow-hidden">
+            <div class="card lg:col-span-3 flex flex-col relative overflow-hidden">
                 <div class="flex justify-between items-center mb-2 flex-shrink-0 relative z-10">
                     <h3 class="section-title mb-0"><i class="fas fa-project-diagram text-blue-500 mr-2"></i> 互動圈 (Ego Network)</h3>
                     <button onclick="openRefModal('interaction_circle')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
                 </div>
 
-                <div id="ego-legend" class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] mb-2 px-2 flex-shrink-0 text-slate-600 font-medium relative z-10 bg-white/80 rounded-2xl py-1">
+                <div id="ego-legend" class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[13px] mb-2 px-2 flex-shrink-0 text-slate-600 font-medium relative z-10 bg-white/80 rounded-2xl py-1">
                     <span class="flex items-center"><span class="legend-dot" style="background:#3b82f6"></span>提問</span>
                     <span class="flex items-center"><span class="legend-dot" style="background:#eab308"></span>延伸</span>
                     <span class="flex items-center"><span class="legend-dot" style="background:#22c55e"></span>改進</span>
@@ -541,7 +545,8 @@
                     <span class="flex items-center"><span class="legend-dot" style="background:#d5dbe5"></span>同學彼此之間的互動(灰線)</span>
                 </div>
 
-                <div id="ego-network-container" class="w-full flex-1 min-h-[300px] bg-slate-50/50 rounded-xl border border-slate-100 relative z-0"></div>
+                <div id="ego-grp-legend" class="hidden flex-wrap justify-center items-center gap-x-3 gap-y-1 text-[14px] mb-2 px-2 flex-shrink-0 text-slate-700 relative z-10"></div>
+                <div id="ego-network-container" class="w-full flex-1 min-h-[300px] lg:min-h-[600px] bg-slate-50/50 rounded-xl border border-slate-100 relative z-0"></div>
             </div>
         </section>
 
@@ -635,19 +640,12 @@
                         <button onclick="openRefModal('echo_chamber')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
                     </div>
 
-                    <div class="flex items-center gap-6 py-4">
-                        <div class="w-24 h-24 rounded-full flex items-center justify-center relative flex-shrink-0">
-                            <svg class="absolute w-full h-full transform -rotate-90 drop-shadow-sm">
-                                <circle cx="48" cy="48" r="42" stroke="#f1f5f9" stroke-width="8" fill="transparent" />
-                                <circle cx="48" cy="48" r="42" stroke="currentColor" stroke-width="8" fill="transparent" stroke-dasharray="264" id="echo-circle" class="text-orange-500 transition-all duration-1000 ease-out" style="stroke-dashoffset: 264; stroke-linecap: round;" />
-                            </svg>
-                            <span class="text-3xl font-black text-slate-800" id="echo-score">0</span>
-                        </div>
-                        <div>
-                            <div class="inline-block px-2 py-1 bg-orange-100 text-orange-700 text-[10px] font-bold rounded mb-1 border border-orange-200" id="echo-title">同溫層探索者</div>
-                            <p class="text-sm text-slate-600 font-medium" id="echo-desc">你目前大多與固定幾位同學互動。</p>
-                            <p class="text-xs text-slate-400 mt-2"><i class="fas fa-lightbulb text-amber-400 mr-1"></i> 提示：嘗試回覆平時較少交流的同學，可提升此分數。</p>
-                        </div>
+                    <div id="echo-fig-host" class="mb-3"></div><script src="kb-echo.js"></script><script src="kb-eureka.js"></script>
+                    <div id="echo-caption" class="rounded-lg border border-orange-100 bg-white px-3 py-2 text-[12px] leading-relaxed text-slate-700" style="min-height:66px"></div>
+                    <div id="echo-moments" class="mt-2 hidden"></div>
+                    <div class="mb-3 mt-3">
+                        <p class="text-sm text-slate-600 font-medium" id="echo-desc">你目前大多與固定幾位同學互動。</p>
+                        <p class="text-xs text-slate-400 mt-2"><i class="fas fa-lightbulb text-amber-400 mr-1"></i> 提示：嘗試回覆平時較少交流的同學，可提升此分數。</p>
                     </div>
                     <div class="rounded-lg bg-orange-50/60 border border-orange-100 px-3 py-2 mb-2 text-[11px] text-slate-600 leading-relaxed" id="echo-legend">
                         <div class="font-bold text-orange-600 mb-0.5">📖 怎麼看這個圈圈?</div>
@@ -659,10 +657,8 @@
                             <div class="text-slate-400">重複回應同一位同學,分數不會增加;回應「還沒說過話」的新同學,圈圈才會變滿。</div>
                         </div>
                     </div>
-                    <div id="echo-caption" class="rounded-lg border border-orange-100 bg-white px-3 py-2 text-[12px] leading-relaxed text-slate-700" style="min-height:66px"></div>
-                    <div id="echo-moments" class="mt-2 hidden"></div>
                 </div>
-<div class="card hover:border-rose-200 transition flex flex-col">
+<div class="card hover:border-rose-200 transition flex flex-col self-start">
                     <div class="flex justify-between items-center mb-2 border-b border-slate-100 pb-3">
                         <h3 class="section-title mb-0"><i class="fas fa-bolt text-rose-500 mr-2"></i> 認知頓悟軌跡 (Eureka Arc)</h3>
                         <button onclick="openRefModal('eureka_arc')" class="ref-btn"><i class="fas fa-info"></i>Ref.</button>
@@ -675,12 +671,30 @@
                             <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:2px solid #f43f5e;vertical-align:-3px;margin-right:4px"></span><b>紅色小點</b> = 一般發言。其中<b>提問、反例</b>會讓線稍微下沉一點,表示你碰到了值得想的難題。</div>
                             <div><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#fbbf24;border:2px solid #d97706;vertical-align:-3px;margin-right:4px"></span><b>黃色點</b> = <b>改進</b>:把想法改得更好,多爬 0.5。</div>
                             <div><span style="display:inline-block;width:15px;height:15px;border-radius:50%;background:#fbbf24;border:2px solid #d97706;vertical-align:-3px;margin-right:4px"></span><b>黃色大點</b> = <b>昇華</b>:把零散的想法整合成新觀點,一口氣多爬 2,是最大的進步!</div>
-                            <div class="text-slate-400">把滑鼠移到任何一個點上,會顯示那一則發言的內容。</div>
+                            <div><span style="display:inline-block;width:18px;height:6px;border-radius:99px;background:linear-gradient(90deg,#26cdb0,#2f86f0,#8f5cf3);vertical-align:2px;margin-right:4px"></span><b>外圈、色帶的顏色</b> = 發言出現的時間:較早(青綠)→ 中期(藍)→ 近期(紫)。<b>下面的粗色帶</b> = 每一則發言「之前」的想法高度,和上面線的距離就是那一則發言爬了多少。</div>
+                            <div class="text-slate-400">把滑鼠移到任何一個點、線、色帶或圖例上,都會跳出說明(會顯示那一則發言的內容)。</div>
                         </div>
                     </div>
-                    <div id="eureka-box" class="mt-auto mb-auto">
-                        <div class="eureka-chart-container">
-                            <canvas id="eurekaChart"></canvas>
+                    <div id="eureka-box">
+                        <div class="eu" id="eu-fig">
+                            <h4 class="eu-h" data-tip="title" tabindex="0">認知頓悟軌跡 <span>Eureka Arc</span></h4>
+                            <div class="eu-sub">移到任一點查看發言內容</div>
+                            <div class="eu-main">
+                                <div class="eureka-chart-container">
+                                    <canvas id="eurekaChart"></canvas>
+                                </div>
+                                <div class="eu-lg">
+                                    <div class="eu-lgg"><b>點＝發言類型</b>
+                                        <div data-tip="lg:normal" tabindex="0"><i class="d r"></i><span>一般/提問/反例</span></div>
+                                        <div data-tip="lg:improve" tabindex="0"><i class="d y"></i><span>+0.5 改進</span></div>
+                                        <div data-tip="lg:rise" tabindex="0"><i class="d y2"></i><span>+2 昇華</span></div>
+                                    </div>
+                                    <div class="eu-lgg"><b>外圈 / 色帶＝出現時間</b>
+                                        <div class="eu-bars"><span class="e" data-tip="lg:era0" tabindex="0"></span><span class="m" data-tip="lg:era1" tabindex="0"></span><span class="l" data-tip="lg:era2" tabindex="0"></span></div>
+                                        <div class="eu-bl"><span>較早</span><span>中期</span><span>近期</span></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div id="eureka-caption" class="mt-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[12px] leading-relaxed text-slate-700" style="min-height:66px"></div>
                         <div id="eureka-moments" class="mt-2 hidden"></div>
@@ -1281,11 +1295,11 @@ async function initApiKey() {
         }
 
         // 🔥 2. Echo Chamber Analysis
-        let echoTargets = new Set(); let outReplies = 0;
+        let echoTargets = new Set(); let outReplies = 0; const echoFirst = {};
         nodes.forEach(n => {
             if (n.author === userId && n.parentId) {
                 const parent = nodes.find(p => p.id === n.parentId);
-                if (parent && parent.author !== userId) { echoTargets.add(parent.author); outReplies++; }
+                if (parent && parent.author !== userId) { echoTargets.add(parent.author); outReplies++; const tm = new Date(n.date).getTime(); if (!echoFirst[parent.author] || tm < echoFirst[parent.author].ms) echoFirst[parent.author] = { ms: tm, raw: n.date }; }
             }
         });
         // 跨溫層分數 = 回應過的不同同學數 / 同一討論區的其他成員數(舊算法固定除以 5,小組只有 3~4 人時最高只能拿 60 分)
@@ -1321,7 +1335,8 @@ async function initApiKey() {
             avgDepth: avgDepth, depthDist: depthDist,
             networkSize: interactants.size,
             lexicalStats: { acCount, lgCount, level: lexicalLevel, title: lexicalTitle, vocab: (function () { try { var ex = ''; try { ex = (KB.settings.get().analysis || {}).extraTerms || ''; } catch (e) {} return KBVocab.forStudent(myNotes.map(function (n) { return { title: n.title, content: n.content, dateTime: n.dateTime || Date.parse(n.date) || 0 }; }), KBVocab.matcher(ex)); } catch (e) { return []; } })() },
-            echoStats: { targets: echoTargets.size, replies: outReplies, score: echoScore, mates: mates.size },
+            initiateCount: initiateCount, crossCount: crossCount, dateCoverage: dateCoverage,
+            echoStats: { targets: echoTargets.size, replies: outReplies, score: echoScore, mates: mates.size, peers: Array.from(mates).sort().map(id => ({ id: id, first: echoFirst[id] ? echoFirst[id].raw : null })) },
             lineageStats: { count: lineageCount, maxDepth: lineageMaxDepth }
         };
     }
@@ -1409,6 +1424,7 @@ async function initApiKey() {
         renderTimeline(stats.recentNotes, globalData.nodes);
         renderScaffoldBars(stats.scaffoldCounts);
 
+        window.__radarSt = stats;
         renderRadarChart([
             stats.roleMetrics.initiator,
             stats.roleMetrics.builder,
@@ -1509,7 +1525,7 @@ async function initApiKey() {
             return { t, sub, ft };
         };
         const R = (id, anchor, inside, title, render, values) => { if (anchor) kbAttachReplay({ id, anchor, inside, labels: sdS.labels, explainTitle: title, render: step => render(statsAt(step), step), values: step => values(statsAt(step), step) }); };
-        const zero = { totalNotes: 0, linksCount: 0, repliedCount: 0, readCount: 0, uniqueTopicsCount: 0, avgDepth: 0, scaffoldCounts: { question: 0, extend: 0, improve: 0, counter: 0, riseabove: 0 }, roleMetrics: { initiator: 0, builder: 0, synthesizer: 0, sustainer: 0 }, lexicalStats: { acCount: 0, lgCount: 0, level: 'LV.0', title: 'LV.0 尚未開始', vocab: [] }, echoStats: { targets: 0, replies: 0, score: 0, mates: 0 }, lineageStats: { count: 0, maxDepth: 0 }, recentNotes: [] };
+        const zero = { totalNotes: 0, linksCount: 0, repliedCount: 0, readCount: 0, uniqueTopicsCount: 0, avgDepth: 0, scaffoldCounts: { question: 0, extend: 0, improve: 0, counter: 0, riseabove: 0 }, roleMetrics: { initiator: 0, builder: 0, synthesizer: 0, sustainer: 0 }, lexicalStats: { acCount: 0, lgCount: 0, level: 'LV.0', title: 'LV.0 尚未開始', vocab: [] }, echoStats: { targets: 0, replies: 0, score: 0, mates: 0, peers: [] }, lineageStats: { count: 0, maxDepth: 0 }, recentNotes: [] };
         const S = st => st || zero;
         // 我的知識角色與四力
         R('s-role', card('role-title'), true, '我的知識角色(開創力、連結力、整合力、維護力)的演變', st => {
@@ -1528,7 +1544,7 @@ async function initApiKey() {
         }, st => { st = S(st); return '發文 ' + st.totalNotes + ' 篇、回應別人 ' + st.linksCount + ' 次、被別人回應 ' + st.repliedCount + ' 次'; });
         // 知識五力雷達
         R('s-radar', document.getElementById('studentRadarChart').parentElement, false, '我的知識五力雷達(開創力、連結力、整合力、維護力、影響力)', st => {
-            st = S(st); radarChartInstance.data.datasets[0].data = [st.roleMetrics.initiator, st.roleMetrics.builder, st.roleMetrics.synthesizer, st.roleMetrics.sustainer, influenceScore(st)]; radarChartInstance.update('none');
+            st = S(st); window.__radarSt = st; radarChartInstance.data.datasets[0].data = [st.roleMetrics.initiator, st.roleMetrics.builder, st.roleMetrics.synthesizer, st.roleMetrics.sustainer, influenceScore(st)]; radarChartInstance.update('none');
         }, st => { st = S(st); const m = st.roleMetrics; return '開創' + m.initiator + '、連結' + m.builder + '、整合' + m.synthesizer + '、維護' + m.sustainer + '、影響' + influenceScore(st) + (st.totalNotes > 0 && st.totalNotes < ROLE_MATURE_N ? '(才發 ' + st.totalNotes + ' 篇,分數先打折,發滿 ' + ROLE_MATURE_N + ' 篇才算滿)' : ''); });
         // 鷹架偏好
         const barsMax = Math.max(...Object.values(finalStats.scaffoldCounts), 1);
@@ -1618,7 +1634,7 @@ async function initApiKey() {
             }
             if (cap) cap.innerHTML = '<div>👆 <b>按下 ▶ 播放</b>:一天一天看你認識了哪些同學,這裡會即時說明「這天發生了什麼、圈圈為什麼變滿」。</div><div class="text-slate-500">整段歷程:你一共回應了 ' + finalE.targets + ' 位不同的同學(共 ' + finalE.replies + ' 次),破壁指數是 ' + finalE.score + '。</div>';
             moments(L - 1);
-            player = kbAttachReplay({ guide: false, id: 's-echo', anchor: anchor, inside: true, labels: sdS.labels, explainTitle: '我的跨溫層破壁指數(跟多少不同同學互動)', stepper: true, slow: true, baseDelay: 1500,
+            player = kbAttachReplay({ guide: false, id: 's-echo', anchor: document.getElementById('echo-fig-host') || anchor, inside: !document.getElementById('echo-fig-host'), labels: sdS.labels, explainTitle: '我的跨溫層破壁指數(跟多少不同同學互動)', stepper: true, slow: true, baseDelay: 1500,
                 render: step => { renderEchoChamber(S(statsAt(step))); say(step); moments(step); },
                 values: step => { const e = S(statsAt(step)).echoStats, v = ev[step]; return ident.scrub('破壁指數 ' + e.score + '(互動過 ' + e.targets + ' 位同學、回應 ' + e.replies + ' 次)' + (v ? ';這天回應了 ' + v.tg.map(t => t.name + (t.isNew ? '(新朋友)' : '(之前聊過)')).join('、') : '')); } });
         })();
@@ -1655,22 +1671,28 @@ async function initApiKey() {
 
     function renderEchoChamber(stats) {
         let score = stats.echoStats.score;
-        let title = "同溫層探索者", desc = "你目前大多與固定幾位同學互動。";
-        let colorClass = "text-orange-500";
+        let title = "同溫層探索者", desc = "你目前大多與固定幾位同學互動。", tier = 0;
 
-        if (score >= 80) { title = "社群破壁者 🏆"; desc = "太棒了！你廣泛地與不同同學交流。"; colorClass = "text-emerald-500"; }
-        else if (score >= 40) { title = "知識橋樑"; desc = "你開始跨群體連結，繼續保持！"; colorClass = "text-sky-500"; }
+        if (score >= 80) { title = "社群破壁者 🏆"; desc = "太棒了！你廣泛地與不同同學交流。"; tier = 2; }
+        else if (score >= 40) { title = "知識橋樑"; desc = "你開始跨群體連結，繼續保持！"; tier = 1; }
 
         document.getElementById('echo-score').innerText = score;
-        document.getElementById('echo-score').className = `text-3xl font-black ${colorClass}`;
         document.getElementById('echo-title').innerText = title;
-        document.getElementById('echo-title').className = `inline-block px-2 py-1 text-[10px] font-bold rounded mb-1 border ${score>=80?'bg-emerald-100 text-emerald-700 border-emerald-200':(score>=40?'bg-sky-100 text-sky-700 border-sky-200':'bg-orange-100 text-orange-700 border-orange-200')}`;
         document.getElementById('echo-desc').innerText = desc;
 
-        const circle = document.getElementById('echo-circle');
-        if(circle) {
-            circle.style.strokeDashoffset = 264 - (264 * score) / 100;
-            circle.setAttribute("class", `${colorClass} transition-all duration-1000 ease-out`);
+        // 拼圖連接盤:每位同組同學一片,顏色 = 你第一次回應他是「較早 / 中期 / 近期」(整段時間分三等份,播放時顏色不會跳);灰色 = 還沒互動
+        if (window.KBEcho) {
+            try {
+                if (!window.__echoSD) window.__echoSD = kbStepDays(globalData.nodes.map(n => n.date));
+                const sd = window.__echoSD, K = sd.labels.length - 1, users = globalData.userList || {};
+                const nameOf = id => { const u = users[id]; return (u && u.name) || '同學'; };
+                const peers = (stats.echoStats.peers || []).map(pr => {
+                    if (pr.first == null) return { id: pr.id, name: nameOf(pr.id), cat: null };
+                    const st = Math.max(1, sd.idx(pr.first));
+                    return { id: pr.id, name: nameOf(pr.id), cat: KBEcho.catOf(st, K), step: st, when: sd.labels[st] || ('第 ' + st + ' 天') };
+                });
+                KBEcho.render(document.getElementById('echo-fig'), { score: score, targets: stats.echoStats.targets, mates: stats.echoStats.mates, tier: tier, peers: peers });
+            } catch (e) { try { console.warn('拼圖連接盤畫圖失敗', e); } catch (x) {} }
         }
     }
 
@@ -1895,26 +1917,38 @@ async function initApiKey() {
         const M = myNotes.length;
         const baseR = myNotes.map(n => n.type === 'riseabove' ? 7.5 : (n.type === 'improve' ? 5 : 3));
         const baseBorder = myNotes.map(n => isUp(n) ? '#d97706' : '#f43f5e');
+        const art = window.KBEureka ? KBEureka.create({ notes: myNotes.map(n => ({ type: n.type, title: n.title, content: n.content, when: fmtD(n) })), data: data, root: document.getElementById('eu-fig') }) : null;
+        window.__eurekaArt = art;
         eurekaChartInstance = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
                 datasets: [{
                     label: '狀態', data: data,
-                    borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.05)',
-                    borderWidth: 2, tension: 0.4, fill: true,
+                    borderColor: art ? 'rgba(0,0,0,0)' : '#f43f5e', backgroundColor: art ? 'rgba(0,0,0,0)' : 'rgba(244, 63, 94, 0.05)',
+                    borderWidth: art ? 0 : 2, tension: 0.4, fill: !art,
                     pointBackgroundColor: myNotes.map(n => isUp(n) ? '#fbbf24' : '#f43f5e'),
-                    pointRadius: baseR.slice(), pointBorderColor: baseBorder.slice(), pointBorderWidth: baseR.map(() => 1.5), pointHoverRadius: baseR.map(r => r + 3),
+                    pointRadius: art ? 0 : baseR.slice(), pointBorderColor: baseBorder.slice(), pointBorderWidth: art ? 0 : baseR.map(() => 1.5), pointHoverRadius: art ? 0 : baseR.map(r => r + 3),
                 }]
             },
+            plugins: art ? [art.plugin] : [],
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: { callbacks: {
+                layout: art ? { padding: { top: 24, right: 14, bottom: 2, left: 2 } } : {},
+                events: art ? [] : ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
+                plugins: { legend: { display: false }, tooltip: { enabled: !art, callbacks: {
                     title: items => { const i = items[0].dataIndex, n = myNotes[i]; return 'N' + (i + 1) + ' · ' + fmtD(n); },
                     label: c => { const n = myNotes[c.dataIndex], t = TYPE[n.type] || ['一般發言', 0]; return t[0] + (t[1] > 0 ? '(多爬 ' + t[1] + ')' : t[1] < 0 ? '(稍微下沉)' : '') + ':' + (n.title || '(無標題)'); },
                     afterLabel: c => '想法高度 ' + c.parsed.y
                 } } },
-                scales: {
+                scales: art ? {
+                    x: { display: true, offset: true, grid: { display: false }, border: { color: '#d3d9e6' }, ticks: { font: { size: 13, weight: '600' }, color: '#1f2937', autoSkip: true, maxTicksLimit: 12, maxRotation: 0 } },
+                    y: {
+                        display: true, min: 0, suggestedMax: Math.max(...data, 4) + 1.4,
+                        grid: { color: '#edf0f6' }, border: { display: false },
+                        ticks: { font: { size: 12.5 }, color: '#374151', maxTicksLimit: 7, padding: 8, callback: function(val) { return Number.isInteger(val) ? val : ''; } }
+                    }
+                } : {
                     x: { display: false },
                     y: {
                         display: true, suggestedMin: 0, suggestedMax: Math.max(...data, 4),
@@ -1924,6 +1958,7 @@ async function initApiKey() {
                 }
             }
         });
+        if (art) art.bind(eurekaChartInstance);
 
         // ---- 播放時的即時說明(停在畫面上,直到下一個點才換)+ 「想法進步的時刻」清單(只增加、不消失)----
         const SAY = {
@@ -1958,13 +1993,16 @@ async function initApiKey() {
         paintCaption(M); if (cap) cap.innerHTML = '<div>👆 <b>按下 ▶ 播放</b>:一個點一個點看你的想法怎麼往上爬,這裡會即時說明「現在這個點代表什麼」。</div><div class="text-slate-500">整段歷程:共 ' + M + ' 次發言,其中 ' + nImp + ' 次改進、' + nRise + ' 次昇華,最後的想法高度是 ' + data[M - 1] + '。</div>';
         paintMoments(M);
         try {
-            player = kbAttachSeriesPlayer({ guide: false, id: 'eureka', explainTitle: '我的認知頓悟軌跡(每一次發言讓想法往上走或停一下)', chart: eurekaChartInstance, anchor: document.getElementById('eureka-box'), slow: true, baseDelay: 650,
+            player = kbAttachSeriesPlayer({ guide: false, id: 'eureka', explainTitle: '我的認知頓悟軌跡(每一次發言讓想法往上走或停一下)', chart: eurekaChartInstance, anchor: document.getElementById('eu-fig') || document.querySelector('#eureka-box .eureka-chart-container') || document.getElementById('eureka-box'), slow: true, baseDelay: 650,
                 hold: k => { const n = myNotes[k - 1]; return n ? (n.type === 'riseabove' ? 1800 : (n.type === 'improve' ? 1200 : 0)) : 0; },
                 onStep: (k, chart) => {
-                    const ds = chart.data.datasets[0];
-                    ds.pointRadius = baseR.map((r, i) => i === k - 1 ? r + 3 : r);
-                    ds.pointBorderColor = baseBorder.map((c, i) => i === k - 1 ? '#4f46e5' : c);
-                    ds.pointBorderWidth = baseR.map((r, i) => i === k - 1 ? 3.5 : 1.5);
+                    if (art) { art.setCurrent(k - 1); if (art.hide) art.hide(); }
+                    else {
+                        const ds = chart.data.datasets[0];
+                        ds.pointRadius = baseR.map((r, i) => i === k - 1 ? r + 3 : r);
+                        ds.pointBorderColor = baseBorder.map((c, i) => i === k - 1 ? '#4f46e5' : c);
+                        ds.pointBorderWidth = baseR.map((r, i) => i === k - 1 ? 3.5 : 1.5);
+                    }
                     paintCaption(k); paintMoments(k);
                 } });
         } catch (e) { console.error(e); }
@@ -1986,9 +2024,80 @@ async function initApiKey() {
             options: {
                 responsive: true, maintainAspectRatio: false,
                 scales: { r: { ticks: { display: false }, suggestedMin: 0, suggestedMax: 100, pointLabels: { font: { size: 11, family: "'Noto Sans TC', sans-serif", weight: 'bold' }, color: '#475569' }, grid: { color: '#e2e8f0' }, angleLines: { color: '#e2e8f0' } } },
-                plugins: { legend: { display: false } }
-            }
+                plugins: { legend: { display: false }, tooltip: { enabled: !window.KBTip } }
+            },
+            plugins: window.KBTip ? [{ id: 'radarHover', afterDatasetsDraw(c) {   // 滑鼠移到哪一個角,那個點外面多一圈
+                if (c.__hov == null || !c.scales.r) return; const v = c.data.datasets[0].data[c.__hov], pt = c.scales.r.getPointPositionForValue(c.__hov, Number(v) || 0), x = c.ctx;
+                x.save(); x.beginPath(); x.arc(pt.x, pt.y, 9, 0, 6.2832); x.strokeStyle = 'rgba(79,70,229,.85)'; x.lineWidth = 3; x.stroke(); x.beginPath(); x.arc(pt.x, pt.y, 5, 0, 6.2832); x.fillStyle = '#4f46e5'; x.fill(); x.restore();
+            } }] : []
         });
+        bindRadarTips();
+    }
+
+    // ===== 知識五力雷達、鷹架偏好:滑鼠移到任何一個圖形,都跳出說明(用你的數字) =====
+    const RADAR_NAMES = ['開創力', '連結力', '整合力', '維護力', '影響力'], RADAR_COLORS = ['#3b82f6', '#6366f1', '#a855f7', '#10b981', '#f59e0b'];
+    const pct1 = (a, b) => b > 0 ? Math.round(a / b * 100) : 0;
+    function radarTipHtml(i, val) {
+        const st = window.__radarSt || {}, n = st.totalNotes || 0, T = window.KBTip, H = T.h, sc = st.scaffoldCounts || {}, name = RADAR_NAMES[i];
+        let what = '', num = '', goal = '', up = '';
+        if (i === 0) { what = '看你「提問、開新話題、提出下一步」的貼文,占你所有貼文的多少。'; num = '你的 ' + n + ' 篇貼文裡有 <span class="hl">' + (st.initiateCount || 0) + '</span> 篇(' + pct1(st.initiateCount || 0, n) + '%)。'; goal = '占比達到 35% 就是滿分。'; up = '多試試提出問題,或說出「下一步我們可以…」。'; }
+        else if (i === 1) { what = '看你「回應別人想法」的貼文,占你所有貼文的多少。'; num = '你的 ' + n + ' 篇貼文裡有 <span class="hl">' + (st.crossCount || 0) + '</span> 篇(' + pct1(st.crossCount || 0, n) + '%)是回應別人。'; goal = '占比達到 90% 就是滿分。'; up = '多去回應同學的想法,把自己的想法接在他們後面。'; }
+        else if (i === 2) { const imp = (sc.improve || 0) + (sc.counter || 0); what = '看你把想法「整合成新觀點(昇華)」,以及「改進、提出反例」的貼文占多少。'; num = '昇華 <span class="hl">' + (sc.riseabove || 0) + '</span> 篇(' + pct1(sc.riseabove || 0, n) + '%)、改進和反例 <span class="hl">' + imp + '</span> 篇(' + pct1(imp, n) + '%)。'; goal = '昇華占比 12% 為滿分(占六成),改進和反例占比 45% 為滿分(占四成)。'; up = '試著把幾個零散的想法連起來,寫成一個更大的結論。'; }
+        else if (i === 3) { what = '看你有沒有「持續」參與,以及你的想法有沒有被別人接續。'; num = '你有發文的日期占全部發文日的 <span class="hl">' + Math.round((st.dateCoverage || 0) * 100) + '%</span>;被別人回覆 <span class="hl">' + (st.repliedCount || 0) + '</span> 次。'; goal = '發文日期占比與「被回覆的比例(80% 為滿分)」各占一半。'; up = '不要只在一天發很多,分散在不同天參與,並回應同學對你的回覆。'; }
+        else { what = '看你的想法被別人回應了多少次。'; num = '你的想法被別人回應 <span class="hl">' + (st.repliedCount || 0) + '</span> 次(每次 15 分)。'; goal = '累積到 100 分就是滿分。'; up = '把想法寫清楚、問一個大家想回答的問題,同學比較容易接續。'; }
+        const mat = Math.max(0, Math.min(1, n / ROLE_MATURE_N));
+        return H(name + ' ' + val, '滿分 100', RADAR_COLORS[i]) + '<p>' + what + '</p><p>' + num + '</p><p>' + goal + '</p>' + (n > 0 && n < ROLE_MATURE_N ? '<p>你才發 ' + n + ' 篇,分數先打 <span class="hl">' + Math.round(mat * 100) + '%</span>,發滿 ' + ROLE_MATURE_N + ' 篇才算滿。</p>' : '') + '<div class="nx">' + up + '</div>';
+    }
+    function radarAreaHtml(vals) {
+        const H = window.KBTip.h, mx = Math.max(...vals), mn = Math.min(...vals), name = i => RADAR_NAMES[i];
+        const rows = vals.map((v, i) => '<li><span>' + name(i) + '</span><span class="hl">' + v + '</span></li>').join('');
+        return H('你的知識五力') + '<ul>' + rows + '</ul>' + '<p>目前最強的是<span class="hl">' + name(vals.indexOf(mx)) + '</span>' + (mx !== mn ? ',最可以再加強的是<span class="hl">' + name(vals.indexOf(mn)) + '</span>' : '') + '。</p><div class="nx">圖形越大、越圓,代表能力越強、越均衡。移到每個角上,看那一項怎麼算。</div>';
+    }
+    function radarRingHtml(level) { return window.KBTip.h('這一格:' + (level - 19) + '~' + level + ' 分') + '<p>最外圈是 100 分。圖形的角碰到越外面的圈,代表那一項能力越強。</p><div class="nx">把滑鼠移到圖形的角或名稱上,看那一項是怎麼算的。</div>'; }
+    window.__tip5 = { radarTipHtml: (i, v) => radarTipHtml(i, v), radarAreaHtml: v => radarAreaHtml(v), radarRingHtml: l => radarRingHtml(l), scaffoldTipHtml: t => scaffoldTipHtml(t) };   // 測試用
+    function bindRadarTips() {
+        const cv = document.getElementById('studentRadarChart'); if (!cv || cv.__tipBound || !window.KBTip) return; cv.__tipBound = true;
+        const card = cv.closest('.card'), tip = KBTip.create(card);
+        function on(e) {
+            const ch = radarChartInstance; if (!ch || !ch.scales || !ch.scales.r) return;
+            const r = cv.getBoundingClientRect(), c = card.getBoundingClientRect(), vals = ch.data.datasets[0].data.map(v => Number(v) || 0), hit = KBTip.radarHit(ch.scales.r, vals, e.clientX - r.left, e.clientY - r.top);
+            const prev = ch.__hov; ch.__hov = hit && hit.kind === 'axis' ? hit.i : null; if (prev !== ch.__hov) { try { ch.draw(); } catch (x) {} }
+            cv.style.cursor = hit ? 'help' : 'default';
+            if (!hit) { tip.hide(); return; }
+            const x = e.clientX - c.left, y = e.clientY - c.top;
+            if (hit.kind === 'axis') tip.show(radarTipHtml(hit.i, vals[hit.i]), x, y, 'r:' + hit.i + ':' + vals[hit.i]);
+            else if (hit.kind === 'area') tip.show(radarAreaHtml(vals), x, y, 'area:' + vals.join(','));
+            else tip.show(radarRingHtml(hit.level), x, y, 'ring:' + hit.level);
+        }
+        cv.addEventListener('mousemove', on); cv.addEventListener('click', on);
+        cv.addEventListener('mouseleave', () => { const ch = radarChartInstance; if (ch && ch.__hov != null) { ch.__hov = null; try { ch.draw(); } catch (x) {} } tip.hide(); });
+        cv.setAttribute('aria-label', '知識五力雷達圖:移到圖形或名稱上,會說明每一項怎麼算');
+    }
+    const SCAFFOLD_DEF = {
+        question: { n: '提問', c: '#3b82f6', say: '提出問題,讓大家一起想。好問題常常是討論的起點。', up: '多問「為什麼」「怎麼會」,討論才有地方可以去。' },
+        extend: { n: '延伸', c: '#eab308', say: '接續別人的想法,補充或往下想。', up: '延伸之後,可以試試用實驗或資料把想法改得更好。' },
+        improve: { n: '改進', c: '#22c55e', say: '把想法改得更好,例如用實驗或資料修正。', up: '改進會讓想法更準確,是從猜想走向證據的一步。' },
+        counter: { n: '反例', c: '#ef4444', say: '提出不同的看法或反例,看看想法站不站得住。', up: '反例不是吵架,是幫大家把想法檢查得更完整。' },
+        riseabove: { n: '昇華', c: '#a855f7', say: '把零散的想法整合成更高一層的新觀點。', up: '把幾個想法連起來,寫成一個更大的結論。' }
+    };
+    function scaffoldTipHtml(t) {
+        const D = SCAFFOLD_DEF[t], T = window.KBTip, c = window.__scCounts || {}, tot = Object.values(c).reduce((a, b) => a + b, 0), v = c[t] || 0, mx = Math.max(...Object.values(c), 0);
+        const p = pct1(v, tot);
+        return T.h(D.n + ' · ' + v + ' 次', tot ? '占 ' + p + '%' : '', D.c) + '<p>' + D.say + '</p>' +
+            (tot ? '<div class="bar"><i style="width:' + p + '%;background:' + D.c + '"></i></div><p>你的 ' + tot + ' 則發言裡,有 <span class="hl">' + v + '</span> 則是「' + D.n + '」。' + (v > 0 && v === mx ? '這是你用得<span class="hl">最多</span>的一種。' : '') + '</p>' : '<p>還沒有發言。</p>') +
+            '<div class="nx">' + (v === 0 && tot ? '你還沒用過這種發言方式,試試看!' : D.up) + '</div>';
+    }
+    function bindScaffoldTips() {
+        const box = document.getElementById('scaffold-bars'); if (!box || box.__tipBound || !window.KBTip) return; box.__tipBound = true;
+        const card = box.closest('.card'), tip = KBTip.create(card);
+        const rel = e => { const c = card.getBoundingClientRect(); return { x: e.clientX - c.left, y: e.clientY - c.top }; };
+        const show = (el, x, y) => { const k = (el.getAttribute('data-kbtip') || '').replace('sc:', ''); if (SCAFFOLD_DEF[k]) tip.show(scaffoldTipHtml(k), x, y, k + ':' + JSON.stringify(window.__scCounts || {})); };
+        card.addEventListener('mouseover', e => { const el = e.target.closest && e.target.closest('[data-kbtip^="sc:"]'); if (!el || !card.contains(el)) { tip.hide(); return; } const p = rel(e); show(el, p.x, p.y); });
+        card.addEventListener('mousemove', e => { const el = e.target.closest && e.target.closest('[data-kbtip^="sc:"]'); if (el && tip.visible()) { const p = rel(e); show(el, p.x, p.y); } });
+        card.addEventListener('mouseout', e => { const to = e.relatedTarget; if (!(to && to.closest && to.closest('[data-kbtip^="sc:"]'))) tip.hide(); });
+        card.addEventListener('focusin', e => { const el = e.target.closest && e.target.closest('[data-kbtip^="sc:"]'); if (!el) return; const r = el.getBoundingClientRect(), c = card.getBoundingClientRect(); show(el, r.left - c.left + r.width / 2, r.top - c.top + r.height / 2); });
+        card.addEventListener('focusout', () => tip.hide());
+        card.addEventListener('click', e => { const el = e.target.closest && e.target.closest('[data-kbtip^="sc:"]'); if (el) { const p = rel(e); show(el, p.x, p.y); } });
     }
 
     function renderEgoNetwork(userId) {
@@ -2020,27 +2129,45 @@ async function initApiKey() {
             if (n.author !== p.author && n.author !== userId && p.author !== userId && interactants.has(n.author) && interactants.has(p.author)) events.push({ from: n.author, to: p.author, d: days.index(n.date, dayPos(n.id)), type: 'alter' });
         });
 
-        const visNodes = Array.from(interactants).map(id => {
-            const u = Object.values(users).find(usr => usr.id === id), isMe = id === userId;
-            return { id: id, label: u ? u.name : id, shape: 'dot', size: isMe ? 24 : 14, color: isMe ? '#4f46e5' : '#cbd5e1', font: { size: 12, color: '#475569', face: 'Noto Sans TC' } };
-        });
+        const meU = users[userId] || Object.values(users).find(u => u.id === userId) || {};
+        const mates = (window.KBEgo && meU.classId) ? Object.values(users).filter(u => u.role === 'student' && u.id !== userId && u.classId === meU.classId) : [];
+        const ringMode = mates.length >= 2;
 
         if(egoNetworkInstance) { egoNetworkInstance.destroy(); egoNetworkInstance = null; }
         Array.prototype.forEach.call(document.querySelectorAll('[data-kbnet="ego-s"]'), x => x.remove());
-        if (visNodes.length <= 1) container.innerHTML = '<div class="flex h-full items-center justify-center text-slate-400 text-xs italic">尚無互動紀錄</div>';
-        else {
-            const edgeFrame = kbEdgeFrames(events, colors);
-            const build = i => { const eds = edgeFrame(i).map(ed => (ed.color && ed.color.color === colors.alter) ? Object.assign({}, ed, { width: 1, arrows: '' }) : ed); const present = new Set([userId]); eds.forEach(ed => { present.add(ed.from); present.add(ed.to); }); return { nodes: visNodes.filter(nd => present.has(nd.id)), edges: eds }; };
-            const last = days.labels.length - 1;
-            const nodesDS = new vis.DataSet(build(last).nodes), edgesDS = new vis.DataSet(build(last).edges);
-            egoNetworkInstance = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, { nodes: { borderWidth: 2 }, edges: { smooth: false }, physics: { stabilization: { enabled: true, iterations: 160, updateInterval: 50, fit: true }, barnesHut: { gravitationalConstant: -3000, springLength: 120, damping: 0.6 } } });
-            // 排列穩定後就關閉物理運算,圖不會再一直晃動(仍可手動拖曳節點)
-            const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
-            egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics); kbLively(egoNetworkInstance);
-            setTimeout(stopEgoPhysics, 2500);
-            try { kbEgoTalk(egoNetworkInstance, { me: userId, student: true, nodes: nodes, userList: users, typeLabel: t => ({ question: '提問', extend: '延伸', improve: '改進', counter: '不同觀點', riseabove: '昇華' })[t] || '' }); } catch (e) { console.error(e); }
-            kbAttachPlayer({ explainTitle: '我的互動圈(我和誰互動)的形成過程', id: 'ego-s', container: container, network: egoNetworkInstance, nodesDS: nodesDS, edgesDS: edgesDS, labels: days.stepLabels, steps: days.steps, build: build });
+        const legendBox = document.getElementById('ego-grp-legend'); if (legendBox) { legendBox.classList.add('hidden'); legendBox.classList.remove('flex'); legendBox.innerHTML = ''; }
+
+        if (!ringMode) {   // 找不到班級同學(例如只有自己):維持原本的排法
+            const visNodes = Array.from(interactants).map(id => {
+                const u = Object.values(users).find(usr => usr.id === id), isMe = id === userId;
+                return { id: id, label: u ? u.name : id, shape: 'dot', size: isMe ? 24 : 14, color: isMe ? '#4f46e5' : '#cbd5e1', font: { size: 12, color: '#475569', face: 'Noto Sans TC' } };
+            });
+            if (visNodes.length <= 1) container.innerHTML = '<div class="flex h-full items-center justify-center text-slate-400 text-xs italic">尚無互動紀錄</div>';
+            else {
+                const edgeFrame = kbEdgeFrames(events, colors);
+                const build = i => { const eds = edgeFrame(i).map(ed => (ed.color && ed.color.color === colors.alter) ? Object.assign({}, ed, { width: 1, arrows: '' }) : ed); const present = new Set([userId]); eds.forEach(ed => { present.add(ed.from); present.add(ed.to); }); return { nodes: visNodes.filter(nd => present.has(nd.id)), edges: eds }; };
+                const last = days.labels.length - 1;
+                const nodesDS = new vis.DataSet(build(last).nodes), edgesDS = new vis.DataSet(build(last).edges);
+                egoNetworkInstance = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, { nodes: { borderWidth: 2 }, edges: { smooth: false }, physics: { stabilization: { enabled: true, iterations: 160, updateInterval: 50, fit: true }, barnesHut: { gravitationalConstant: -3000, springLength: 120, damping: 0.6 } } });
+                const stopEgoPhysics = () => { if (egoNetworkInstance) egoNetworkInstance.setOptions({ physics: false }); };
+                egoNetworkInstance.once('stabilizationIterationsDone', stopEgoPhysics); kbLively(egoNetworkInstance);
+                setTimeout(stopEgoPhysics, 2500);
+                try { kbEgoTalk(egoNetworkInstance, { me: userId, student: true, nodes: nodes, userList: users, typeLabel: t => ({ question: '提問', extend: '延伸', improve: '改進', counter: '不同觀點', riseabove: '昇華' })[t] || '' }); } catch (e) { console.error(e); }
+                kbAttachPlayer({ explainTitle: '我的互動圈(我和誰互動)的形成過程', id: 'ego-s', container: container, network: egoNetworkInstance, nodesDS: nodesDS, edgesDS: edgesDS, labels: days.stepLabels, steps: days.steps, build: build });
+            }
+            return;
         }
+
+        // ===== 社群位置排法(kb-ego.js):你在中央;離你的距離 = 互動多寡;扇形區與顏色 = 組別;最外圍 = 還沒互動 =====
+        const lastIdx = days.labels.length - 1;
+        const nameOfE = id => { const u = Object.values(users).find(x => x.id === id); return u ? u.name : id; };
+        window.KBEgo.mountRing({
+            container: container, legendBox: legendBox, me: userId, users: users, groups: (window.KB && KB.classes && KB.classes.groups) ? KB.classes.groups(meU.classId) : [], events: events, lastIdx: lastIdx,
+            edgeFrame: kbEdgeFrames(events, colors), isAlter: ed => !!(ed.color && ed.color.color === colors.alter), nameOf: nameOfE,
+            lively: net => { egoNetworkInstance = net; kbLively(net); },
+            talk: net => kbEgoTalk(net, { me: userId, student: true, nodes: nodes, userList: users, typeLabel: t => ({ question: '提問', extend: '延伸', improve: '改進', counter: '不同觀點', riseabove: '昇華' })[t] || '' }),
+            attach: (net, nodesDS, edgesDS, build) => kbAttachPlayer({ explainTitle: '我的互動圈(我和誰互動)的形成過程', id: 'ego-s', container: container, network: net, nodesDS: nodesDS, edgesDS: edgesDS, labels: days.stepLabels, steps: days.steps, build: build, noPhysics: true })
+        });
     }
 
     function renderTimeline(notes, dbNodes) {
@@ -2081,8 +2208,11 @@ async function initApiKey() {
             bar.className = `flex-1 ${colors[i]} rounded-t-lg relative transition-all duration-500 hover:opacity-80 cursor-pointer`;
             bar.style.height = `${h}%`;
             bar.innerHTML = `<div class="absolute -top-5 left-1/2 transform -translate-x-1/2 text-[11px] font-bold text-slate-600">${val}</div>`;
+            bar.setAttribute('data-kbtip', 'sc:' + t); bar.tabIndex = 0; bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', ['提問', '延伸', '改進', '反例', '昇華'][i] + ' ' + val + ' 次');
             container.appendChild(bar);
         });
+        window.__scCounts = Object.assign({}, counts);
+        bindScaffoldTips();
     }
 
     function viewNoteDetail(noteId) {

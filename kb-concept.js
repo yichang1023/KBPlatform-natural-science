@@ -145,135 +145,43 @@
   }
 
   /* ---------- 版面:詞擺在雲裡,不重疊;常一起出現的詞放近一點 ---------- */
-  // 雲朵外觀的總開關:false=只顯示文字(目前使用),true=水墨/立體雲朵(之後慢慢調整)
-  var CLOUDS = false;
-  // 單一大雲:只有一朵雲(依參考圖的藍色層層雲團),所有文字都在裡面,文字越多雲越大
-  var ONE_CLOUD = true;
-  var CLOUD_IMG = 'kb-cloud.png', CLOUD_ASP = 1395 / 808;   // 參考圖(去背的 PNG,檔案載入失敗時改用手繪的雲)
-  // 要包住 bw×bh 的文字,雲(保持原圖比例)需要多大
-  function cloudBox(bw, bh) { var w = Math.max(bw / .82 + 30, (bh / .64 + 26) * CLOUD_ASP, 250); return { w: w, h: w / CLOUD_ASP }; }
-  function chipFont(count) { return 14 + Math.min(count, 4) * 4; }
-  // 每個詞是一朵雲:寬 = 字數 + 3 個字寬,高 = 2.7 個字高(單位是 em,字越大雲越大)
-  function cloudDim(t) { return CLOUDS ? { w: t.length + 3.2, h: 2.8 } : { w: t.length + 1.5, h: 1.7 }; }
-  function chipBox(c) { var f = chipFont(c.count); return CLOUDS ? { w: (c.t.length + 1.9) * f, h: f * 1.75 } : { w: cloudDim(c.t).w * f, h: cloudDim(c.t).h * f }; }   // 只算文字的位置:小雲可以互相重疊,但字不能疊在一起
-  // 不規則的雲朵:一個扁平的雲底 + 幾個大小不一、位置有點偏的凸起;同一個詞永遠長一樣,不同的詞長不一樣
-  function cloudShapes(seed, W, H, big) {
-    var r = rng(hash(seed)), sh = [], i, kind = Math.floor(r() * 4);   // 0 一般 1 高塔 2 雙峰 3 扁長
-    var lean = (r() - .5) * .5;                                        // 整朵雲往左或往右歪一點
-    var nb = clamp(Math.round(W / (kind === 3 ? 1.0 : 1.35)), 3, big ? 8 : 7);
-    // 雲腳:一排大小不一、高低不同的圓,擠成圓滾滾的底
-    for (i = 0; i < nb; i++) {
-      var t = nb === 1 ? .5 : i / (nb - 1), e = Math.sin(Math.PI * t);
-      sh.push({ cx: -W * .4 + t * W * .8 + (r() - .5) * W * .05, cy: H * (.1 + .08 * r()) - H * .04 * e, r: H * (.2 + .1 * r() + .07 * e) });
-    }
-    // 雲頂:大小與位置每朵都不一樣
-    var peaks = kind === 1 ? 1 : kind === 2 ? 2 : kind === 3 ? 2 : 3, p;
-    for (p = 0; p < peaks; p++) {
-      var px = kind === 1 ? (r() - .5) * W * .5 : -W * .3 + (p + .5) / peaks * W * .6 + (r() - .5) * W * .12;
-      var pr = H * (kind === 1 ? .36 + .1 * r() : kind === 3 ? .22 + .08 * r() : .26 + .14 * r());
-      sh.push({ cx: px + lean * W * .15, cy: -H * (kind === 1 ? .22 : kind === 3 ? .08 : .1 + .12 * r()), r: pr });
-      if (r() > .35) sh.push({ cx: px + (r() - .5) * W * .25, cy: -H * (.02 + .12 * r()), r: H * (.18 + .1 * r()) });   // 旁邊再冒出一團小的
-    }
-    // 兩端的小圓角
-    sh.push({ cx: -W * (.43 + .03 * r()), cy: H * (.12 + .06 * r()), r: H * (.15 + .07 * r()) });
-    sh.push({ cx: W * (.43 + .03 * r()), cy: H * (.12 + .06 * r()), r: H * (.15 + .07 * r()) });
-    // 平平的雲底
-    sh.push({ cx: 0, cy: H * .2, rx: W * (.42 + .04 * r()), ry: H * (.17 + .04 * r()) });
-    sh.sort(function (a, b) { return a.cy - b.cy; });   // 高的先畫(在後面),低的後畫(在前面),重疊處才有前後
-    var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-    sh.forEach(function (q) { var rx = q.rx || q.r, ry = q.ry || q.r; x0 = Math.min(x0, q.cx - rx); x1 = Math.max(x1, q.cx + rx); y0 = Math.min(y0, q.cy - ry); y1 = Math.max(y1, q.cy + ry); });
-    return { sh: sh, x0: x0, x1: x1, y0: y0, y1: y1, seed: hash(seed) % 997 };
-  }
-  // ---------- 水墨潑畫的大雲(單位是 px):多團雲疊成一整朵,深藍墨在邊緣與底部暈開,外圍有潑濺的墨點與墨痕 ----------
-  function inkMass(A, B, seedStr) {
-    var r = rng(hash(seedStr)), L = [], i, n, t, e;
-    L.push({ cx: 0, cy: 0, rx: A * .82, ry: B * .62 });
-    n = Math.max(4, Math.round(A * 2 / (B * .9)));
-    for (i = 0; i < n; i++) { t = i / (n - 1); e = Math.sin(Math.PI * t); L.push({ cx: -A * .86 + t * A * 1.72 + (r() - .5) * A * .06, cy: B * (.5 + .06 * r()) - B * .08 * e, r: B * (.3 + .1 * r() + .08 * e) }); }   // 底部大小不一的雲腳
-    n = Math.max(3, Math.round(A * 2 / (B * 1.2)));
-    for (i = 0; i < n; i++) { t = (i + .5) / n; e = Math.sin(Math.PI * t); L.push({ cx: -A * .75 + t * A * 1.5 + (r() - .5) * A * .1, cy: -B * (.18 + .3 * e * (.6 + .6 * r())), r: B * (.3 + .22 * e * (.7 + .5 * r())) }); }   // 高高低低的雲頂
-    for (i = 0; i < 10; i++) L.push({ cx: (r() - .5) * A * 1.5, cy: (r() - .5) * B * .95, r: B * (.2 + .16 * r()) });   // 大雲裡面再疊起來的小雲團
-    L.push({ cx: -A * .95, cy: B * .35, r: B * .28 }, { cx: A * .95, cy: B * .35, r: B * .28 });
-    L = L.map(function (o) { return o.rx ? o : { cx: o.cx, cy: o.cy, rx: o.r, ry: o.r }; });
-    var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-    L.forEach(function (o) { x0 = Math.min(x0, o.cx - o.rx); x1 = Math.max(x1, o.cx + o.rx); y0 = Math.min(y0, o.cy - o.ry); y1 = Math.max(y1, o.cy + o.ry); });
-    var sx = 2 * A / (x1 - x0), sy = 2 * B / (y1 - y0), mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-    L = L.map(function (o) { return { cx: (o.cx - mx) * sx, cy: (o.cy - my) * sy, rx: o.rx * sx, ry: o.ry * sy }; });
-    L.sort(function (a, b) { return a.cy - b.cy; });
-    function el(o, grow) { return '<ellipse cx="' + o.cx.toFixed(1) + '" cy="' + o.cy.toFixed(1) + '" rx="' + (o.rx + (grow || 0)).toFixed(1) + '" ry="' + (o.ry + (grow || 0)).toFixed(1) + '"/>'; }
-    var id = 'kbcm' + (++cloudId), sd = hash(seedStr) % 991, pad = 80, W = 2 * A + pad * 2, H = 2 * B + pad * 2 + 30;
-    var defs = '<defs>' +
-      '<filter id="' + id + 'w" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".014" numOctaves="3" seed="' + sd + '" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="34" xChannelSelector="R" yChannelSelector="G" result="d"/><feGaussianBlur in="d" stdDeviation="3"/></filter>' +
-      '<filter id="' + id + 'r" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".03" numOctaves="2" seed="' + (sd + 7) + '" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="12" xChannelSelector="R" yChannelSelector="G"/></filter>' +
-      '<filter id="' + id + 'b" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".006 .07" numOctaves="3" seed="' + (sd + 3) + '"/><feColorMatrix values="0 0 0 0 .13  0 0 0 0 .36  0 0 0 0 .62  2.6 0 0 0 -1.05"/></filter>' +
-      '<filter id="' + id + 's" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7"/></filter>' +
-      '<filter id="' + id + 'p" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".8"/></filter>' +
-      '<radialGradient id="' + id + 'g" cx=".45" cy=".28" fx=".35" fy=".2" r=".9"><stop offset="0" stop-color="#eaf7ff"/><stop offset=".32" stop-color="#b4dcfa"/><stop offset=".68" stop-color="#5fb0ee"/><stop offset="1" stop-color="#2f79c4"/></radialGradient>' +
-      '<linearGradient id="' + id + 'v" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="' + (-B).toFixed(0) + '" y2="' + B.toFixed(0) + '"><stop offset="0" stop-color="#9fd2f4"/><stop offset="1" stop-color="#2b74bb"/></linearGradient>' +
-      '<clipPath id="' + id + 'c">' + L.map(function (o) { return el(o); }).join('') + '</clipPath></defs>';
-    var wash = '<g class="mw" filter="url(#' + id + 'w)" fill="url(#' + id + 'v)" opacity=".82">' + L.map(function (o) { return el(o, 9); }).join('') + '</g>';
-    var body = '<g class="mb" filter="url(#' + id + 'r)" fill="url(#' + id + 'g)" stroke="#1d5a9c" stroke-opacity=".5" stroke-width="2.4">' + L.map(function (o) { return el(o); }).join('') + '</g>';
-    var brush = '<g clip-path="url(#' + id + 'c)"><rect class="mk" x="' + (-A - 20) + '" y="' + (-B - 20) + '" width="' + (2 * A + 40) + '" height="' + (2 * B + 40) + '" filter="url(#' + id + 'b)" opacity=".2"/></g>';
-    var lite = '<g class="mh" filter="url(#' + id + 's)" fill="#fff" opacity=".5"><ellipse cx="' + (-A * .35).toFixed(0) + '" cy="' + (-B * .45).toFixed(0) + '" rx="' + (A * .3).toFixed(0) + '" ry="' + (B * .18).toFixed(0) + '"/><ellipse cx="' + (A * .28).toFixed(0) + '" cy="' + (-B * .28).toFixed(0) + '" rx="' + (A * .2).toFixed(0) + '" ry="' + (B * .12).toFixed(0) + '"/><ellipse cx="' + (-A * .1).toFixed(0) + '" cy="' + (B * .02).toFixed(0) + '" rx="' + (A * .34).toFixed(0) + '" ry="' + (B * .1).toFixed(0) + '" opacity=".6"/></g>';
-    var spl = '<g class="ms" filter="url(#' + id + 'p)" fill="#24609f">';
-    for (i = 0; i < 24; i++) { var an = r() * Math.PI * 2, d = 1.03 + r() * .3, rr = 1.5 + r() * r() * 9; spl += '<circle cx="' + (Math.cos(an) * A * d).toFixed(1) + '" cy="' + (Math.sin(an) * B * d).toFixed(1) + '" r="' + rr.toFixed(1) + '" opacity="' + (.25 + r() * .4).toFixed(2) + '"/>'; }
-    for (i = 0; i < 4; i++) { var dx = (r() - .5) * A * 1.4, dl = 10 + r() * 20; spl += '<rect x="' + (dx - 2).toFixed(1) + '" y="' + (B * .88).toFixed(1) + '" width="4.4" height="' + dl.toFixed(1) + '" rx="2.2" opacity=".38"/><circle cx="' + dx.toFixed(1) + '" cy="' + (B * .88 + dl + 3).toFixed(1) + '" r="3.6" opacity=".4"/>'; }
-    spl += '</g>';
-    return { w: W, h: H, svg: '<svg class="kbc-mass-svg" viewBox="' + (-W / 2).toFixed(0) + ' ' + (-H / 2 + 12).toFixed(0) + ' ' + W.toFixed(0) + ' ' + H.toFixed(0) + '" width="' + W.toFixed(0) + '" height="' + H.toFixed(0) + '" aria-hidden="true">' + defs + wash + body + brush + lite + spl + '</svg>' };
-  }
-  // ---------- 單一大雲:照參考圖畫的藍色層層雲團(viewBox 480x300),後面深藍的大團、中間淺一點的小雲團、前面兩朵亮亮的小雲 ----------
-  function oneCloud() {
-    var id = 'kbc1' + (++cloudId);
-    function circ(o) { return o.length === 4 ? '<ellipse cx="' + o[0] + '" cy="' + o[1] + '" rx="' + o[2] + '" ry="' + o[3] + '"/>' : '<circle cx="' + o[0] + '" cy="' + o[1] + '" r="' + o[2] + '"/>'; }
-    function layer(list, grad, rim) { return '<g fill="url(#' + id + grad + ')" stroke="' + rim + '" stroke-opacity=".62" stroke-width="2.4" vector-effect="non-scaling-stroke">' + list.map(circ).join('') + '</g>'; }
-    function hi(list) {   // 每個雲團上緣一道亮光
-      return '<g fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3.2" stroke-linecap="round" vector-effect="non-scaling-stroke">' + list.filter(function (o) { return o.length === 3; }).map(function (o) {
-        var r = o[2] * .8, a1 = 200 * Math.PI / 180, a2 = 292 * Math.PI / 180;
-        return '<path d="M' + (o[0] + r * Math.cos(a1)).toFixed(1) + ' ' + (o[1] + r * Math.sin(a1)).toFixed(1) + ' A' + r.toFixed(1) + ' ' + r.toFixed(1) + ' 0 0 1 ' + (o[0] + r * Math.cos(a2)).toFixed(1) + ' ' + (o[1] + r * Math.sin(a2)).toFixed(1) + '"/>';
-      }).join('') + '</g>';
-    }
-    var back = [[240, 214, 218, 60], [205, 112, 92], [300, 76, 52], [335, 128, 76], [128, 138, 66], [255, 148, 92], [412, 160, 48], [58, 205, 46], [108, 222, 42], [172, 236, 40], [245, 240, 42], [318, 236, 44], [390, 224, 44], [440, 202, 36]];
-    var mid = [[212, 92, 58], [276, 112, 44], [100, 160, 30], [166, 150, 52], [218, 142, 60], [90, 190, 34], [56, 205, 28], [128, 205, 36], [236, 182, 46]];
-    var fr = [[352, 206, 92, 30], [305, 190, 26], [335, 172, 34], [378, 176, 30], [408, 198, 24], [318, 208, 22]];
-    var fl = [[152, 240, 64, 20], [122, 230, 20], [152, 216, 27], [184, 230, 22]];
-    function grad(g, a, b, c) { return '<radialGradient id="' + id + g + '" cx=".4" cy=".28" fx=".32" fy=".2" r=".88"><stop offset="0" stop-color="' + a + '"/><stop offset=".52" stop-color="' + b + '"/><stop offset="1" stop-color="' + c + '"/></radialGradient>'; }
-    return '<svg viewBox="0 0 480 300" preserveAspectRatio="none" aria-hidden="true"><defs>' + grad('b', '#a6e0f9', '#6fc3f1', '#2d8ae0') + grad('m', '#d3f2fd', '#98d8f8', '#4ea9ec') + grad('f', '#f1fbff', '#bbe8fb', '#5fb8ee') +
-      '<filter id="' + id + 's" x="-20%" y="-200%" width="140%" height="500%"><feGaussianBlur stdDeviation="7"/></filter></defs>' +
-      '<ellipse cx="240" cy="284" rx="190" ry="10" fill="#4d7fb0" opacity=".28" filter="url(#' + id + 's)"/>' +
-      layer(back, 'b', '#1f78cc') + layer(mid, 'm', '#2f8fdc') + hi(mid) + layer(fr, 'f', '#2f8fdc') + hi(fr) + layer(fl, 'f', '#2f8fdc') + hi(fl) + '</svg>';
-  }
-  var cloudId = 0;
-  function cloudSVG(cs, cls, stroke) {
-    function one(p) { return p.rx ? '<ellipse cx="' + p.cx.toFixed(3) + '" cy="' + p.cy.toFixed(3) + '" rx="' + p.rx.toFixed(3) + '" ry="' + p.ry.toFixed(3) + '"/>' : '<circle cx="' + p.cx.toFixed(3) + '" cy="' + p.cy.toFixed(3) + '" r="' + p.r.toFixed(3) + '"/>'; }
-    var id = 'kbcg' + (++cloudId), m = stroke ? stroke + .3 : .25, vw = cs.x1 - cs.x0 + m * 2, vh = cs.y1 - cs.y0 + m * 2;
-    var all = cs.sh.map(one).join('');
-    var defs = '<defs>' +
-      // 每一團的光影:亮光在左上,往右下慢慢變成藍色的陰影(底部帶這個詞的狀態色)
-      '<radialGradient id="' + id + '" cx=".42" cy=".3" fx=".34" fy=".24" r=".86"><stop offset="0" stop-color="#ffffff"/><stop offset=".42" stop-color="#ffffff"/><stop offset=".72" stop-color="#e3f0fc"/><stop offset=".9" stop-color="#b9d9f6"/><stop offset="1" stop-color="#8fc0ef" class="kbc-gb"/></radialGradient>' +
-      // 整朵雲底部再壓一層藍,上面保持亮白
-      '<linearGradient id="' + id + 'b" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="' + (cs.y0 + (cs.y1 - cs.y0) * .45).toFixed(3) + '" y2="' + cs.y1.toFixed(3) + '"><stop offset="0" stop-color="#7fb6ec" stop-opacity="0"/><stop offset="1" stop-color="#6aa6e6" stop-opacity=".5" class="kbc-gb2"/></linearGradient>' +
-      '<clipPath id="' + id + 'c">' + all + '</clipPath>' +
-      // 邊緣像真的雲一樣被撕得毛毛的、每朵不同
-      '<filter id="' + id + 'n" x="-20%" y="-30%" width="140%" height="160%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="1.5" numOctaves="2" seed="' + (cs.seed || 1) + '" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="' + (stroke ? .2 : .32) + '" xChannelSelector="R" yChannelSelector="G"/></filter>' +
-      (stroke ? '<filter id="' + id + 'g" x="-30%" y="-40%" width="160%" height="180%"><feGaussianBlur stdDeviation=".09"/></filter>' : '') +
-      '</defs>';
-    var halo = stroke ? '<g class="o" stroke-width="' + (stroke * 2).toFixed(3) + '" filter="url(#' + id + 'g)">' + all + '</g>' : '';
-    var body = '<g class="f" fill="url(#' + id + ')" filter="url(#' + id + 'n)">' + all + '</g>';
-    var belly = '<g clip-path="url(#' + id + 'c)" filter="url(#' + id + 'n)" class="h"><rect x="' + (cs.x0 - 1).toFixed(3) + '" y="' + cs.y0.toFixed(3) + '" width="' + (cs.x1 - cs.x0 + 2).toFixed(3) + '" height="' + (cs.y1 - cs.y0).toFixed(3) + '" fill="url(#' + id + 'b)"/></g>';
-    return '<svg class="' + cls + '" viewBox="' + (cs.x0 - m).toFixed(3) + ' ' + (cs.y0 - m).toFixed(3) + ' ' + vw.toFixed(3) + ' ' + vh.toFixed(3) + '" style="width:' + vw.toFixed(3) + 'em;height:' + vh.toFixed(3) + 'em" aria-hidden="true">' + defs + halo + body + belly + '</svg>';
+  // 字的大小:用越多次越大(單位 px)。每個詞佔的格子 = 字寬 + 留白,字不會疊在一起;外圍的光暈與緞帶可以互相疊
+  var CH = 1.5, uidN = 0;
+  function chipFont(count) { return 30 + Math.min(count, 6) * 8; }
+  function chipBox(c, mode) { var f = chipFont(c.count); return mode === 'b' ? { w: (c.t.length * 1.45 + 2.6) * f * .76, h: 2.4 * f } : { w: (c.t.length + 1.3) * f, h: CH * f }; }   // 模式 B 的格子 = 漣漪光暈的大小
+  // 模式 B「漣漪擴散雲」:每個詞底下一圈淡紫色的橢圓,外面再往外擴散兩圈細環(單位是 em,跟著字一起放大縮小)
+  function rippleSVG(len) {
+    var id = 'kbrp' + (++uidN), w = len * 1.45 + 2.6;
+    function ring(cls, rx, ry, extra) { return '<ellipse class="' + cls + '" cx="50" cy="30" rx="' + rx + '" ry="' + ry + '" ' + extra + ' vector-effect="non-scaling-stroke"/>'; }
+    return '<svg class="kbc-rip" viewBox="0 0 100 60" preserveAspectRatio="none" style="width:' + w.toFixed(2) + 'em;height:3.5em" aria-hidden="true"><defs><radialGradient id="' + id + '" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#f9f8ff"/><stop offset=".55" stop-color="#eeedfc"/><stop offset=".86" stop-color="#e0def8"/><stop offset="1" stop-color="#d0cef2"/></radialGradient></defs>' +
+      ring('r3', 49, 29, 'fill="none" stroke="#c3bdf0" stroke-width="1" stroke-opacity=".7"') + ring('r2', 41.5, 24.5, 'fill="none" stroke="#bdb7ee" stroke-width="1" stroke-opacity=".85"') + ring('r1', 34, 20, 'fill="url(#' + id + ')" stroke="#bcb7ee" stroke-width="1.2" stroke-opacity=".9"') + '</svg>';
   }
 
-  function layout(model) {
-    var order = model.concepts.slice().sort(function (a, b) { return (a.first - b.first) || (b.count - a.count); }), placed = [], pos = {}, boxes = {};   // 早出現的詞在中心,新長出來的詞在外圍
-    model.concepts.forEach(function (c) { boxes[c.t] = chipBox(c); });
-    function free(x, y, b) { return !placed.some(function (p) { return Math.abs(x - p.x) < (b.w + p.w) / 2 + 12 && Math.abs(y - p.y) < (b.h + p.h) / 2 + 10; }); }
-    function linkedTo(c) { var best = null, bw = 0; model.links.forEach(function (l) { var o = l.a === c.t ? l.b : (l.b === c.t ? l.a : null); if (o && pos[o] && l.posts.length > bw) { bw = l.posts.length; best = o; } }); return best; }
-    order.forEach(function (c, idx) {
-      var b = boxes[c.t], x = 0, y = 0, found = false, t, near = linkedTo(c);
-      // 先試著放在「常一起出現的詞」旁邊,不行再從中心往外找空位(橢圓形螺旋,一定找得到)
-      if (near) { for (t = 0; t < 400 && !found; t++) { var a = t * 2.399963 + idx, r = 50 + t * 1.1; x = pos[near].x + Math.cos(a) * r * 1.35; y = pos[near].y + Math.sin(a) * r * 0.7; if (Math.abs(x) < 520 && Math.abs(y) < 200 && free(x, y, b)) found = true; } }
-      for (t = 0; t < 6000 && !found; t++) { var a2 = t * 2.399963 + idx * 0.7, r2 = 6 + Math.sqrt(t) * 10; x = Math.cos(a2) * r2 * 1.7; y = Math.sin(a2) * r2 * 0.75; if (free(x, y, b)) found = true; }
-      pos[c.t] = { x: x, y: y, w: b.w, h: b.h }; placed.push(pos[c.t]);
+  function layout(model, mode) {
+    mode = mode === 'b' ? 'b' : 'a'; var gx = mode === 'b' ? 6 : 40, gy = mode === 'b' ? 4 : 26;   // 模式 A 字與字之間留大空隙(緞帶要從中間穿過);模式 B 光暈可以稍微疊在一起
+    // 照示意圖:用得最多的詞(字最大)在正中央,其餘的圍成一圈(詞多的話再圍第二圈),大字分散在不同方向
+    var order = model.concepts.slice().sort(function (a, b) { return (b.count - a.count) || (a.first - b.first) || (a.t < b.t ? -1 : 1); }), placed = [], pos = {}, boxes = {};
+    model.concepts.forEach(function (c) { boxes[c.t] = chipBox(c, mode); });
+    function free(x, y, b) { return !placed.some(function (p) { return Math.abs(x - p.x) < (b.w + p.w) / 2 + gx && Math.abs(y - p.y) < (b.h + p.h) / 2 + gy; }); }
+    function put(c, x, y) { var b = boxes[c.t]; pos[c.t] = { x: x, y: y, w: b.w, h: b.h }; placed.push(pos[c.t]); }
+    function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+    if (order.length) put(order[0], 0, 0);
+    var rest = order.slice(1), n1 = Math.min(rest.length, 7), rings = [rest.slice(0, n1), rest.slice(n1)], rx0 = 0, ry0 = 0;
+    var cw = order.length ? boxes[order[0].t].w : 0, ch = order.length ? boxes[order[0].t].h : 0;
+    rings.forEach(function (ring, ri) {
+      var n = ring.length; if (!n) return;
+      var mw = 0, mh = 0; ring.forEach(function (c) { mw = Math.max(mw, boxes[c.t].w); mh = Math.max(mh, boxes[c.t].h); });
+      var stride = 1; for (var s2 = Math.max(2, Math.round(n * .4)); s2 < n; s2++) if (gcd(s2, n) === 1) { stride = s2; break; }
+      var a0 = -Math.PI / 2 + (ri ? Math.PI / n : .55), RX = ri ? rx0 + mw * .7 + gx : (cw / 2 + mw / 2 + gx) * 1.05, RY = ri ? ry0 + mh + gy : (ch / 2 + mh / 2 + gy) * 1.15, sc = 1, mark = placed.length, ok = false, tries = 0;
+      while (!ok && tries++ < 160) {
+        placed.length = mark; ok = true;
+        for (var k = 0; k < n && ok; k++) {
+          var c = ring[k], slot = (k * stride) % n, an = a0 + slot / n * Math.PI * 2, x = Math.cos(an) * RX * sc, y = Math.sin(an) * RY * sc;
+          if (free(x, y, boxes[c.t])) put(c, x, y); else ok = false;
+        }
+        if (!ok) sc *= 1.035;
+      }
+      rx0 = RX * sc; ry0 = RY * sc;
     });
     var minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
     placed.forEach(function (p) { minx = Math.min(minx, p.x - p.w / 2); maxx = Math.max(maxx, p.x + p.w / 2); miny = Math.min(miny, p.y - p.h / 2); maxy = Math.max(maxy, p.y + p.h / 2); });
@@ -287,63 +195,72 @@
     if (cssDone || doc.getElementById('kbc-style')) { cssDone = true; return; }
     var s = doc.createElement('style'); s.id = 'kbc-style';
     s.textContent = [
-      '.kbc{--q:#3b8df0;--e:#f2b01e;--i:#27b97a;--c:#ef5b5b;--r:#9a6cf0;--ink:#16315a;--sub:#4b6a97;--line:rgba(60,110,190,.2);font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;color:var(--ink)}',
-      '.kbc-stage{position:relative;height:440px;border-radius:20px;overflow:hidden;border:1px solid rgba(80,130,200,.28);background:radial-gradient(ellipse at 50% 40%,#ffffff,#f3f8fd 66%,#e8f1fa);box-shadow:0 18px 40px -22px rgba(40,90,180,.5),inset 0 0 50px rgba(120,170,240,.15);touch-action:pan-x pan-y;cursor:grab;user-select:none;-webkit-user-select:none;outline:none}',
+      '.kbc{--q:#2a6fd6;--e:#12aebf;--i:#8a45b8;--c:#f08a1f;--r:#2f9e48;--ink:#16315a;--sub:#4b6a97;--line:rgba(60,110,190,.2);font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;color:var(--ink)}',
+      '.kbc-stage{position:relative;height:460px;border-radius:20px;overflow:hidden;border:1px solid rgba(110,140,200,.28);background:linear-gradient(160deg,#fafcff,#f1f6fe 55%,#e8f0fb);box-shadow:0 10px 30px -22px rgba(40,90,180,.45);touch-action:pan-x pan-y;cursor:grab;user-select:none;-webkit-user-select:none;outline:none}',
+      '.kbc.tm .kbc-stage{background:radial-gradient(ellipse at 50% 58%,#ffffff,#fcfbff 55%,#f5f3fe)}',
       '.kbc-stage.drag{cursor:grabbing}.kbc-stage:focus-visible{box-shadow:0 0 0 3px rgba(59,141,240,.45)}',
       '.kbc-grid{opacity:0;position:absolute;left:-10%;right:-10%;bottom:-30px;height:190px;transform:perspective(500px) rotateX(62deg);transform-origin:bottom;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;-webkit-mask-image:linear-gradient(0deg,#000 10%,transparent 95%);mask-image:linear-gradient(0deg,#000 10%,transparent 95%);pointer-events:none}',
       '.kbc-view{position:absolute;left:50%;top:50%;width:0;height:0;transform-origin:0 0;will-change:transform}',
       '.kbc-view.anim{transition:transform .32s cubic-bezier(.2,.9,.3,1)}',
       '.kbc-lines{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}',
-      '.kbc-lines path{fill:none;stroke:rgba(20,60,120,.55);stroke-linecap:round;stroke-dasharray:6 7;animation:kbc-flow 1.6s linear infinite;transition:stroke-width .4s,opacity .3s}',
-      '.kbc-lines path.hot{stroke:#2b7fff;opacity:1}.kbc-lines path.dim{opacity:.12}',
-      '@keyframes kbc-flow{to{stroke-dashoffset:-26}}',
+      '.kbc-lines path{fill:none;stroke:rgba(105,115,135,.6);stroke-linecap:round;stroke-dasharray:5 4;transition:stroke-width .4s,opacity .3s}.kbc.tm .kbc-lines path{stroke:rgba(125,122,168,.75);stroke-dasharray:3 4}',
+      '.kbc-lines path.weak{opacity:.28}.kbc-lines path.hot{stroke:#2b7fff;opacity:1}.kbc-lines path.dim{opacity:.12}',
       '.kbc-w{position:absolute;left:0;top:0;opacity:0;pointer-events:none;transition:transform .7s cubic-bezier(.2,1.1,.3,1),opacity .4s}',
-      '.kbc-w.on{opacity:1;pointer-events:auto}',
+      '.kbc-w.on{opacity:1}.kbc-w.on .kbc-chip{pointer-events:auto}',   // 只有字的方塊能點(外層的空盒子會蓋住隔壁的字)
       '.kbc-w.dim{opacity:.28}',
-      '.kbc-dot{width:.55em;height:.55em;border-radius:50%;background:var(--cc);box-shadow:0 0 6px var(--cc)}',
+      '.kbc-dot{display:none}',
       '.kbc-star{color:#f5a300}',
-      '.kbc-chip{position:relative;display:flex;align-items:center;justify-content:center;transform:translate(-50%,-50%);cursor:pointer;transition:transform .22s,font-size .5s;line-height:1}',
-      '.kbc-cs{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);overflow:visible;pointer-events:none;filter:drop-shadow(0 .3em .32em rgba(50,100,190,.3));transition:filter .22s}',
-      '.kbc-gb{stop-color:color-mix(in srgb,var(--cc,#5aa0e8) 30%,#8fc0ef)}.kbc-gb2{stop-color:color-mix(in srgb,var(--cc,#5aa0e8) 38%,#6aa6e6)}',
-      '.kbc-cs .o{fill:var(--cc);stroke:var(--cc);stroke-linejoin:round;opacity:.55}',
-      '.kbc-w[data-d="1"] .kbc-cs{opacity:.86;filter:drop-shadow(0 .16em .2em rgba(50,100,190,.18)) blur(.35px)}.kbc-w[data-d="3"] .kbc-cs{filter:drop-shadow(0 .42em .42em rgba(40,90,190,.36))}',
-      '.kbc-ct{position:relative;display:flex;align-items:center;gap:.28em;font-weight:800;color:#0a2243;white-space:nowrap;padding-top:.12em;text-shadow:0 0 .1em #fff,0 0 .16em #fff,0 0 .26em #fff,0 0 .4em rgba(255,255,255,.95)}',
-      '.kbc-plain{padding:.12em .25em}.kbc-w.sel .kbc-plain .kbc-txt{text-decoration:underline;text-decoration-color:var(--cc);text-decoration-thickness:.14em;text-underline-offset:.18em}',
-      '.kbc-one{position:absolute;pointer-events:none;transition:left .9s cubic-bezier(.2,.9,.3,1),top .9s cubic-bezier(.2,.9,.3,1),width .9s cubic-bezier(.2,.9,.3,1),height .9s cubic-bezier(.2,.9,.3,1)}.kbc-one svg{width:100%;height:100%;display:block;overflow:visible}.kbc-one img{width:100%;height:100%;display:block;-webkit-user-drag:none;user-select:none;filter:drop-shadow(0 14px 16px rgba(40,100,170,.22))}',
-      '.kbc-mass{position:absolute;pointer-events:none;transform-origin:50% 50%;transition:transform .9s cubic-bezier(.2,.9,.3,1)}.kbc-mass-svg{display:block;overflow:visible}',
-      '.kbc-cs .f circle,.kbc-cs .f ellipse{stroke:#2a68a8;stroke-opacity:.42;stroke-width:.05}',
+      '.kbc-chip{position:relative;display:flex;align-items:center;justify-content:center;transform:translate(-50%,-50%);cursor:grab;transition:transform .22s,font-size .5s;line-height:1}',
+      '.kbc-ct{position:relative;display:flex;align-items:center;gap:.28em;font-weight:700;color:var(--cc,#0a2243);white-space:nowrap;padding-top:.06em;letter-spacing:.03em}',
+      '.kbc-txt{color:var(--cc,#0a2243);background:linear-gradient(180deg,color-mix(in srgb,var(--cc,#0a2243) 84%,#fff) 0%,var(--cc,#0a2243) 50%,color-mix(in srgb,var(--cc,#0a2243) 94%,#000) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 .03em 0 rgba(255,255,255,.9)) drop-shadow(0 .06em .12em color-mix(in srgb,var(--cc,#456) 30%,transparent))}',
+      '.kbc.tm .kbc-txt{filter:drop-shadow(0 0 .22em color-mix(in srgb,var(--cc,#456) 38%,transparent))}',
+      '.kbc-plain{padding:.12em .24em;border:.05em solid transparent;border-radius:.2em;transition:transform .22s,font-size .5s,background .25s,border-color .25s,box-shadow .25s}',
+      '.kbc-w.sel .kbc-plain{border-color:color-mix(in srgb,var(--cc) 70%,#fff);background:linear-gradient(180deg,color-mix(in srgb,var(--cc) 6%,rgba(255,255,255,.92)),color-mix(in srgb,var(--cc) 15%,rgba(255,255,255,.7)));box-shadow:0 0 .5em color-mix(in srgb,var(--cc) 38%,transparent),inset 0 0 .35em rgba(255,255,255,.9)}',
+      '.kbc.tm .kbc-w.sel .kbc-plain{border-color:transparent;background:none;box-shadow:none}',
+      '.kbc-rib{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}.kbc-rb{transition:opacity .3s}.kbc-rb path:first-child{fill-opacity:.74;filter:blur(.6px)}.kbc-rb path+path{fill-opacity:.42;filter:blur(1px)}.kbc-fib{stroke:#fff;stroke-opacity:.5;stroke-width:1.1px;stroke-linecap:round}.kbc-rb.dim{opacity:.1}.kbc.tm .kbc-rib{display:none}',
+      '.kbc-halos{position:absolute;left:0;top:0;width:0;height:0}',
+      '.kbc-hw{position:absolute;left:0;top:0;display:none;opacity:0;pointer-events:none;transition:transform .7s cubic-bezier(.2,1.1,.3,1),opacity .4s}.kbc.tm .kbc-hw{display:block}.kbc.tm .kbc-hw.on{opacity:1}.kbc-hw.dim{opacity:.2!important}',
+      '.kbc-hw .kbc-rip{position:absolute;left:0;top:0;transform:translate(-50%,-50%);overflow:visible;filter:drop-shadow(0 .1em .2em rgba(90,90,190,.16))}.kbc-hw.sel .kbc-rip .r1{stroke:#7b72e4;stroke-opacity:1;stroke-width:2}.kbc-hw.top .kbc-rip .r1{fill:none;stroke-opacity:0}.kbc-hw.top .kbc-rip .r2{stroke-opacity:.35}.kbc-hw.top.sel .kbc-rip .r1{stroke-opacity:.9}',
+      '.kbc.tm .kbc-rip .r2,.kbc.tm .kbc-rip .r3{transform-box:fill-box;transform-origin:center;animation:kbc-rp 4.4s ease-in-out infinite}.kbc.tm .kbc-rip .r3{animation-delay:-2.2s}@keyframes kbc-rp{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.05);opacity:.5}}',
       '.kbc-w:hover .kbc-chip{transform:translate(-50%,-50%) scale(1.08)}',
-      '.kbc-w.sel .kbc-cs{filter:drop-shadow(0 0 .3em var(--cc)) drop-shadow(0 .3em .32em rgba(50,100,190,.34))}',
-      '.kbc-pulse{position:absolute;left:50%;top:50%;width:140%;height:140%;margin:-70% 0 0 -70%;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--cc) 38%,transparent),transparent 68%);animation:kbc-pl 1.8s ease-out infinite;pointer-events:none}',
+      '.kbc-stage.drag .kbc-chip{cursor:grabbing}.kbc-dragging .kbc-w,.kbc-dragging .kbc-hw,.kbc-dragging .kbc-chip{transition:none!important}',
+      '.kbc-lines path.kbc-hit,.kbc.tm .kbc-lines path.kbc-hit{fill:none;stroke:transparent;stroke-width:16px;stroke-dasharray:none;opacity:1;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:help}.kbc-rb{pointer-events:visiblePainted;cursor:help}',
+      '.kbc-ctl{display:inline-flex;align-items:center;margin-left:auto;flex-wrap:wrap;gap:4px}.kbc-ctl .kb-drag-ctl{font-size:12.5px!important}',
+      '.kbc-dual.kbc-zoomed .kbc-stage{height:var(--kbc-zh,70vh)}.kbc-dual.kbc-zoomed .kbc-mode{min-height:74px;align-content:flex-start}',
+      '.kbc-pulse{position:absolute;left:-14%;right:-14%;top:-34%;bottom:-34%;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--cc) 34%,transparent),transparent 68%);animation:kbc-pl 1.8s ease-out 2 both;pointer-events:none}',
       '@keyframes kbc-pl{0%{opacity:.9;transform:scale(.6)}100%{opacity:0;transform:scale(1.5)}}',
-      '.kbc-tip{position:absolute;left:0;top:0;z-index:30;width:250px;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.97);border:1px solid rgba(80,130,210,.35);box-shadow:0 14px 34px -10px rgba(30,70,150,.5);opacity:0;pointer-events:none;transition:opacity .16s;font-size:13px;line-height:1.55;color:var(--sub)}',
+      '.kbc-tip{position:absolute;left:0;top:0;z-index:30;width:330px;max-width:calc(100% - 16px);box-sizing:border-box;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.98);border:1px solid rgba(80,130,210,.4);box-shadow:0 16px 38px -10px rgba(30,70,150,.55);opacity:0;pointer-events:none;transition:opacity .16s;font-size:16px;line-height:1.65;color:#33415c;cursor:default}',
       '.kbc-tip.show{opacity:1}.kbc-tip.pin{pointer-events:auto}',
-      '.kbc-tip h4{margin:0 0 4px;font-size:18px;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
-      '.kbc-tip .msg{color:var(--ink);font-size:14px;margin:6px 0}',
-      '.kbc-tip button{width:100%;margin-top:8px;padding:7px 10px;border-radius:999px;border:none;background:linear-gradient(135deg,#2b7fff,#35c6ff);color:#fff;font-weight:700;font-size:14px;cursor:pointer}',
+      '.kbc-tip h4{margin:0 0 6px;font-size:22px;line-height:1.3;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}.kbc-tip h4 .kbc-tg{font-size:14px;padding:2px 10px}',
+      '.kbc-tip .msg{color:var(--ink);font-size:16.5px;font-weight:600;margin:8px 0}.kbc-tip .kbc-ex{margin-top:8px;padding:8px 10px;border-radius:10px;background:#f1f6ff;font-size:15px}',
+      '.kbc-tip button{width:100%;margin-top:10px;padding:10px 12px;min-height:42px;border-radius:999px;border:none;background:linear-gradient(135deg,#2b7fff,#35c6ff);color:#fff;font-weight:700;font-size:16px;cursor:pointer}.kbc-tip .kbc-ex button{width:auto;display:inline-block;margin:0 0 0 6px;padding:2px 12px;min-height:0;font-size:14px}',
       '.kbc-hud{position:absolute;z-index:5;font-size:12px;letter-spacing:.06em;color:var(--sub);pointer-events:none}.kbc-hud b{color:var(--ink);font-size:20px;letter-spacing:0}',
-      '.kbc-hud.tl{left:14px;top:10px}.kbc-hud.tr{right:14px;top:10px;text-align:right}',
+      '.kbc-hud.tl{left:14px;bottom:10px}.kbc-hud.tr{left:72px;bottom:10px}',
       '.kbc-hint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:6;font-size:12px;color:var(--sub);background:rgba(255,255,255,.85);border:1px solid rgba(80,130,210,.25);border-radius:999px;padding:3px 12px;white-space:nowrap;pointer-events:none}',
-      '.kbc-cap{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:6;max-width:62%;font-size:13px;color:var(--ink);background:rgba(255,255,255,.92);border:1px solid rgba(80,130,210,.3);border-radius:999px;padding:4px 14px;text-align:center;pointer-events:none}',
+      '.kbc-cap{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);z-index:6;max-width:62%;font-size:13px;color:var(--ink);background:rgba(255,255,255,.92);border:1px solid rgba(80,130,210,.3);border-radius:999px;padding:4px 14px;text-align:center;pointer-events:none}',
       '.kbc-cap:empty{display:none}',
-      '.kbc-tools{position:absolute;right:10px;bottom:10px;z-index:8;display:flex;flex-direction:column;gap:6px}',
-      '.kbc-tools button{width:38px;height:38px;border-radius:12px;border:1px solid rgba(80,130,210,.35);background:rgba(255,255,255,.95);color:var(--ink);font-size:18px;font-weight:700;cursor:pointer;line-height:1;box-shadow:0 4px 12px -6px rgba(30,70,150,.5)}',
-      '.kbc-tools button:hover{border-color:var(--q);background:#eef6ff}.kbc-tools .z{font-size:11px;color:var(--sub);text-align:center}',
-      '.kbc-toast{position:absolute;left:50%;top:50px;transform:translate(-50%,-12px);z-index:45;padding:7px 16px;border-radius:999px;background:linear-gradient(135deg,#2b7fff,#35c6ff);color:#fff;font-weight:700;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap}',
+      '.kbc-tools{position:absolute;right:12px;bottom:12px;z-index:8;display:flex;flex-direction:column;background:#fff;border:1px solid rgba(120,140,190,.32);border-radius:12px;box-shadow:0 6px 16px -8px rgba(30,60,130,.5);overflow:hidden}',
+      '.kbc-zcap{position:absolute;right:64px;bottom:50px;z-index:7;font-size:13px;color:#4b5565;pointer-events:none}',
+      '.kbc-tools button{width:38px;height:34px;border:0;border-radius:0;background:transparent;color:var(--ink);font-size:20px;font-weight:600;cursor:pointer;line-height:1}',
+      '.kbc-tools button:hover{background:#eef4ff}.kbc-tools .z{font-size:10.5px;color:var(--sub);text-align:center;padding:2px 0;border-top:1px solid #e3e8f4}.kbc-tools button[data-z=out],.kbc-tools button[data-z=reset]{border-top:1px solid #e3e8f4}',
+      '.kbc-toast{position:absolute;left:50%;bottom:78px;transform:translate(-50%,12px);z-index:45;padding:7px 16px;border-radius:999px;background:linear-gradient(135deg,#2b7fff,#35c6ff);color:#fff;font-weight:700;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap}',
       '.kbc-toast.show{opacity:1;transform:translate(-50%,0)}',
-      '.kbc-legend{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0;font-size:12.5px;color:var(--sub)}',
+      '.kbc-hd{position:absolute;left:0;right:0;top:0;z-index:7;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:6px 18px;padding:12px 16px 4px;pointer-events:none}',
+      '.kbc-ttl{font-size:21px;font-weight:800;color:#111c33;line-height:1.25;letter-spacing:.01em}.kbc-sttl{font-size:14px;color:#33415c;margin-top:2px}.kbc-sttl:empty{display:none}',
+      '.kbc-legend{display:flex;flex-direction:column;gap:3px;margin:0;font-size:12.5px;color:#26344f;line-height:1.5}.kbc-lg1{display:flex;gap:4px 14px;flex-wrap:wrap}.kbc-lg2{display:flex;gap:2px 8px;flex-wrap:wrap}',
+      '.kbc.tm .kbc-legend{flex-direction:row;flex-wrap:wrap;gap:4px 20px;align-items:flex-start}.kbc.tm .kbc-lg1{flex-direction:column;gap:1px}.kbc-lgb{display:flex;flex-direction:column;gap:3px}',
+      '.kbc-legend .kbc-tg{padding:0;border:0;background:none;color:var(--cc);font-weight:700;font-size:12.5px;gap:0;border-radius:0}.kbc-legend .kbc-tg:before{content:none}.kbc-legend .kbc-tg+.kbc-tg:before{content:"|";display:inline;width:auto;height:auto;background:none;border-radius:0;color:#7a869f;margin-right:8px;font-weight:400}',
       '.kbc-main{display:flex;flex-direction:column}.kbc-mode{order:-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 8px;font-size:13px;color:var(--sub);min-height:32px}',
       '.kbc-mt{font-size:15px;color:var(--ink);padding:3px 12px;border-radius:999px;background:#eaf2ff;border:1px solid rgba(80,130,210,.35)}.kbc.tm .kbc-mt{background:#fff1e0;border-color:rgba(196,100,40,.45)}',
-      '.kbc-dual{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}.kbc-dual .kbc-stage{height:400px}',
+      '.kbc-dual{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}.kbc-dual .kbc-stage{height:470px}',
       '@media (max-width:860px){.kbc-dual{grid-template-columns:minmax(0,1fr)}}',
       '.kbc-seg{display:inline-flex;border:1px solid rgba(80,130,210,.4);border-radius:999px;overflow:hidden;background:#fff}',
       '.kbc-seg button{border:0;background:transparent;padding:5px 14px;font:inherit;font-weight:700;color:var(--sub);cursor:pointer;min-height:32px}',
       '.kbc-seg button+button{border-left:1px solid rgba(80,130,210,.3)}',
       '.kbc-seg button[aria-pressed=true]{background:#2b6fe0;color:#fff}',
       '.kbc-seg button:focus-visible{outline:3px solid rgba(59,141,240,.5);outline-offset:-3px}',
-      '.kbc-ramp{display:inline-flex;align-items:center;gap:8px;font-weight:700;color:var(--ink)}',
-      '.kbc-ramp i{display:inline-block;width:150px;height:14px;border-radius:999px;border:1px solid rgba(120,60,20,.35);background:linear-gradient(90deg,#ffe8b8,#f5a25a 55%,#c4471c)}',
-      '.kbc.tm .kbc-dot{box-shadow:0 0 0 1.6px rgba(110,50,15,.65)}',
+      '.kbc-ramp{display:flex;flex-direction:column;gap:3px;width:150px;font-weight:600;color:#33415c}',
+      '.kbc-ramp i{display:block;height:10px;border-radius:999px;background:linear-gradient(90deg,#1b4a8e,#804ab2 50%,#f48638)}.kbc-rl{display:flex;justify-content:space-between;font-size:12px}.kbc-rl u{text-decoration:none}',
       '.kbc-seg[hidden]{display:none}.kbc-sub{margin-left:4px}.kbc-sub button{padding:3px 11px;min-height:28px;font-size:12px}',
       '.kbc-tg{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--cc);color:var(--ink);background:color-mix(in srgb,var(--cc) 14%,#fff)}',
       '.kbc-tg:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cc)}',
@@ -361,17 +278,17 @@
       '.kbc-box{border-radius:12px;padding:10px 14px;font-size:.92em;background:#f3f8ff;border:1px solid rgba(80,130,210,.25)}',
       '.kbc-box.next{background:linear-gradient(135deg,#e6f1ff,#dff7ff);border-color:rgba(60,150,230,.5)}',
       '.kbc-empty{padding:26px 14px;text-align:center;color:var(--sub);font-size:14px}',
-      '@media (max-width:640px){.kbc-stage{height:360px}.kbc-cap{max-width:86%;top:34px}.kbc-hint{font-size:11px}}',
-      '@media (prefers-reduced-motion:reduce){.kbc-lines path,.kbc-pulse,.kbc-one,.kbc-w{animation:none!important;transition:none!important}}'
+      '@media (max-width:640px){.kbc-stage{height:440px}.kbc-cap{max-width:86%}.kbc-hint{display:none}.kbc-zcap{display:none}}',
+      '@media (prefers-reduced-motion:reduce){.kbc-rip *,.kbc-pulse,.kbc-w,.kbc-hw{animation:none!important;transition:none!important}}'
     ].join('\n');
     (doc.head || doc.documentElement).appendChild(s); cssDone = true;
   }
 
   /* ---------- 顏色模式 ---------- */
-  // 模式 A:顏色 = 想法現在的狀態(提問/延伸/改進/質疑/整合)。模式 B:顏色 = 時間,較早的淡米色 → 較晚的深橘紅(本平台自己的色階)
-  var RAMP = [[255, 232, 184], [245, 162, 90], [196, 71, 28]];
+  // 模式 A:顏色 = 想法現在的狀態(提問/延伸/改進/質疑/整合)。模式 B:顏色 = 時間,早期深藍 → 中期紫 → 近期橘(照示意圖的色條)
+  var RAMP = [[27, 74, 142], [128, 74, 178], [244, 134, 56]];   // 早期深藍 → 中期紫 → 近期橘(照示意圖的色條)
   function rampColor(t) {
-    t = Math.max(0, Math.min(1, t)); var seg = t < .55 ? 0 : 1, a = RAMP[seg], b = RAMP[seg + 1], u = seg ? (t - .55) / .45 : t / .55;
+    t = Math.max(0, Math.min(1, t)); var seg = t < .5 ? 0 : 1, a = RAMP[seg], b = RAMP[seg + 1], u = seg ? (t - .5) / .5 : t / .5;
     return 'rgb(' + [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * u); }).join(',') + ')';
   }
 
@@ -384,35 +301,38 @@
       host.innerHTML = '<div class="kbc kbc-empty">' + (model.totalPosts < 2 ? '再多發幾則想法,你的概念雲就會長出來囉!' : '這幾則貼文裡還沒有找到常用的詞,多寫一些內容試試看。') + '</div>';
       inst.render = function () {}; inst.select = function () {}; inst.empty = true; return inst;
     }
-    var L = layout(model), r = rng(hash(model.userId)), K = model.K;
+    var L = layout(model, opts.colorMode === 'b' ? 'b' : 'a'), r = rng(hash(model.userId)), K = model.K;
     var cmKey = 'kb_cc_cmode'; inst.cmode = opts.colorMode === 'b' ? 'b' : 'a'; inst.csub = 'f'; try { var sv0 = global.localStorage.getItem(cmKey) || ''; if (sv0 === 'bl') inst.csub = 'l'; } catch (e) {}
     var root = doc.createElement('div'); root.className = 'kbc';
     root.innerHTML = '<div class="kbc-main"><div class="kbc-stage" tabindex="0" role="application" aria-label="我的概念雲:滾輪或按鈕放大縮小,拖曳移動,點詞看故事">' +
       '<div class="kbc-grid"></div><div class="kbc-hud tl">第<br><b data-k="day">0</b> 天</div><div class="kbc-hud tr">概念<br><b data-k="n">0</b> 個</div><div class="kbc-cap" data-k="cap" aria-live="polite"></div>' +
-      '<div class="kbc-view" data-k="view"><div class="kbc-cloud" data-k="cloud"></div><svg class="kbc-lines" data-k="lines" width="1" height="1"></svg><div class="kbc-words" data-k="words"></div><div class="kbc-tip" data-k="tip"></div></div>' +
-      '<div class="kbc-hint" data-k="hint">點一個詞看它的故事 · 滾輪縮放 · 拖曳移動</div><div class="kbc-toast" data-k="toast"></div>' +
-      '<div class="kbc-tools"><button type="button" data-z="in" title="放大" aria-label="放大">＋</button><div class="z" data-k="zl">100%</div><button type="button" data-z="out" title="縮小" aria-label="縮小">－</button><button type="button" data-z="reset" title="還原" aria-label="還原" style="font-size:15px">⟲</button></div></div>' +
-      '<div class="kbc-mode" data-k="mode"><b class="kbc-mt" data-k="mtitle"></b><span class="kbc-seg kbc-sub" role="group" aria-label="時間要看哪一天" data-k="sub" hidden><button type="button" data-cs="f" aria-pressed="true">第一次出現</button><button type="button" data-cs="l" aria-pressed="false">最近一次用到</button></span></div>' +
-      '<div class="kbc-legend" data-k="legend"></div></div>' +
+      '<div class="kbc-hd"><div class="kbc-hl"><div class="kbc-ttl" data-k="ttl"></div><div class="kbc-sttl" data-k="sttl"></div></div><div class="kbc-legend" data-k="legend"></div></div>' +
+      '<div class="kbc-view" data-k="view"><div class="kbc-halos" data-k="halos"></div><svg class="kbc-rib" data-k="rib" width="1" height="1"><defs data-k="ribdefs"></defs></svg><svg class="kbc-lines" data-k="lines" width="1" height="1"></svg><div class="kbc-words" data-k="words"></div></div><div class="kbc-tip" data-k="tip"></div>' +
+      '<div class="kbc-hint" data-k="hint">點一個詞看它的故事 · 可以拖動文字 · 滾輪縮放</div><div class="kbc-toast" data-k="toast"></div>' +
+      '<div class="kbc-tools"><button type="button" data-z="in" title="放大" aria-label="放大">＋</button><div class="z" data-k="zl">100%</div><button type="button" data-z="out" title="縮小" aria-label="縮小">－</button><button type="button" data-z="reset" title="還原" aria-label="還原" style="font-size:15px">⟲</button></div><div class="kbc-zcap">滾輪縮放</div></div>' +
+      '<div class="kbc-mode" data-k="mode"><b class="kbc-mt" data-k="mtitle"></b><span class="kbc-seg kbc-sub" role="group" aria-label="時間要看哪一天" data-k="sub" hidden><button type="button" data-cs="f" aria-pressed="true">第一次出現</button><button type="button" data-cs="l" aria-pressed="false">最近一次用到</button></span><span class="kbc-ctl" data-k="ctl"></span></div></div>' +
       '';
     host.appendChild(root);
     var cardWrap = doc.createElement('div'); cardWrap.className = 'kbc'; cardWrap.innerHTML = '<div class="kbc-card" data-k="card"></div>'; if (!opts.noCard) host.appendChild(cardWrap);
     inst.cardWrap = cardWrap;
     var q = function (k) { return root.querySelector('[data-k=' + k + ']') || cardWrap.querySelector('[data-k=' + k + ']'); };
-    var stage = root.querySelector('.kbc-stage'), view = q('view'), cloud = q('cloud'), words = q('words'), lines = q('lines'), tip = q('tip'), card = q('card');
+    var stage = root.querySelector('.kbc-stage'), hd = root.querySelector('.kbc-hd'), view = q('view'), halos = q('halos'), rib = q('rib'), words = q('words'), lines = q('lines'), tip = q('tip'), card = q('card');
     inst.root = root; inst.stage = stage; inst.card = card; inst.main = root.querySelector('.kbc-main');
 
     // 雲與詞的基準尺寸(讓整朵雲剛好放進舞台)
-    var fullBox = cloudBox(L.maxx - L.minx, L.maxy - L.miny), extW = ONE_CLOUD ? fullBox.w : (L.maxx - L.minx) + 180, extH = ONE_CLOUD ? fullBox.h : (L.maxy - L.miny) + 150, cx0 = (L.minx + L.maxx) / 2, cy0 = (L.miny + L.maxy) / 2;
-    function fit() { var w = stage.clientWidth || 700, h = stage.clientHeight || 440; return clamp(Math.min(w / ((extW + 16) * 1.05), h / ((extH + 16) * 1.06)), 0.5, 1.4); }
+    var extW = (L.maxx - L.minx) + 90, extH = (L.maxy - L.miny) + 70, cx0 = (L.minx + L.maxx) / 2, cy0 = (L.miny + L.maxy) / 2;
+    // 舞台上方有標題與圖例(約 90px),雲放在剩下的空間正中央
+    var voff = 46;
+    function fit() {
+      var w = stage.clientWidth || 700, h = stage.clientHeight || 460, hh = hd && hd.offsetHeight ? hd.offsetHeight : 92;
+      voff = Math.round(hh / 2) - 22; view.style.top = 'calc(50% + ' + voff + 'px)';
+      return clamp(Math.min(w / ((extW + 16) * 1.05), (h - hh - 44) / ((extH + 16) * 1.06)), 0.25, 1.7);
+    }
+    var rig = global.KB3D ? new global.KB3D.Rig({ cx: 0, cy: 0, ext: Math.max(extW, extH) / 2 }) : null; inst.rig = rig; inst.off = {};   // rig = 3D 旋轉;off = 使用者拖動過的字的位置
     var base = fit();   // 整體縮放比例:讓整朵雲剛好放進舞台(詞與位置一起縮放,不會重疊)
-    // 水墨潑畫的大雲:所有的小雲(詞)都在這一整朵大雲裡面;大雲會隨著想法變多慢慢長大
-    var mass = null, one = null;
-    if (ONE_CLOUD) { one = doc.createElement('div'); one.className = 'kbc-one'; var cimg = doc.createElement('img'); cimg.src = CLOUD_IMG; cimg.alt = ''; cimg.draggable = false; cimg.onerror = function () { one.innerHTML = oneCloud(); }; one.appendChild(cimg); cloud.appendChild(one); }
-    if (CLOUDS) { var mk = inkMass(extW / 2 - 28, extH / 2 - 22, model.userId + '|ink'); mass = doc.createElement('div'); mass.className = 'kbc-mass';
-    mass.style.cssText = 'left:' + (-mk.w / 2) + 'px;top:' + (-mk.h / 2 + 12) + 'px;width:' + mk.w + 'px;height:' + mk.h + 'px'; mass.innerHTML = mk.svg; cloud.appendChild(mass); }
     // 詞
-    var wEl = {}, lEl = {};
+    var biggest = model.concepts.slice().sort(function (a, b) { return (b.count - a.count) || (a.first - b.first); })[0];
+    var wEl = {}, lEl = {}, hEl = {}, rEl = {}, hitEl = {};
     function dayName(s) { return opts.labels && opts.labels[s] ? opts.labels[s] : '第 ' + s + ' 天'; }
     // 這個詞在第 k 天的「時間」位置:0 = 最早、1 = 最晚(用整段時間的長度算,播放時顏色不會跳)
     function timeT(c, k) {
@@ -422,9 +342,12 @@
     function colorOf(c, k, st) { return inst.cmode === 'b' ? rampColor(timeT(c, k)) : 'var(--' + st + ')'; }
     function drawLegend() {
       var lg = q('legend'); if (!lg) return;
+      // 圖例照示意圖:模式 B = 顏色色條(早期 → 近期)+ 字大/虛線說明;模式 A = 字大/虛線說明 + 五種狀態色
       lg.innerHTML = inst.cmode === 'b'
-        ? '<span class="kbc-ramp">較早 <i role="img" aria-label="顏色從淡米色到深橘紅,代表從較早到較晚"></i> 較晚</span><span>' + (inst.csub === 'l' ? '這個詞最近一次出現的時間' : '這個詞第一次出現的時間') + '(' + esc(dayName(1)) + ' → ' + esc(dayName(K)) + ')</span>'
-        : '<span>顏色 = 這個想法現在的狀態:</span><span class="kbc-tg" style="--cc:var(--q)">提問中</span><span class="kbc-tg" style="--cc:var(--e)">被延伸</span><span class="kbc-tg" style="--cc:var(--i)">改進中</span><span class="kbc-tg" style="--cc:var(--c)">被質疑</span><span class="kbc-tg" style="--cc:var(--r)">已整合</span>';
+        ? '<div class="kbc-lgb"><div class="kbc-lg2">' + (inst.csub === 'l' ? '顏色＝最近一次用到的時間' : '顏色＝首次出現時間') + '</div><span class="kbc-ramp"><i role="img" aria-label="顏色從深藍到紫色再到橘色,代表從早期到近期" title="' + esc(dayName(1)) + ' → ' + esc(dayName(K)) + '"></i><span class="kbc-rl"><u>早期</u><u>中期</u><u>近期</u></span></span></div><div class="kbc-lg1"><div>字大＝使用較多</div><div>虛線＝常一起出現</div></div>'
+        : '<div class="kbc-lg1"><span>字大＝使用較多</span><span>虛線＝常一起出現,非因果或先後</span></div><div class="kbc-lg2"><span class="kbc-tg" style="--cc:var(--q)">藍＝提問中</span><span class="kbc-tg" style="--cc:var(--e)">青＝被延伸</span><span class="kbc-tg" style="--cc:var(--i)">紫＝改進中</span><span class="kbc-tg" style="--cc:var(--r)">綠＝已整合</span><span class="kbc-tg" style="--cc:var(--c)">橘＝被質疑</span></div>';
+      var tt = q('ttl'); if (tt) tt.textContent = inst.cmode === 'b' ? '漣漪擴散雲｜我的概念雲' : '對話編織雲｜我的概念雲';
+      var st2 = q('sttl'); if (st2) st2.textContent = inst.cmode === 'b' ? '' : '模式 A｜想法狀態';
       var mt = q('mtitle'); if (mt) mt.textContent = inst.cmode === 'b' ? '模式 B:顏色看「什麼時候出現」' : '模式 A:顏色看「想法的狀態」';
       var sb = root.querySelectorAll('[data-cs]'); for (var j = 0; j < sb.length; j++) sb[j].setAttribute('aria-pressed', sb[j].getAttribute('data-cs') === inst.csub ? 'true' : 'false');
       root.classList.toggle('tm', inst.cmode === 'b');
@@ -437,15 +360,27 @@
     };
     model.concepts.forEach(function (c) {
       var w = doc.createElement('div'); w.className = 'kbc-w'; w.setAttribute('data-t', c.t);
-      var dm = cloudDim(c.t), shp = CLOUDS ? cloudShapes(c.t, dm.w, dm.h, false) : null;
-      w.innerHTML = '<div class="kbc-chip' + (CLOUDS ? '' : ' kbc-plain') + '">' + (CLOUDS ? cloudSVG(shp, 'kbc-cs', 0.075) : '') + '<span class="kbc-ct"><span class="kbc-dot"></span><span class="kbc-txt">' + esc(c.t) + '</span></span></div>';
+      w.innerHTML = '<div class="kbc-chip kbc-plain"><span class="kbc-ct"><span class="kbc-dot"></span><span class="kbc-txt">' + esc(c.t) + '</span></span></div>';
       words.appendChild(w); wEl[c.t] = w;
+      // 模式 B 的漣漪光暈放在另一層,所有的字都在光暈上面(光暈疊在一起也不會蓋住隔壁的字)
+      var h = doc.createElement('div'); h.className = 'kbc-hw' + (c === biggest ? ' top' : ''); h.innerHTML = rippleSVG(c.t.length); halos.appendChild(h); hEl[c.t] = h;
     });
-    model.links.forEach(function (l, idx) { var p = doc.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('data-a', l.a); p.setAttribute('data-b', l.b); lines.appendChild(p); lEl[idx] = p; });
+    var SVGNS = 'http://www.w3.org/2000/svg', ribDefs = q('ribdefs');
+    function svgEl(n, at) { var e = doc.createElementNS(SVGNS, n); for (var k in at) e.setAttribute(k, at[k]); return e; }
+    model.links.forEach(function (l, idx) {
+      var p = svgEl('path', { 'data-a': l.a, 'data-b': l.b }); lines.appendChild(p); lEl[idx] = p;
+      var hit = svgEl('path', { 'class': 'kbc-hit', 'data-i': String(idx) }); lines.appendChild(hit); hitEl[idx] = hit;
+      // 模式 A 的緞帶:兩個詞之間一條半透明、從一個詞的顏色漸層到另一個詞的顏色的彩帶(只畫常一起出現最多次的幾條)
+      var gid = 'kbrb' + (++uidN), g = svgEl('linearGradient', { id: gid, gradientUnits: 'userSpaceOnUse' }), sts = [['0', '.0'], ['.22', '1'], ['.78', '1'], ['1', '.0']].map(function (o) { var st = svgEl('stop', { offset: o[0], 'stop-opacity': o[1] }); g.appendChild(st); return st; });
+      ribDefs.appendChild(g);
+      var grp = svgEl('g', { 'class': 'kbc-rb' }), body = svgEl('path', { fill: 'url(#' + gid + ')' }), sheen = svgEl('path', { fill: '#fff' }), fibs = [0, 1, 2].map(function () { return svgEl('path', { 'class': 'kbc-fib', fill: 'none' }); });
+      grp.appendChild(body); grp.appendChild(sheen); fibs.forEach(function (f) { grp.appendChild(f); }); rib.appendChild(grp); rEl[idx] = { g: grp, body: body, sheen: sheen, fibs: fibs, grad: g, sts: sts };
+    });
 
     // 詞(每個詞一朵雲)的位置固定不動,新的詞會一朵一朵飄進來
     var HA = Math.max(extW / 2, 50), HB = Math.max(extH / 2, 40);
-    function posOf(c, k) { var p = L.pos[c.t]; return { x: p.x - cx0, y: p.y - cy0 }; }
+    function flatOf(c) { var p = L.pos[c.t], o = inst.off[c.t]; return { x: p.x - cx0 + (o ? o.x : 0), y: p.y - cy0 + (o ? o.y : 0) }; }
+    function posOf(c, k) { var f = flatOf(c); if (!rig || !rig.active()) return { x: f.x, y: f.y, f: 1, z: 0 }; var P = rig.project(f.x, f.y, c.t); return { x: P.x, y: P.y, f: P.f, z: P.z }; }
     function related(t) { var out = {}; model.links.forEach(function (l) { if (l.a === t) out[l.b] = 1; if (l.b === t) out[l.a] = 1; }); return out; }
 
     /* ---- 放大縮小/移動 ---- */
@@ -454,64 +389,124 @@
       var nz = clamp(inst.z * f, 0.5, 4), k = nz / inst.z;
       inst.x = px - (px - inst.x) * k; inst.y = py - (py - inst.y) * k; inst.z = nz; applyView(anim);
     }
-    function stagePt(e) { var rc = stage.getBoundingClientRect(); return { x: e.clientX - rc.left - rc.width / 2, y: e.clientY - rc.top - rc.height / 2 }; }
+    function stagePt(e) { var rc = stage.getBoundingClientRect(); return { x: e.clientX - rc.left - rc.width / 2, y: e.clientY - rc.top - rc.height / 2 - voff }; }
     inst.zoomIn = function () { zoomAt(1.25, 0, 0, true); }; inst.zoomOut = function () { zoomAt(0.8, 0, 0, true); };
-    inst.reset = function () { inst.z = 1; inst.x = 0; inst.y = 0; applyView(true); };
+    // 位置變動時不要慢慢滑過去(資料線與緞帶是立刻跟著動的)
+    function instant(fn) { stage.classList.add('kbc-dragging'); fn(); clearTimeout(inst._ti); inst._ti = setTimeout(function () { stage.classList.remove('kbc-dragging'); }, 80); }
+    // ↺ 回正:只把旋轉轉回平面(字的位置、縮放、平移都不變)
+    inst.level = function () { if (rig) rig.reset(); instant(function () { inst.render(inst.k, true); }); };
+    // ⟲ 還原:拖動過的字、旋轉、縮放、平移全部回到最初
+    inst.reset = function () { if (rig) rig.reset(); inst.off = {}; inst.z = 1; inst.x = 0; inst.y = 0; applyView(true); instant(function () { inst.render(inst.k, true); }); };
     q('zl').parentNode.querySelectorAll('[data-z]').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); var z = b.getAttribute('data-z'); if (z === 'in') inst.zoomIn(); else if (z === 'out') inst.zoomOut(); else inst.reset(); }); });
     stage.addEventListener('wheel', function (e) { e.preventDefault(); var p = stagePt(e); zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, p.x, p.y, false); }, { passive: false });
-    stage.addEventListener('dblclick', function (e) { if (!e.target.closest('.kbc-w') && !e.target.closest('.kbc-tip') && !e.target.closest('.kbc-tools')) inst.reset(); });
     stage.addEventListener('keydown', function (e) {
       var k = e.key; if (k === '+' || k === '=') { inst.zoomIn(); e.preventDefault(); } else if (k === '-' || k === '_') { inst.zoomOut(); e.preventDefault(); } else if (k === '0') { inst.reset(); e.preventDefault(); }
       else if (k.indexOf('Arrow') === 0) { var d = 40; if (k === 'ArrowLeft') inst.x += d; if (k === 'ArrowRight') inst.x -= d; if (k === 'ArrowUp') inst.y += d; if (k === 'ArrowDown') inst.y -= d; applyView(true); e.preventDefault(); }
       else if (k === 'Escape') { hideTip(true); }
     });
-    var ptrs = {}, drag = null, moved = false, pinch0 = null;
+    var ptrs = {}, drag = null, wdrag = null, moved = false, pinch0 = null, DM = global.KB3D ? global.KB3D.dragMode : null;
+    function isPanEv(e) { return DM ? DM.isPan(e) : true; }
+    stage.addEventListener('contextmenu', function (e) { if (DM) e.preventDefault(); });   // 右鍵拖曳 = 平移,不要跳出瀏覽器選單
     stage.addEventListener('pointerdown', function (e) {
       if (e.target.closest('.kbc-tools') || e.target.closest('.kbc-tip')) return;
       ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
       var ids = Object.keys(ptrs);
-      if (ids.length === 2) { var a1 = ptrs[ids[0]], a2 = ptrs[ids[1]]; pinch0 = { d: Math.hypot(a1.x - a2.x, a1.y - a2.y), z: inst.z }; drag = null; return; }
+      if (ids.length === 2) { var a1 = ptrs[ids[0]], a2 = ptrs[ids[1]]; pinch0 = { d: Math.hypot(a1.x - a2.x, a1.y - a2.y), z: inst.z }; drag = null; wdrag = null; return; }
       if (e.pointerType === 'touch') return;   // 手機單指留給頁面捲動,兩指才縮放
-      drag = { x: e.clientX, y: e.clientY, ox: inst.x, oy: inst.y }; moved = false;
-      try { stage.setPointerCapture(e.pointerId); } catch (x) {}
+      var wc = e.target.closest ? e.target.closest('.kbc-w.on') : null, left = (e.button === 0 || e.button == null);
+      moved = false;
+      if (wc && left && !e.shiftKey) {   // 按住字拖曳 = 把這個字拖到別的地方(只動畫面,不改資料)
+        var tt = wc.getAttribute('data-t'), cc = conceptOf(tt), pp = posOf(cc, inst.k); wdrag = { t: tt, x: e.clientX, y: e.clientY, sx: pp.x, sy: pp.y, z: pp.z }; return;
+      }
+      var onLine = !!(e.target.closest && (e.target.closest('.kbc-hit') || e.target.closest('.kbc-rb')));
+      drag = { x: e.clientX, y: e.clientY, ox: inst.x, oy: inst.y, pan: isPanEv(e), start: rig ? rig.snap() : null, tap: left && !e.shiftKey && !wc && !onLine, ev: { clientX: e.clientX, clientY: e.clientY } };   // 真的拖動了才抓住滑鼠;一按下就抓,Chrome 會把「點詞」的 click 送給舞台
     });
     stage.addEventListener('pointermove', function (e) {
       if (ptrs[e.pointerId]) { ptrs[e.pointerId].x = e.clientX; ptrs[e.pointerId].y = e.clientY; }
       var ids = Object.keys(ptrs);
-      if (pinch0 && ids.length === 2) { var a1 = ptrs[ids[0]], a2 = ptrs[ids[1]], d = Math.hypot(a1.x - a2.x, a1.y - a2.y), rc = stage.getBoundingClientRect(); var mx = (a1.x + a2.x) / 2 - rc.left - rc.width / 2, my = (a1.y + a2.y) / 2 - rc.top - rc.height / 2; zoomAt(clamp(pinch0.z * d / pinch0.d, 0.5, 4) / inst.z, mx, my, false); return; }
+      if (pinch0 && ids.length === 2) { var a1 = ptrs[ids[0]], a2 = ptrs[ids[1]], d = Math.hypot(a1.x - a2.x, a1.y - a2.y), rc = stage.getBoundingClientRect(); var mx = (a1.x + a2.x) / 2 - rc.left - rc.width / 2, my = (a1.y + a2.y) / 2 - rc.top - rc.height / 2 - voff; zoomAt(clamp(pinch0.z * d / pinch0.d, 0.5, 4) / inst.z, mx, my, false); return; }
+      if (wdrag) {
+        var wx = e.clientX - wdrag.x, wy = e.clientY - wdrag.y;
+        if (!moved && Math.abs(wx) + Math.abs(wy) > 4) { moved = true; stage.classList.add('drag', 'kbc-dragging'); try { stage.setPointerCapture(e.pointerId); } catch (x) {} }
+        if (moved) {
+          var sc = inst.z * base, nx = wdrag.sx + wx / sc, ny = wdrag.sy + wy / sc, fl = (rig && rig.active()) ? rig.unproject(nx, ny, wdrag.z) : { x: nx, y: ny }, bp = L.pos[wdrag.t];
+          inst.off[wdrag.t] = { x: fl.x - (bp.x - cx0), y: fl.y - (bp.y - cy0) }; inst.render(inst.k, true);
+        }
+        return;
+      }
       if (!drag) return;
       var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (!moved && Math.abs(dx) + Math.abs(dy) > 4) { moved = true; stage.classList.add('drag'); }
-      if (moved) { inst.x = drag.ox + dx; inst.y = drag.oy + dy; applyView(false); }
+      if (!moved && Math.abs(dx) + Math.abs(dy) > 4) { moved = true; stage.classList.add('drag'); if (!drag.pan && rig) stage.classList.add('kbc-dragging'); try { stage.setPointerCapture(e.pointerId); } catch (x) {} }
+      if (moved) { if (drag.pan || !rig) { inst.x = drag.ox + dx; inst.y = drag.oy + dy; applyView(false); } else { rig.drag(drag.start, dx, dy); inst.render(inst.k, true); } }
     });
-    function endPtr(e) { delete ptrs[e.pointerId]; if (Object.keys(ptrs).length < 2) pinch0 = null; if (drag) { drag = null; stage.classList.remove('drag'); setTimeout(function () { moved = false; }, 0); } }
+    function endPtr(e) {
+      delete ptrs[e.pointerId]; if (Object.keys(ptrs).length < 2) pinch0 = null;
+      if (wdrag) { wdrag = null; stage.classList.remove('drag', 'kbc-dragging'); setTimeout(function () { moved = false; }, 0); return; }
+      if (drag) {
+        var g = drag; drag = null; stage.classList.remove('drag', 'kbc-dragging');
+        if (!moved && g.tap && DM && e.type === 'pointerup') DM.tap(g.ev, stage, inst.level);   // 空白處點一下:連點 2 下換「旋轉/平移」、3 下回正
+        setTimeout(function () { moved = false; }, 0);
+      }
+    }
     stage.addEventListener('pointerup', endPtr); stage.addEventListener('pointercancel', endPtr);
-    stage.addEventListener('click', function (e) { if (!e.target.closest('.kbc-w') && !e.target.closest('.kbc-tip') && !moved) hideTip(true); });
+    stage.addEventListener('click', function (e) { if (!e.target.closest('.kbc-w') && !e.target.closest('.kbc-tip') && !e.target.closest('.kbc-hit') && !e.target.closest('.kbc-rb') && !moved) hideTip(true); });
 
-    /* ---- 提示泡泡(在 view 裡面,所以會跟著一起放大) ---- */
+    /* ---- 說明泡泡:放在舞台上(不跟著圖縮放),字夠大、位置會避開標題和邊邊 ---- */
     function toast(msg) { var t = q('toast'); t.textContent = msg; t.className = 'kbc-toast show'; clearTimeout(inst._tt); inst._tt = setTimeout(function () { t.className = 'kbc-toast'; }, 2600); }
     function conceptOf(t) { return model.concepts.filter(function (c) { return c.t === t; })[0]; }
     function stTag(st) { return '<span class="kbc-tg" style="--cc:var(--' + st + ')">' + STATE_NAME[st] + '</span>'; }
+    function toStage(x, y) { var sc = inst.z * base; return { x: (stage.clientWidth || 700) / 2 + inst.x + x * sc, y: (stage.clientHeight || 460) / 2 + voff + inst.y + y * sc, sc: sc }; }
+    function putTip(sx, sy, halfH) {   // 以舞台上的位置為準:放得下就放上面,不行放下面;不會蓋到標題、也不會超出邊邊
+      var W = stage.clientWidth || 700, H = stage.clientHeight || 460, tw = Math.min(330, W - 16);
+      tip.style.width = tw + 'px'; var th = tip.offsetHeight || 190, hb = (hd && hd.offsetHeight) || 0;
+      var top = sy - halfH - 12 - th, below = false; if (top < hb + 4) { top = sy + halfH + 12; below = true; }
+      if (top + th > H - 6) top = Math.max(hb + 4, H - th - 6);
+      tip.style.left = clamp(sx - tw / 2, 8, W - tw - 8) + 'px'; tip.style.top = top + 'px'; tip.setAttribute('data-below', below ? '1' : '0');
+    }
     function showTip(t, pin) {
       var c = conceptOf(t); if (!c) return; var ps = model.postsAt(c, inst.k); if (!ps.length) return;
       var st = model.stateAt(c, inst.k), rc = 0; ps.forEach(function (p) { p.rep.forEach(function (rp) { if (rp.step <= inst.k) rc++; }); });
       var rel = model.related(c, inst.k).slice(0, 3).map(function (x) { return x.t; });
       tip.innerHTML = '<h4>' + esc(t) + (inst.cmode === 'b' ? '<span class="kbc-tg" style="--cc:' + colorOf(c, inst.k, st) + '">' + (inst.csub === 'l' ? '最近用在 ' + esc(dayName(ps[ps.length - 1].step)) : '最早出現在 ' + esc(dayName(ps[0].step))) + '</span>' : stTag(st)) + (model.turningAt(c, inst.k) ? '<span class="kbc-star">★</span>' : '') + '</h4><div>第 ' + ps[0].step + ' 天出現 · 你的貼文 ' + ps.length + ' 則 · 同學回應 ' + rc + ' 則</div><div class="msg">' + STATE_MSG[st] + '</div>' + (rel.length ? '<div>常一起出現:' + rel.map(esc).join('、') + '</div>' : '') + (pin ? '<button type="button" data-k="see">看完整故事 ↓</button>' : '<div>點一下看完整故事</div>');
-      tip.className = 'kbc-tip show' + (pin ? ' pin' : '');
-      var p = posOf(c, inst.k), f = chipFont(ps.length), ch = f * cloudDim(c.t).h, th = tip.offsetHeight || 150, tw = 250;
-      var sc = inst.z * base, vTop = (-stage.clientHeight / 2 - inst.y) / sc, vL = (-stage.clientWidth / 2 - inst.x) / sc, vR = (stage.clientWidth / 2 - inst.x) / sc;
-      var top = p.y - ch / 2 - 14 - th, below = false; if (top < vTop + 8) { top = p.y + ch / 2 + 14; below = true; }
-      var left = clamp(p.x - tw / 2, vL + 8, vR - tw - 8);
-      tip.style.left = left + 'px'; tip.style.top = top + 'px'; tip.setAttribute('data-below', below ? '1' : '0');
+      tip.className = 'kbc-tip show' + (pin ? ' pin' : ''); inst.tipKind = 'word';
+      var p = posOf(c, inst.k), s = toStage(p.x, p.y), f = chipFont(ps.length) * (p.f || 1);
+      putTip(s.x, s.y, f * CH / 2 * s.sc);
       var sb = tip.querySelector('[data-k=see]'); if (sb) sb.onclick = function (e) { e.stopPropagation(); inst.goCard(); };
     }
-    function hideTip(force) { if (inst.pinned && !force) return; tip.className = 'kbc-tip'; inst.pinned = false; applyDim(null); }
+    // 滑鼠移到「資料線 / 緞帶」上:說明這兩個詞為什麼連在一起,並列出同時提到它們的貼文
+    function sharedPosts(l, k) { var a = conceptOf(l.a), b = conceptOf(l.b), ids = {}; model.postsAt(a, k).forEach(function (p) { ids[p.id] = p; }); return model.postsAt(b, k).filter(function (p) { return ids[p.id]; }).map(function (p) { return ids[p.id]; }); }
+    function showLineTip(i, pin, ev) {
+      var l = model.links[i]; if (!l) return; var k = inst.k, sh = sharedPosts(l, k); if (!sh.length) return;
+      var ex = sh.slice(0, 2).map(function (p) { return '<div class="kbc-ex">' + esc(dayName(p.step)) + ':「' + esc(p.text) + '」' + (pin ? '<button type="button" data-go="' + esc(p.id) + '" data-topic="' + esc(p.topicId) + '">看原文</button>' : '') + '</div>'; }).join('');
+      tip.innerHTML = '<h4>「' + esc(l.a) + '」＋「' + esc(l.b) + '」<span class="kbc-tg" style="--cc:var(--q)">常一起出現</span></h4><div>你有 ' + sh.length + ' 則貼文同時提到這兩個詞(第 ' + sh[0].step + ' 天起)</div><div class="msg">這條線只代表「常寫在同一則貼文裡」,不代表因果,也不代表誰先誰後。</div>' + ex + (pin ? '' : '<div style="margin-top:8px">點一下固定這個說明</div>');
+      tip.className = 'kbc-tip show' + (pin ? ' pin' : ''); inst.tipKind = 'line';
+      var sx, sy, rc = stage.getBoundingClientRect();
+      if (ev && ev.clientX != null) { sx = ev.clientX - rc.left; sy = ev.clientY - rc.top; inst.lineAt = { x: sx, y: sy }; }
+      else if (inst.lineAt) { sx = inst.lineAt.x; sy = inst.lineAt.y; }
+      else { var qa = posOf(conceptOf(l.a), k), qb = posOf(conceptOf(l.b), k), pa = toStage(qa.x, qa.y), pb = toStage(qb.x, qb.y); sx = (pa.x + pb.x) / 2; sy = (pa.y + pb.y) / 2; }
+      putTip(sx, sy, 10);
+      Array.prototype.forEach.call(tip.querySelectorAll('[data-go]'), function (b) { b.onclick = function (e) { e.stopPropagation(); if (opts.onGoPost) opts.onGoPost(b.getAttribute('data-go'), b.getAttribute('data-topic')); }; });
+      applyDimLine(i);
+    }
+    function applyDimLine(i) {
+      var l = model.links[i];
+      Object.keys(wEl).forEach(function (k) { var dm = k !== l.a && k !== l.b; wEl[k].classList.toggle('dim', dm); hEl[k].classList.toggle('dim', dm); });
+      Object.keys(lEl).forEach(function (j) { var hot = Number(j) === Number(i); lEl[j].classList.toggle('hot', hot); lEl[j].classList.toggle('dim', !hot); rEl[j].g.classList.toggle('dim', !hot); });
+    }
+    function bindLink(node, i) {
+      node.addEventListener('mouseenter', function (e) { if (!inst.pinned && !moved) showLineTip(i, false, e); });
+      node.addEventListener('mousemove', function (e) { if (!inst.pinned && inst.tipKind === 'line' && tip.classList.contains('show')) showLineTip(i, false, e); });
+      node.addEventListener('mouseleave', function () { if (!inst.pinned) hideTip(false); });
+      node.addEventListener('click', function (e) { e.stopPropagation(); if (moved) return; inst.pinned = true; inst.pinLine = i; showLineTip(i, true, e); });
+    }
+    Object.keys(hitEl).forEach(function (i) { bindLink(hitEl[i], Number(i)); bindLink(rEl[i].g, Number(i)); });
+    function hideTip(force) { if (inst.pinned && !force) return; tip.className = 'kbc-tip'; inst.pinned = false; inst.pinLine = null; applyDim(null); }
     function applyDim(t) {
       var rel = t ? related(t) : null;
-      Object.keys(wEl).forEach(function (k) { wEl[k].classList.toggle('dim', !!t && k !== t && !rel[k]); });
-      Object.keys(lEl).forEach(function (i) { var l = model.links[i], hot = !!t && (l.a === t || l.b === t); lEl[i].classList.toggle('hot', hot); lEl[i].classList.toggle('dim', !!t && !hot); });
+      Object.keys(wEl).forEach(function (k) { var dm = !!t && k !== t && !rel[k]; wEl[k].classList.toggle('dim', dm); hEl[k].classList.toggle('dim', dm); });
+      Object.keys(lEl).forEach(function (i) { var l = model.links[i], hot = !!t && (l.a === t || l.b === t); lEl[i].classList.toggle('hot', hot); lEl[i].classList.toggle('dim', !!t && !hot); rEl[i].g.classList.toggle('dim', !!t && !hot); });
     }
-    inst.goCard = function () { if (!cardOpen) inst.setCardOpen(true); try { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { card.scrollIntoView(); } card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash'); };
+    inst.goCard = function () { if (global.KB3D && global.KB3D.zoomOpen && global.KB3D.zoomOpen()) global.KB3D.zoomClose(); if (!cardOpen) inst.setCardOpen(true); try { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { card.scrollIntoView(); } card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash'); };
 
     /* ---- 故事卡 ---- */
     var fsKey = 'kb_cc_fs', fsList = [14, 16, 19, 23], fsIdx = 1; try { var sv = Number(global.localStorage.getItem(fsKey)); if (sv >= 0 && sv < fsList.length) fsIdx = sv; } catch (e) {}
@@ -584,40 +579,73 @@
     function bindFs() { card.querySelectorAll('[data-fs]').forEach(function (b) { b.onclick = function () { fsIdx = clamp(fsIdx + Number(b.getAttribute('data-fs')), 0, fsList.length - 1); try { global.localStorage.setItem(fsKey, String(fsIdx)); } catch (e) {} applyFs(); }; }); }
 
     /* ---- 逐步畫面 ---- */
-    inst.render = function (k) {
+    inst.render = function (k, light) {
       k = clamp(Math.round(k), 0, K); inst.k = k;
       var n = 0, pos = {};
       model.concepts.forEach(function (c) {
         var el = wEl[c.t], ps = model.postsAt(c, k), vis = ps.length > 0;
         el.classList.toggle('on', vis); el.classList.toggle('sel', vis && inst.sel === c.t);
         var p = posOf(c, k); pos[c.t] = p; el.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+        var hw = hEl[c.t]; hw.style.transform = el.style.transform; hw.classList.toggle('on', vis); hw.classList.toggle('sel', vis && inst.sel === c.t);
         if (!vis) return; n++;
-        var st = model.stateAt(c, k), f = chipFont(ps.length), chip = el.firstChild, ct = chip.querySelector('.kbc-ct');
-        el.style.setProperty('--cc', colorOf(c, k, st)); chip.style.fontSize = f + 'px'; el.style.zIndex = String(ps.length); el.setAttribute('data-d', ps.length >= 3 ? '3' : String(ps.length));
+        var st = model.stateAt(c, k), f = chipFont(ps.length) * (p.f || 1), chip = el.firstChild, ct = chip.querySelector('.kbc-ct');
+        hw.style.fontSize = f + 'px';
+        el.style.setProperty('--cc', colorOf(c, k, st)); chip.style.fontSize = f + 'px'; el.style.zIndex = rig && rig.active() ? String(Math.round(500 + p.z)) : String(ps.length); el.setAttribute('data-d', ps.length >= 3 ? '3' : String(ps.length));
         var old = chip.querySelector('.kbc-star'); if (old) old.remove(); var op = chip.querySelector('.kbc-pulse'); if (op) op.remove();
         if (model.turningAt(c, k)) { var sp = doc.createElement('span'); sp.className = 'kbc-star'; sp.textContent = '★'; ct.appendChild(sp); }
         if (k > 0 && ps[0].step === k) { var pu = doc.createElement('span'); pu.className = 'kbc-pulse'; chip.insertBefore(pu, chip.firstChild); }
       });
-      if (one) { var bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9; model.concepts.forEach(function (c) { if (!model.postsAt(c, k).length) return; var pp = pos[c.t], bb = chipBox(c); bx0 = Math.min(bx0, pp.x - bb.w / 2); bx1 = Math.max(bx1, pp.x + bb.w / 2); by0 = Math.min(by0, pp.y - bb.h / 2); by1 = Math.max(by1, pp.y + bb.h / 2); });
-        if (bx0 > bx1) { bx0 = -50; bx1 = 50; by0 = -22; by1 = 22; }
-        var cb = cloudBox(bx1 - bx0, by1 - by0), ow = cb.w, oh = cb.h, ocx = (bx0 + bx1) / 2, ocy = (by0 + by1) / 2;
-        one.style.width = ow.toFixed(0) + 'px'; one.style.height = oh.toFixed(0) + 'px'; one.style.left = (ocx - ow * .5).toFixed(0) + 'px'; one.style.top = (ocy - oh * .52).toFixed(0) + 'px'; }
-      var Nn = model.concepts.length || 1; if (mass) mass.style.transform = 'scale(' + clamp(.6 + .4 * Math.sqrt(n / Nn), .6, 1).toFixed(3) + ')';
+      // ---- 資料線與緞帶(照示意圖):都從「字(或光暈)的邊緣」出發,不穿過字;緞帶只畫一起出現最多次的前 6 條 ----
+      var shown = [];
+      model.links.forEach(function (l, i) { var w = model.linkWeight(l, k); if (w && model.visible(conceptOf(l.a), k) && model.visible(conceptOf(l.b), k)) shown.push({ i: i, w: w }); });
+      shown.sort(function (x, y) { return (y.w - x.w) || (x.i - y.i); });
+      var ribTop = {};
+      if (inst.cmode === 'a') {   // 緞帶優先連「外圍的詞」彼此(繞著中間那個大字畫圈圈),不夠 3 條才補上連到中間大字的
+        var outer = shown.filter(function (s2) { var l2 = model.links[s2.i]; return l2.a !== biggest.t && l2.b !== biggest.t; }), pick = outer.slice(0, 6);
+        shown.forEach(function (s2) { if (pick.length < 3 && pick.indexOf(s2) < 0) pick.push(s2); });
+        pick.forEach(function (s2) { ribTop[s2.i] = s2.w; });
+      }
+      function edgeOf(c, p, ux, uy) {   // 從詞的中心朝 (ux,uy) 走到字(模式 A)或光暈(模式 B)邊緣的那一點
+        var f = chipFont(model.postsAt(c, k).length || 1) * (p.f || 1), ln = c.t.length, sc;
+        if (inst.cmode === 'b') { var rx = .34 * (ln * 1.45 + 2.6) * f, ry = (20 / 60) * 3.5 * f; sc = 1 / Math.sqrt(ux * ux / (rx * rx) + uy * uy / (ry * ry)) + 2; }
+        else { var hx = (ln + 1) * f / 2 + 6, hy = .75 * f + 5; sc = Math.min(hx / (Math.abs(ux) || 1e-6), hy / (Math.abs(uy) || 1e-6)); }
+        return { x: p.x + ux * sc, y: p.y + uy * sc };
+      }
+      // 資料線太多會眼花:只有「一起出現最多次」的前幾條畫清楚,其餘的淡淡的;點一個詞時,和它有關的線全部變清楚
+      var strong = {}; shown.slice(0, Math.max(7, n)).forEach(function (s2) { strong[s2.i] = 1; });
+      var f1 = function (v) { return v.toFixed(1); };
       model.links.forEach(function (l, i) {
-        var a = conceptOf(l.a), b = conceptOf(l.b), w = model.linkWeight(l, k), pa = pos[l.a], pb = pos[l.b], el = lEl[i];
-        if (!w || !model.visible(a, k) || !model.visible(b, k)) { el.setAttribute('d', ''); el.style.opacity = 0; return; }
-        var mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2, dx = pb.x - pa.x, dy = pb.y - pa.y, len = Math.sqrt(dx * dx + dy * dy) || 1, off = Math.min(40, len * 0.18);
-        el.setAttribute('d', 'M' + pa.x.toFixed(1) + ' ' + pa.y.toFixed(1) + ' Q' + (mx - dy / len * off).toFixed(1) + ' ' + (my + dx / len * off).toFixed(1) + ' ' + pb.x.toFixed(1) + ' ' + pb.y.toFixed(1));
-        el.setAttribute('stroke-width', (1.2 + Math.min(w, 4) * 0.9).toFixed(1)); el.style.opacity = '';
+        var a = conceptOf(l.a), b = conceptOf(l.b), w = model.linkWeight(l, k), el = lEl[i], R = rEl[i], hp = hitEl[i];
+        if (!w || !model.visible(a, k) || !model.visible(b, k)) { el.setAttribute('d', ''); hp.setAttribute('d', ''); el.style.opacity = 0; R.g.style.display = 'none'; return; }
+        var pa0 = pos[l.a], pb0 = pos[l.b], dx0 = pb0.x - pa0.x, dy0 = pb0.y - pa0.y, len0 = Math.sqrt(dx0 * dx0 + dy0 * dy0) || 1, ux = dx0 / len0, uy = dy0 / len0, nx = -uy, ny = ux;
+        var ea = edgeOf(a, pa0, ux, uy), eb = edgeOf(b, pb0, -ux, -uy), elen = (eb.x - ea.x) * ux + (eb.y - ea.y) * uy;
+        if (elen < 10) { el.setAttribute('d', ''); hp.setAttribute('d', ''); el.style.opacity = 0; R.g.style.display = 'none'; return; }   // 兩個詞靠太近,不畫線
+        var off = Math.min(36, elen * 0.16), mx = (ea.x + eb.x) / 2, my = (ea.y + eb.y) / 2;
+        el.setAttribute('d', 'M' + f1(ea.x) + ' ' + f1(ea.y) + ' Q' + f1(mx + nx * off) + ' ' + f1(my + ny * off) + ' ' + f1(eb.x) + ' ' + f1(eb.y)); hp.setAttribute('d', el.getAttribute('d'));
+        el.setAttribute('stroke-width', '1.2'); el.style.opacity = ''; el.classList.toggle('weak', !strong[i]);
+        if (!ribTop[i]) { R.g.style.display = 'none'; return; }
+        // 緞帶:半透明的玻璃彩帶,兩端尖、中間寬。有的繞成弧形(大圈圈),有的扭成 S 形;每一條的形狀由兩個詞決定,不會每次不一樣
+        var ea = pa0, eb = pb0; elen = len0;   // 緞帶從字的後面穿過去(兩端尖尖的藏在字下面);虛線才從邊緣出發
+        var hh = hash(l.a + '|' + l.b), arc = hh % 3 !== 0, side = ((hh >> 3) & 1) ? 1 : -1, bulge = elen * (arc ? .4 : .27) * side, wd = 14 + Math.min(w, 4) * 4;
+        var c1 = { x: ea.x + ux * elen * .3 + nx * bulge, y: ea.y + uy * elen * .3 + ny * bulge }, c2 = { x: ea.x + ux * elen * .7 + nx * (arc ? bulge : -bulge), y: ea.y + uy * elen * .7 + ny * (arc ? bulge : -bulge) };
+        function band(lo, hi) {
+          function C(c, o) { return f1(c.x + nx * o) + ' ' + f1(c.y + ny * o); }
+          return 'M' + f1(ea.x) + ' ' + f1(ea.y) + ' C' + C(c1, hi) + ' ' + C(c2, hi) + ' ' + f1(eb.x) + ' ' + f1(eb.y) + ' C' + C(c2, lo) + ' ' + C(c1, lo) + ' ' + f1(ea.x) + ' ' + f1(ea.y) + 'Z';
+        }
+        function strand(o) { function C(c) { return f1(c.x + nx * o) + ' ' + f1(c.y + ny * o); } return 'M' + f1(ea.x) + ' ' + f1(ea.y) + ' C' + C(c1) + ' ' + C(c2) + ' ' + f1(eb.x) + ' ' + f1(eb.y); }
+        R.g.style.display = ''; R.body.setAttribute('d', band(-wd, wd)); R.sheen.setAttribute('d', band(wd * .12, wd * .72));
+        R.fibs[0].setAttribute('d', strand(-wd * .55)); R.fibs[1].setAttribute('d', strand(wd * .05)); R.fibs[2].setAttribute('d', strand(wd * .6));
+        R.grad.setAttribute('x1', f1(ea.x)); R.grad.setAttribute('y1', f1(ea.y)); R.grad.setAttribute('x2', f1(eb.x)); R.grad.setAttribute('y2', f1(eb.y));
+        var ca = 'color-mix(in srgb,' + colorOf(a, k, model.stateAt(a, k)) + ' 78%,#fff)', cb = 'color-mix(in srgb,' + colorOf(b, k, model.stateAt(b, k)) + ' 78%,#fff)';
+        R.sts[0].style.stopColor = ca; R.sts[1].style.stopColor = ca; R.sts[2].style.stopColor = cb; R.sts[3].style.stopColor = cb;
       });
-      q('day').textContent = k; q('n').textContent = n;
-      var chg = k > 0 ? model.changes(k) : ''; q('cap').innerHTML = chg ? chg : (k === 0 ? '起點:雲還沒長出來' : '');
+      if (!light) { q('day').textContent = k; q('n').textContent = n; var chg = k > 0 ? model.changes(k) : ''; q('cap').innerHTML = chg ? chg : (k === 0 ? '起點:雲還沒長出來' : ''); }
       if (inst.sel && !conceptOf(inst.sel)) inst.sel = null;
-      drawCard();
-      if (inst.pinned) { if (inst.sel && model.postsAt(conceptOf(inst.sel), k).length) showTip(inst.sel, true); else hideTip(true); }
-      applyDim(inst.pinned ? inst.sel : null);
+      if (!light) drawCard();
+      if (inst.pinned) { if (inst.pinLine != null) showLineTip(inst.pinLine, true); else if (inst.sel && model.postsAt(conceptOf(inst.sel), k).length) showTip(inst.sel, true); else hideTip(true); }
+      if (inst.pinLine != null && inst.pinned) applyDimLine(inst.pinLine); else applyDim(inst.pinned ? inst.sel : null);
     };
-    inst.select = function (t, pin) { inst.sel = t; if (pin) inst.pinned = true; inst.render(inst.k); if (pin) { showTip(t, true); } if (opts.onPick) opts.onPick(t); };
+    inst.select = function (t, pin) { inst.pinLine = null; inst.sel = t; if (pin) inst.pinned = true; inst.render(inst.k); if (pin) { showTip(t, true); } if (opts.onPick) opts.onPick(t); };
     // 詞的互動:移上去有提示,點一下釘住並說明
     Object.keys(wEl).forEach(function (t) {
       var w = wEl[t];
@@ -625,7 +653,7 @@
       w.addEventListener('mouseleave', function () { if (!inst.pinned) hideTip(false); });
       w.addEventListener('click', function (e) {
         e.stopPropagation(); if (moved) return;
-        inst.sel = t; inst.pinned = true; inst.render(inst.k); showTip(t, true); toast('已選擇「' + t + '」,它的故事在下面 ↓'); if (opts.onPick) opts.onPick(t); var h = q('hint'); if (h) h.style.display = 'none';
+        inst.pinLine = null; inst.sel = t; inst.pinned = true; inst.render(inst.k); showTip(t, true); toast('已選擇「' + t + '」,它的故事在下面 ↓'); if (opts.onPick) opts.onPick(t); var h = q('hint'); if (h) h.style.display = 'none';
       });
     });
     // 預設選一個:用最多次的詞
@@ -633,6 +661,28 @@
     inst.fit = function () { base = fit(); applyView(false); inst.render(inst.k); };
     if (global.ResizeObserver) { try { new global.ResizeObserver(function () { var nb = fit(); if (Math.abs(nb - base) > 0.02) { base = nb; applyView(false); inst.render(inst.k); } }).observe(stage); } catch (e) {} }
     root.querySelectorAll('[data-cs]').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); inst.setColorMode('b', b.getAttribute('data-cs')); }); });
+    // 「拖空白處:🔄 旋轉 ✋ 平移 ↺ 回正 ⟲ 還原」與「⤢ 放大」(和其他關聯圖一樣;需要 kb-3d.js)
+    var zoomedSingle = false;
+    function paintZoom() { if (inst.zoomBtn) { var on = opts.zoomState ? opts.zoomState() : zoomedSingle; inst.zoomBtn.textContent = on ? '✕ 縮回' : '⤢ 放大'; inst.zoomBtn.title = on ? '關閉放大視窗(ESC)' : '放大視窗:整個視窗放大來看,操作和原本一樣'; inst.zoomBtn.setAttribute('aria-label', inst.zoomBtn.title); } }
+    inst.paintZoom = paintZoom;
+    inst.toggleZoom = function () {
+      if (opts.zoomHost) return opts.zoomHost();
+      var KB = global.KB3D; if (!KB) return;
+      if (zoomedSingle) { KB.zoomClose(); return; }
+      zoomedSingle = true; paintZoom();
+      KB.zoom({ title: '我的概念雲', els: [root], pad: '8px', opener: inst.zoomBtn,
+        onOpen: function (body) { stage.style.height = Math.max(300, body.clientHeight - 80) + 'px'; [30, 250].forEach(function (ms) { setTimeout(function () { if (zoomedSingle) inst.fit(); }, ms); }); },
+        onClose: function () { zoomedSingle = false; stage.style.height = ''; paintZoom(); },
+        after: function () { setTimeout(inst.fit, 30); } });
+    };
+    var slot = q('ctl');
+    if (slot && global.KB3D) {
+      slot.appendChild(global.KB3D.dragMode.ctl(inst.level, inst.reset));
+      var zb = doc.createElement('button'); zb.type = 'button'; zb.className = 'kb-3d-btn kb-zoom-btn kbc-zoombtn';
+      zb.style.cssText = 'padding:1px 10px;border-radius:999px;border:1px solid #4f46e5;background:#eef2ff;color:#4338ca;font-size:12px;font-weight:800;cursor:pointer;line-height:1.6;margin-left:6px';
+      zb.addEventListener('click', function (e) { e.stopPropagation(); inst.toggleZoom(); });
+      slot.appendChild(zb); inst.zoomBtn = zb; paintZoom();
+    }
     drawLegend();
     applyView(false); inst.render(K);
     return inst;
@@ -646,8 +696,20 @@
     var grid = doc.createElement('div'); grid.className = 'kbc-dual';
     var ha = doc.createElement('div'), hb = doc.createElement('div'); ha.className = 'kbc-col'; hb.className = 'kbc-col';
     grid.appendChild(ha); grid.appendChild(hb); host.appendChild(grid);
-    var a, b;
+    var a, b, zoomed = false;
     function sub(extra) { var x = {}; for (var k in opts) x[k] = opts[k]; for (var e in extra) x[e] = extra[e]; return x; }
+    function paintZ() { [a, b].forEach(function (i) { if (i && i.paintZoom) i.paintZoom(); }); }
+    function sizeStages(body) { var mh = 0; Array.prototype.forEach.call(grid.querySelectorAll('.kbc-mode'), function (m) { mh = Math.max(mh, m.offsetHeight); }); grid.style.setProperty('--kbc-zh', Math.max(300, body.clientHeight - 16 - mh - 14) + 'px'); }
+    function toggleZoom() {
+      var KB = global.KB3D; if (!KB) return;
+      if (zoomed) { KB.zoomClose(); return; }
+      zoomed = true; paintZ();
+      KB.zoom({ title: '我的概念雲(左:想法狀態　右:首次出現時間)', els: [grid], pad: '8px', opener: a && a.zoomBtn,
+        onOpen: function (body) { grid.classList.add('kbc-zoomed'); sizeStages(body); [30, 250].forEach(function (ms) { setTimeout(function () { if (zoomed) { sizeStages(body); a.fit(); } }, ms); }); },
+        onClose: function () { zoomed = false; grid.classList.remove('kbc-zoomed'); grid.style.removeProperty('--kbc-zh'); paintZ(); },
+        after: function () { setTimeout(function () { a.fit(); }, 30); } });
+    }
+    opts.zoomHost = toggleZoom; opts.zoomState = function () { return zoomed; };
     a = create(ha, model, sub({ colorMode: 'a', noCard: true, onPick: function (t) { if (b) { b.sel = t; b.pinned = false; b.render(b.k); } } }));
     b = create(hb, model, sub({ colorMode: 'b', noCard: true, probe: null, onPick: function (t) { a.sel = t; a.pinned = false; a.render(a.k); } }));
     host.appendChild(a.cardWrap);            // 故事卡放在兩張圖下面(整排寬)

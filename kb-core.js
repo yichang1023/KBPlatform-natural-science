@@ -479,7 +479,7 @@
           classId = c.id;
           if (r.groupName) {
             var g = null; S.groups.forEach(function (x) { if (x.classId === classId && x.name === String(r.groupName).trim()) g = x; });
-            if (!g) { if (!opts.dryRun) { g = { id: uid('g'), classId: classId, name: String(r.groupName).trim() }; S.groups.push(g); } else g = { id: '(新)' }; }
+            if (!g) { if (!opts.dryRun) { g = { id: uid('g'), classId: classId, name: String(r.groupName).trim() }; S.groups.push(g); g.color = groupColorMapOf(S.groups.filter(function (x) { return x.classId === classId; }))[g.id]; } else g = { id: '(新)' }; }
             groupId = g.id;
           }
         }
@@ -532,8 +532,33 @@
   /* ---------- 班級與分組 ---------- */
   // 教材班(例如五年級示範班):所有學生登入後都可以進去看內容,但只有該班的學生能在裡面發言。舊資料的示範班(c_demo)視為教材班。
   function isMaterialClass(c) { if (typeof c === 'string') c = S.classes.filter(function (x) { return x.id === c; })[0]; return !!c && (c.material === undefined ? c.id === 'c_demo' : c.material === true); }
+  // 組別顏色:老師可以自己選;沒選的,系統依組別順序從色盤配對(不會跟老師已選的顏色重複)。畫互動圖時,每一組用同一個顏色。
+  // (kb-ego.js 裡的 colorMap 用同一套規則,兩邊要一樣)
+  var GROUP_PALETTE = ['#e4572e', '#2e86de', '#2fa84f', '#f2a900', '#8e5bd9', '#0fa3b1', '#d6336c', '#7a8a2e', '#5c6f91', '#c0762d'];
+  function validColor(v) { return /^#[0-9a-fA-F]{6}$/.test(String(v || '')); }
+  function groupColorMapOf(list) {
+    var used = {}, map = {}, i, k = 0;
+    list.forEach(function (g) { if (validColor(g.color)) used[String(g.color).toLowerCase()] = 1; });
+    list.forEach(function (g) {
+      if (validColor(g.color)) { map[g.id] = g.color; return; }
+      var tries = 0; while (used[GROUP_PALETTE[k % GROUP_PALETTE.length]] && tries++ < GROUP_PALETTE.length) k++;
+      map[g.id] = GROUP_PALETTE[k % GROUP_PALETTE.length]; k++;
+    });
+    return map;
+  }
   var classes = {
     isMaterial: isMaterialClass,
+    GROUP_PALETTE: GROUP_PALETTE,
+    // 某個班每一組的顏色 { 組別id: '#rrggbb' }(有設定用設定的,沒有就依順序配色)
+    groupColorMap: function (classId) { return groupColorMapOf(S.groups.filter(function (g) { return !classId || g.classId === classId; })); },
+    setGroupColor: function (id, color) { var g = S.groups.filter(function (x) { return x.id === id; })[0]; if (!g) return { ok: false, error: '找不到這個組別' }; if (!validColor(color)) return { ok: false, error: '顏色格式不對(要像 #2e86de)' }; g.color = String(color).toLowerCase(); persist(['groups']); audit('group.color', id, g.color); return { ok: true }; },
+    // 自動配色:o.all = true → 全部重新配(預設只幫還沒有顏色的組別配)
+    autoGroupColors: function (classId, o) {
+      o = o || {}; var list = S.groups.filter(function (g) { return g.classId === classId; }); if (!list.length) return { ok: false, error: '這個班級還沒有組別' };
+      if (o.all) list.forEach(function (g) { delete g.color; });
+      var map = groupColorMapOf(list), n = 0; list.forEach(function (g) { if (!validColor(g.color)) { g.color = map[g.id]; n++; } });
+      persist(['groups']); audit('group.color.auto', classId, '配色 ' + n + ' 組'); return { ok: true, colored: n };
+    },
     // 某個人可以在論壇選到哪些班級:老師與管理者全部;學生 = 自己的班級 + 所有教材班
     visibleTo: function (cur) {
       var u = cur ? userById(cur.id) : null, staff = !cur || isStaffRole(cur.role);
@@ -548,7 +573,7 @@
       persist(['classes', 'groups']); audit('class.delete', id, ''); return { ok: true };
     },
     groups: function (classId) { return clone(S.groups.filter(function (g) { return !classId || g.classId === classId; })); },
-    createGroup: function (classId, name) { name = String(name || '').trim(); if (!name) return { ok: false, error: '請輸入組別名稱' }; var g = { id: uid('g'), classId: classId, name: name }; S.groups.push(g); persist(['groups']); audit('group.create', g.id, name); return { ok: true, id: g.id }; },
+    createGroup: function (classId, name) { name = String(name || '').trim(); if (!name) return { ok: false, error: '請輸入組別名稱' }; var g = { id: uid('g'), classId: classId, name: name }; S.groups.push(g); var gm = groupColorMapOf(S.groups.filter(function (x) { return x.classId === classId; })); g.color = gm[g.id]; persist(['groups']); audit('group.create', g.id, name); return { ok: true, id: g.id }; },
     updateGroup: function (id, name) { var g = S.groups.filter(function (x) { return x.id === id; })[0]; if (!g) return { ok: false }; g.name = String(name); persist(['groups']); audit('group.update', id, name); return { ok: true }; },
     // 刪除組別。opts.unassign:true → 組內的學生一併移到「未分組」(否則組內還有學生時不能刪)
     removeGroup: function (id, opts) {
@@ -568,7 +593,7 @@
         var nm = (pattern.indexOf('{n}') >= 0 ? pattern.split('{n}').join(String(i)) : pattern + i).trim();
         if (!nm) continue;
         if (S.groups.some(function (g) { return g.classId === classId && g.name === nm; })) { skipped++; continue; }
-        S.groups.push({ id: uid('g'), classId: classId, name: nm }); made++;
+        var ng = { id: uid('g'), classId: classId, name: nm }; S.groups.push(ng); ng.color = groupColorMapOf(S.groups.filter(function (x) { return x.classId === classId; }))[ng.id]; made++;
       }
       persist(['groups']); audit('group.bulk', classId, '建立 ' + made + ' 組'); return { ok: true, created: made, skipped: skipped };
     },
@@ -688,7 +713,7 @@
       var cn = {}; S.classes.forEach(function (c) { cn[c.id] = c.name; });
       S.users.forEach(function (u) {
         var r = isStaffRole(u.role) ? 'teacher' : 'student';
-        out[u.id] = { id: u.id, name: labelFor(u.id, viewerRole), role: r, avatar: avatarFor(u.id, u.role), realRole: u.role, classId: u.classId || '', className: cn[u.classId] || '' };
+        out[u.id] = { id: u.id, name: labelFor(u.id, viewerRole), role: r, avatar: avatarFor(u.id, u.role), realRole: u.role, classId: u.classId || '', className: cn[u.classId] || '', groupId: u.groupId || '' };
       });
       // 訪客不會成為貼文作者,不放進使用者清單(避免被分析頁當成學生)
       return out;
