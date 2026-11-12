@@ -19,6 +19,7 @@
 <script src="kb-asra-push.js"></script>
 <script src="kb-asra-refs.js"></script>
 <script src="kb-asra-src.js"></script>
+<script src="kb-asra-cloudpack.js"></script>
 <script src="kb-asra.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -256,7 +257,29 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
   }
   function importBtn() {
     if (readonly) return '<span class="text-xs text-slate-500">(學生還沒匯入學習單資料。老師可在「學習單資料」分頁匯入。)</span>';
-    return '<label class="chip" style="cursor:pointer"><i class="fas fa-file-import"></i> 我有學習單資料包<input type="file" id="ws-file" accept=".json,application/json" multiple class="hidden"></label>';
+    return '<label class="chip" style="cursor:pointer"><i class="fas fa-file-import"></i> 我有學習單資料包<input type="file" id="ws-file" accept=".json,application/json" multiple class="hidden"></label>' + cloudChip();
+  }
+  /* ---- 從雲端同步我的學習單資料:登入平台後會自動做;這個鈕是手動再同步一次(伺服器只給自己的那一份) ---- */
+  function cloudSyncOn() { return !!(window.KBSrcCloud && window.KB && KB.cloud && KB.cloud.mode === 'cloud'); }
+  function cloudChip() {
+    if (readonly || !cloudSyncOn()) return '';
+    return '<button type="button" class="chip" id="ws-cloud"><i class="fas fa-cloud-arrow-down"></i> 從雲端同步我的資料</button>';
+  }
+  function afterCloudSync(r, auto) {
+    if (!r) return;
+    if (!r.ok) { if (!auto) toast(r.error, 4500); return; }
+    if (r.same) { if (!auto) toast('已經是最新的 ✓'); return; }
+    SRC.pref = 'ws'; renderStepper(); renderPanel();
+    toast('已從雲端同步 ' + r.records + ' 則學習單回答 ✓', 2600);
+  }
+  function manualCloudSync() {
+    var b = document.getElementById('ws-cloud'); if (b) b.disabled = true;
+    KBSrcCloud.serverSync(uid, { force: true }).then(function (r) { if (b) b.disabled = false; afterCloudSync(r, false); });
+  }
+  // 打開頁面時:悄悄檢查老師有沒有存新的資料(登入時 kb-core 已經換好憑證)
+  function autoCloudSync() {
+    if (readonly || !uid || !cloudSyncOn()) return;
+    setTimeout(function () { KB.ready.then(function () { return KBSrcCloud.serverSync(uid); }).then(function (r) { afterCloudSync(r, true); }, function () {}); }, 1200);
   }
   function manualForm() {
     if (readonly) return '';
@@ -1121,6 +1144,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     ['下一步:決定怎麼做', '下一步', '前往「第 4 步 決定下一步」,根據這次反思訂一個小計畫。'],
     ['訂好我的計畫', '訂好我的計畫', '把你選的行動和計畫存起來;做完之後再回「第 5 步」檢查。'],
     ['去論壇行動', '去論壇行動', '回到知識論壇這個想法所在的討論,去做你選的行動(例如回應同學、補充證據)。'],
+    ['從雲端同步我的資料', '從雲端同步我的資料', '把老師存在雲端的學習單資料放到這台電腦。登入平台時會自動同步,這個鈕是手動再同步一次。只會拿到你自己的,看不到同學的。'],
     ['看全部', '看全部', '目前只顯示最新的 8 個,點了會把全部都列出來。'],
     ['只看最新 8 個', '只看最新 8 個', '把清單收回到最新的 8 個。']
   ];
@@ -1185,6 +1209,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
       var gid = autoFinish(adKey('idea', 'new'), { kind: 'idea', title: t, text: (q('#man-text').value || '').trim() || undefined, srcFrom: q('#man-from').value, stageKey: q('#man-stage').value || undefined });
       SRC.openMan = false; SRC.filter = 'all'; selIdea = 'manual:' + gid; renderStepper(); renderPanel(); toast('想法已新增 ✓');
     };
+    var wc = q('#ws-cloud'); if (wc) wc.onclick = manualCloudSync;
     var wf = q('#ws-file'); if (wf) wf.onchange = function () {
       var files = Array.prototype.slice.call(wf.files || []); if (!files.length) return;
       var readOne = function (f) {
@@ -1262,7 +1287,7 @@ textarea:focus,select:focus,input[type=text]:focus{border-color:#6366f1}
     $('prev').onclick = function () { go(cur - 1); }; $('next').onclick = function () { go(cur + 1); };
     if (readonly) setupStaff(); else uid = user.id;
     if (!uid) { $('panel').innerHTML = '<div class="card">目前沒有學生資料。</div>'; return; }
-    if (!readonly) KBAsra.seenSet(uid, 0); build();
+    if (!readonly) KBAsra.seenSet(uid, 0); build(); autoCloudSync();
     KB.on(function (keys, remote) { if (remote && KB.auth.current()) { try { build(); } catch (e) {} } });
     window.addEventListener('kb-asra-error', function () { syncNote(); });
     if (!$('panel').__pv) { $('panel').__pv = 1; $('panel').addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('[data-view]') : null; if (!b) return; e.preventDefault(); openOrig(b.getAttribute('data-view')); }); }

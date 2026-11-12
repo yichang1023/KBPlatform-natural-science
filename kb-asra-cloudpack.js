@@ -6,6 +6,7 @@
  *  另一台電腦輸入同一組密碼,才在那台電腦的瀏覽器裡解開。密碼不會送出去、也不會存起來。
  *  做法:密碼 → PBKDF2-SHA256(15 萬次、每次上傳隨機 salt)→ AES-256-GCM(隨機 iv);GCM 有驗證,密碼錯或被竄改一定解不開。
  *  雲端放法見 kb-cloud.js(packPut/packList/packGet):每次上傳新增一筆,不改、不刪;「覆蓋」與「移除」都是再新增一筆,以最新的為準。
+ *  另外:學生用平台帳號自動同步自己的資料(serverSync / srv,見 api/asra-stu.js)。
  *  純函式 + 非同步;不碰畫面。
  * ===================================================================== */
 (function (global) {
@@ -111,5 +112,74 @@
     return C.packPut(id, null, { n: String(name), t: Date.now(), k: 'del', a: 0, r: 0, s: '', i: 0, sz: 0 }).then(function () { return { ok: true, name: name }; }, function (e) { return { ok: false, error: '沒有移除成功:' + String((e && (e.code || e.message)) || e).slice(0, 120) }; });
   }
 
-  global.KBSrcCloud = { available: available, seal: seal, open: open, list: list, checkPassword: checkPassword, upload: upload, download: download, remove: remove, pwProblem: pwProblem, MIN_PW: MIN_PW, ITER: ITER };
+  /* ---------- 學生:登入平台後,自動從伺服器同步「自己的」學習單資料 ----------
+   *  老師把每位學生的個別資料存在伺服器(api/asra-stu.js,資料庫規則擋住瀏覽器,只有伺服器讀得到);
+   *  學生登入平台時,kb-core 會順便向伺服器驗證帳號密碼、換一張 12 小時的憑證(只存憑證,不存密碼);
+   *  ASRA 頁用憑證取「自己」的那一份(伺服器只給 uid 相同的)。保護強度等於學生的平台密碼。 */
+  var TOK = 'kb_asra_tok_', MARK = 'kb_asra_stusync_';
+  function lsGet(k) { try { return global.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { global.localStorage.setItem(k, v); } catch (e) {} }
+  function lsDel(k) { try { global.localStorage.removeItem(k); } catch (e) {} }
+  function httpOk() { try { return typeof global.fetch === 'function' && /^https?:$/.test(global.location.protocol); } catch (e) { return false; } }
+  function post(body) {
+    return global.fetch('/api/asra-stu', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, data: j || {} }; });
+    });
+  }
+  function errOf(r) { return r.status === 404 ? '這個網站沒有伺服器功能(找不到 /api/asra-stu)。' : String((r.data && r.data.error) || ('伺服器回應 ' + r.status)); }
+  function hasToken(uid) { try { var t = JSON.parse(lsGet(TOK + uid) || 'null'); return !!(t && t.t && t.exp > Date.now()); } catch (e) { return false; } }
+  // 回傳 { ok, same, records, kind, error }  kind: 'notoken' 要重新登入 | 'noserver' 伺服器沒設定 | 'nopack' 老師還沒存 | 'net' 連不上
+  function serverSync(uid, opts) {
+    if (!httpOk()) return Promise.resolve({ ok: false, kind: 'noserver', error: '目前不是線上環境,沒有伺服器可以同步。' });
+    var tk = null; try { tk = JSON.parse(lsGet(TOK + uid) || 'null'); } catch (e) {}
+    if (!tk || !tk.t || tk.exp <= Date.now()) return Promise.resolve({ ok: false, kind: 'notoken', error: '要重新登入一次(登出再登入),才能從雲端同步你的資料。' });
+    return post({ action: 'get', uid: uid, token: tk.t }).then(function (r) {
+      if (r.status === 401) { lsDel(TOK + uid); return { ok: false, kind: 'notoken', error: '要重新登入一次(登出再登入),才能從雲端同步你的資料。' }; }
+      if (!r.ok) return { ok: false, kind: r.status === 503 || r.status === 404 ? 'noserver' : 'net', error: errOf(r) };
+      if (r.data.none || !r.data.data) return { ok: false, kind: 'nopack', error: '老師還沒有把你的學習單資料存到雲端。' };
+      var K = global.KBSrc, last = null; try { last = JSON.parse(lsGet(MARK + uid) || 'null'); } catch (e) {}
+      if (!(opts && opts.force) && last && last.updated === r.data.updated && K.has(uid)) return { ok: true, same: true, records: r.data.records || 0 };
+      var obj = null; try { obj = JSON.parse(r.data.data); } catch (e) {}
+      if (!obj) return { ok: false, kind: 'net', error: '收到的資料格式不正確。' };
+      var res = K.importPack(obj, { name: '學習單資料(雲端)' });
+      if (!res.ok) return { ok: false, kind: 'net', error: res.error };
+      var codes = Object.keys(obj.students || {}); if (codes.length === 1) K.mapSet(uid, codes[0]);
+      lsSet(MARK + uid, JSON.stringify({ updated: r.data.updated }));
+      return { ok: true, same: false, records: res.records, students: res.students };
+    }).catch(function (e) { return { ok: false, kind: 'net', error: '連不上伺服器:' + String(e && e.message || e).slice(0, 80) }; });
+  }
+
+  /* ---------- 老師:把學生的個別資料存到伺服器(要管理密碼 AI_ADMIN_PASSCODE) ---------- */
+  var srv = {
+    status: function (pass) {
+      if (!httpOk()) return Promise.resolve({ ok: false, kind: 'noserver', error: '目前不是線上環境,沒有伺服器可以用。' });
+      return post({ action: 'status', passcode: pass }).then(function (r) { return r.ok ? { ok: true, items: r.data.items || [] } : { ok: false, kind: r.status === 401 ? 'badpass' : (r.status === 503 || r.status === 404 ? 'noserver' : 'net'), error: errOf(r) }; }, function (e) { return { ok: false, kind: 'net', error: '連不上伺服器:' + String(e && e.message || e).slice(0, 80) }; });
+    },
+    // entries = [{ uid, code }](code = 資料包裡的學生代碼);回傳 { ok, done:[{uid,records}], bad:[{uid,error}], error, kind }
+    put: function (entries, pass, onStep) {
+      if (!httpOk()) return Promise.resolve({ ok: false, kind: 'noserver', error: '目前不是線上環境,沒有伺服器可以用。', done: [], bad: [] });
+      var K = global.KBSrc, done = [], bad = [], fatal = null, chunks = [], i;
+      for (i = 0; i < entries.length; i += 10) chunks.push(entries.slice(i, i + 10));
+      return chunks.reduce(function (p, ch) {
+        return p.then(function () {
+          if (fatal) return;
+          var items = [];
+          ch.forEach(function (en) { var sub = K.exportStudent(en.code); if (!sub) bad.push({ uid: en.uid, error: '資料包裡找不到這位學生' }); else items.push({ uid: en.uid, data: JSON.stringify(sub) }); });
+          if (!items.length) return;
+          if (onStep) { try { onStep(items.length, entries.length); } catch (x) {} }
+          return post({ action: 'put', passcode: pass, items: items }).then(function (r) {
+            if (!r.ok) { fatal = { kind: r.status === 401 ? 'badpass' : (r.status === 503 || r.status === 404 ? 'noserver' : 'net'), error: errOf(r) }; return; }
+            (r.data.saved || []).forEach(function (s) { done.push(s); }); (r.data.bad || []).forEach(function (b) { bad.push(b); });
+          });
+        });
+      }, Promise.resolve()).then(function () { return fatal ? { ok: false, kind: fatal.kind, error: fatal.error, done: done, bad: bad } : { ok: true, done: done, bad: bad }; }, function (e) { return { ok: false, kind: 'net', error: '連不上伺服器:' + String(e && e.message || e).slice(0, 80), done: done, bad: bad }; });
+    },
+    clear: function (pass, uid) {
+      if (!httpOk()) return Promise.resolve({ ok: false, error: '目前不是線上環境。' });
+      var b = { action: 'clear', passcode: pass }; if (uid) b.uid = uid;
+      return post(b).then(function (r) { return r.ok ? { ok: true, cleared: r.data.cleared || 0 } : { ok: false, error: errOf(r) }; }, function (e) { return { ok: false, error: '連不上伺服器:' + String(e && e.message || e).slice(0, 80) }; });
+    }
+  };
+
+  global.KBSrcCloud = { available: available, seal: seal, open: open, list: list, checkPassword: checkPassword, upload: upload, download: download, remove: remove, pwProblem: pwProblem, MIN_PW: MIN_PW, ITER: ITER, serverSync: serverSync, hasToken: hasToken, srv: srv };
 })(typeof window !== 'undefined' ? window : globalThis);

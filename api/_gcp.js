@@ -65,5 +65,46 @@ async function getKey() {
   keyCache = { v, exp: Date.now() + 60000 };
   return v;
 }
+/* ---- 一般文件存取(ASRA 學生資料等):路徑像 "kb_secret/asra__ST01" ---- */
+const docBase = (s) => 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(s.project_id) + '/databases/(default)/documents/';
+const encPath = (p) => String(p).split('/').map(encodeURIComponent).join('/');
+async function getDoc(path) {
+  const s = account(); if (!s) throw new Error('尚未設定 FIREBASE_SERVICE_ACCOUNT');
+  const t = await token();
+  const r = await fetch(docBase(s) + encPath(path), { headers: { Authorization: 'Bearer ' + t } });
+  if (r.status === 404) return null;
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('讀取文件失敗');
+  return j.fields || {};
+}
+async function setDoc(path, fields) {
+  const s = account(); if (!s) throw new Error('尚未設定 FIREBASE_SERVICE_ACCOUNT');
+  const t = await token();
+  const r = await fetch(docBase(s) + encPath(path), { method: 'PATCH', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) });
+  if (!r.ok) throw new Error('寫入文件失敗');
+}
+async function delDoc(path) {
+  const s = account(); if (!s) throw new Error('尚未設定 FIREBASE_SERVICE_ACCOUNT');
+  const t = await token();
+  const r = await fetch(docBase(s) + encPath(path), { method: 'DELETE', headers: { Authorization: 'Bearer ' + t } });
+  if (!r.ok && r.status !== 404) throw new Error('刪除文件失敗');
+}
+// 列出某集合的文件(只取指定欄位);回傳 [{ id, fields }]
+async function listDocs(col, maskFields) {
+  const s = account(); if (!s) throw new Error('尚未設定 FIREBASE_SERVICE_ACCOUNT');
+  const t = await token(), out = [];
+  let page = '';
+  for (let n = 0; n < 20; n++) {
+    const q = '?pageSize=300' + (maskFields || []).map((f) => '&mask.fieldPaths=' + encodeURIComponent(f)).join('') + (page ? '&pageToken=' + encodeURIComponent(page) : '');
+    const r = await fetch(docBase(s) + encPath(col) + q, { headers: { Authorization: 'Bearer ' + t } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error('列出文件失敗');
+    (j.documents || []).forEach((d) => out.push({ id: String(d.name || '').split('/').pop(), fields: d.fields || {} }));
+    page = j.nextPageToken || ''; if (!page) break;
+  }
+  return out;
+}
+// 簽發/驗證學生憑證用的伺服器秘密(由服務帳戶私鑰推出,不需要另外設定)
+function tokenSecret() { const s = account(); return s ? crypto.createHash('sha256').update('kb-asra-token|' + s.private_key).digest() : null; }
 function _reset() { tok = null; keyCache = null; }
-module.exports = { account, getKey, setSecret, delSecret, _reset };
+module.exports = { account, getKey, setSecret, delSecret, getDoc, setDoc, delDoc, listDocs, tokenSecret, _reset };

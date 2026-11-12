@@ -546,7 +546,70 @@
         var lp = names[r.name];
         return '<tr class="border-t border-slate-100"><td class="py-1.5 font-bold text-slate-800">' + esc(r.name) + '</td><td>' + r.students + ' 位</td><td>' + r.records + ' 則</td><td class="text-xs text-slate-500">' + fmtDT(r.t) + '</td><td class="text-xs ' + (lp ? 'text-emerald-700' : 'text-slate-400') + '">' + (lp ? '已有同名(載入會更新它)' : '還沒有') + '</td><td class="text-xs whitespace-nowrap"><button type="button" data-act="cl-down" data-id="' + esc(r.id) + '" class="text-indigo-600 font-bold underline mr-3">載入到這台電腦</button><button type="button" data-act="cl-rm" data-name="' + esc(r.name) + '" class="text-rose-600 font-bold underline">從雲端移除</button></td></tr>';
       }).join('') + '</tbody></table></div><div class="mt-2"><button type="button" data-act="cl-downall" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold"><i class="fas fa-cloud-arrow-down mr-1"></i>雲端上的資料包,全部載入到這台電腦</button></div>';
+    h += stuSection();
     return h + '</section>';
+  }
+  /* ---- 學生登入就自動同步:老師把每位學生的資料存到伺服器,學生登入後 ASRA 頁自動拿到「自己的」那份 ---- */
+  function srvState() { return UI.srv || (UI.srv = { items: null, msg: '', bad: false, busy: '' }); }
+  function stuRows() {
+    var K = global.KBSrc, S = K.summary(); if (!S) return [];
+    var users = (UI.D && UI.D.rows ? UI.D.rows : []).map(function (r) { return r.u; }), mp = K.mapGet(), rev = {};
+    Object.keys(mp).forEach(function (u) { rev[mp[u]] = u; });
+    var P = K.load();
+    return S.codes.map(function (c) {
+      var u = rev[c] ? users.filter(function (x) { return String(x.id) === String(rev[c]); })[0] : null;
+      if (!u) u = users.filter(function (x) { return String(x.id).toUpperCase() === c.toUpperCase(); })[0] || null;
+      return { code: c, uid: u ? String(u.id) : '', name: u ? u.name : '', group: P.students[c] ? P.students[c].g : '' };
+    });
+  }
+  function stuSection() {
+    var V = srvState(), rows = stuRows(), mapped = rows.filter(function (r) { return r.uid; }), ST = V.items || {};
+    var h = '<div class="mt-5 pt-4 border-t border-emerald-100" id="asra-stusync"><h5 class="font-black text-slate-800"><i class="fas fa-user-graduate mr-1 text-emerald-600"></i>讓學生登入就自動同步<span class="ml-2 text-xs font-bold text-slate-400">每位學生只拿到自己的資料</span></h5>' +
+      '<ul class="text-xs text-slate-500 mt-1 list-disc pl-5 space-y-0.5"><li>按下面的鈕,系統把每位學生<b>自己的</b>資料各存一份在<b>伺服器</b>(不是公開的雲端資料庫,瀏覽器直接讀不到)。學生用平台帳號登入後,ASRA 頁會自動把自己的資料放到那台電腦,<b>不用輸入任何碼</b>。</li><li>學生登入時,伺服器用平台的帳號密碼確認是本人,所以保護強度等於學生的平台密碼:密碼還是預設值(等於學號)的學生,知道他學號的人就能拿到他的資料,請提醒學生改密碼。</li><li>你更新資料包後再按一次,學生下次登入就會拿到最新的。學生已經登入中的,要登出再登入一次才會拿到憑證。</li><li>需要管理者在 Vercel 設定 <code>FIREBASE_SERVICE_ACCOUNT</code> 與 <code>AI_ADMIN_PASSCODE</code>(和儲存 AI 金鑰同一套,見「AI金鑰雲端設定說明」)。下面要填的「管理密碼」就是 <code>AI_ADMIN_PASSCODE</code>。只有已對應到平台帳號的學生能存。</li></ul>' +
+      '<div class="flex flex-wrap items-end gap-3 mt-3"><label class="text-xs font-bold text-slate-600">管理密碼<br><input type="password" data-act="cl-adm" autocomplete="off" value="' + esc(UI.adm || '') + '" class="mt-0.5 w-48 border border-slate-300 rounded-lg px-2 py-1 text-sm font-normal"></label>' +
+      '<button type="button" data-act="cl-srvput" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold"' + (mapped.length ? '' : ' disabled style="opacity:.45;cursor:not-allowed"') + '><i class="fas fa-cloud-arrow-up mr-1"></i>為 ' + mapped.length + ' 位學生存到伺服器 / 更新</button>' +
+      '<button type="button" data-act="cl-srvstat" class="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold border border-slate-300"><i class="fas fa-rotate mr-1"></i>看伺服器上有哪些</button>' +
+      '<button type="button" data-act="cl-srvclear" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-bold border border-rose-200"><i class="fas fa-trash mr-1"></i>清除伺服器上所有學生資料</button></div>' +
+      '<div class="text-xs mt-2 min-h-[1.25rem] font-bold ' + (V.bad ? 'text-rose-600' : 'text-emerald-700') + '" id="srv-msg" role="status">' + (V.busy ? '<i class="fas fa-spinner fa-spin mr-1"></i>' + esc(V.busy) : esc(V.msg || '')) + '</div>';
+    if (rows.length) h += '<div class="overflow-x-auto mt-3"><table class="w-full text-sm text-left"><thead><tr class="text-xs text-slate-500"><th class="pb-1">帳號</th><th>姓名</th><th>資料包代碼</th><th>小組</th><th>伺服器上的資料</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        var st = r.uid && ST[r.uid];
+        return '<tr class="border-t border-slate-100"><td class="py-1.5 font-bold text-slate-800">' + (r.uid ? esc(r.uid) : '<span class="text-amber-600 text-xs">(未對應帳號)</span>') + '</td><td>' + esc(r.name) + '</td><td class="text-xs text-slate-500">' + esc(r.code) + '</td><td>' + esc(r.group) + '</td><td class="text-xs ' + (st ? 'text-emerald-700' : 'text-slate-400') + '">' + (st ? '已存(' + st.records + ' 則,' + fmtDT(Date.parse(st.updated) || 0) + ')' : (V.items ? (r.uid ? '還沒有' : '') : '按「看伺服器上有哪些」查看')) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    return h + '</div>';
+  }
+  function srvSay(msg, bad) { var V = srvState(); V.busy = ''; V.msg = msg; V.bad = !!bad; draw(); }
+  function srvBusy(msg) { var V = srvState(); V.busy = msg; V.msg = ''; V.bad = false; draw(); }
+  function srvFail(r) { return r.error + (r.kind === 'noserver' ? '(請管理者先在 Vercel 設定 FIREBASE_SERVICE_ACCOUNT 與 AI_ADMIN_PASSCODE,設定後要重新部署)' : ''); }
+  function srvAction(a) {
+    var V = srvState(), S = global.KBSrcCloud;
+    if (V.busy) return;
+    if (!UI.adm) { srvSay('請先填管理密碼。', true); return; }
+    if (a === 'cl-srvstat' || a === 'cl-srvput') {
+      var after = function () {
+        return S.srv.status(UI.adm).then(function (r) {
+          if (!r.ok) { srvSay(srvFail(r), true); return; }
+          V.items = {}; r.items.forEach(function (x) { V.items[x.uid] = x; });
+          return r;
+        });
+      };
+      if (a === 'cl-srvstat') { srvBusy('讀取中…'); after().then(function (r) { if (r) srvSay('伺服器上有 ' + r.items.length + ' 位學生的資料。', false); }); return; }
+      var ents = stuRows().filter(function (r) { return r.uid; }).map(function (r) { return { uid: r.uid, code: r.code }; });
+      if (!ents.length) { srvSay('還沒有學生對應到平台帳號。', true); return; }
+      srvBusy('正在存到伺服器…');
+      S.srv.put(ents, UI.adm, function (n, total) { srvBusy('正在存到伺服器…(' + n + '/' + total + ')'); }).then(function (r) {
+        if (!r.ok) { srvSay(srvFail(r), true); return; }
+        return after().then(function (st) {
+          if (st) srvSay((r.done.length ? '已為 ' + r.done.length + ' 位學生存好資料。學生下次登入平台就會自動同步。' : '') + (r.bad.length ? ' 沒有成功:' + r.bad.map(function (b) { return b.uid + '(' + b.error + ')'; }).join('、') : ''), !r.done.length);
+        });
+      });
+      return;
+    }
+    if (a === 'cl-srvclear') {
+      if (global.confirm && !global.confirm('清除伺服器上「所有」學生的學習單資料?\n(學生已經同步到自己電腦的不受影響;這台電腦的資料包也不會被刪。之後可以再按「存到伺服器」重新存。)')) return;
+      srvBusy('清除中…');
+      S.srv.clear(UI.adm).then(function (r) { if (!r.ok) { srvSay(r.error, true); return; } V.items = {}; srvSay('已清除伺服器上 ' + r.cleared + ' 位學生的資料。', false); });
+    }
   }
   function clSay(msg, bad) { var C = cl(); C.busy = ''; C.msg = msg; C.bad = !!bad; draw(); }
   function clBusy(msg) { var C = cl(); C.busy = msg; C.msg = ''; C.bad = false; draw(); }
@@ -657,7 +720,7 @@
     else if (a === 'sortcol') { var sk = el.getAttribute('data-key'); if (UI.sort === sk) UI.dir = UI.dir === 'asc' ? 'desc' : 'asc'; else { UI.sort = sk; UI.dir = sortCol(sk).d0 || 'desc'; } draw(); }
     else if (a === 'csv') { exportCSV(); }
     else if (a === 'src-export' || a === 'src-del' || a === 'src-clear' || a === 'src-threads' || a === 'src-threads-clear' || a === 'src-suggest' || a === 'src-ai') { ev.preventDefault(); srcAction(el, a); }
-    else if (a.indexOf('cl-') === 0 && a !== 'cl-pw' && a !== 'cl-pw2' && a !== 'cl-auto') { ev.preventDefault(); clAction(el, a); }
+    else if (a.indexOf('cl-') === 0 && a !== 'cl-pw' && a !== 'cl-pw2' && a !== 'cl-auto' && a !== 'cl-adm') { ev.preventDefault(); if (a.indexOf('cl-srv') === 0) srvAction(a); else clAction(el, a); }
   }
   function onChange(ev) {
     var el = ev.target, a = el.getAttribute && el.getAttribute('data-act'); if (!a) return;
@@ -682,7 +745,7 @@
   var bound = false;
   function render(root, ctx) {
     UI.root = root; UI.ctx = ctx;
-    if (!bound) { bound = true; root.addEventListener('click', onClick); root.addEventListener('change', onChange); root.addEventListener('input', function (ev) { var t = ev.target, a = t && t.getAttribute && t.getAttribute('data-act'); if (a === 'cl-pw') UI.cpw = t.value; else if (a === 'cl-pw2') UI.cpw2 = t.value; }); KBAsra.onChange(function () { if (UI.root && UI.root.offsetParent !== null) { try { draw(); } catch (e) {} } }); }
+    if (!bound) { bound = true; root.addEventListener('click', onClick); root.addEventListener('change', onChange); root.addEventListener('input', function (ev) { var t = ev.target, a = t && t.getAttribute && t.getAttribute('data-act'); if (a === 'cl-pw') UI.cpw = t.value; else if (a === 'cl-pw2') UI.cpw2 = t.value; else if (a === 'cl-adm') UI.adm = t.value; }); KBAsra.onChange(function () { if (UI.root && UI.root.offsetParent !== null) { try { draw(); } catch (e) {} } }); }
     draw();
   }
   global.KBAsraTeacher = { render: render, compute: compute, state: function () { return UI; }, _csv: exportCSV };

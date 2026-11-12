@@ -60,6 +60,17 @@
   }
   function randSalt() { var s = ''; for (var i = 0; i < 12; i++) s += Math.floor(Math.random() * 36).toString(36); return s; }
   function hashPw(pw, salt) { return sha256(salt + '|' + pw); }
+  // 學生登入時順便向伺服器換一張「憑證」(只存憑證,不存密碼),ASRA 頁用它自動同步老師存好的學習單資料。
+  // 沒有 /api(單機測試版)或伺服器沒設定時什麼都不會發生。
+  function asraToken(id, pw) {
+    try {
+      if (typeof global.fetch !== 'function' || !/^https?:$/.test(global.location.protocol) || !(global.KB && global.KB.cloud && global.KB.cloud.mode === 'cloud')) return;
+      global.fetch('/api/asra-stu', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'login', uid: id, password: pw }) })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.token) { try { global.localStorage.setItem('kb_asra_tok_' + id, JSON.stringify({ t: j.token, exp: j.exp })); } catch (x) {} } })
+        .catch(function () {});
+    } catch (x) {}
+  }
   function nowISO() { return new Date().toISOString(); }
   function uid(prefix) { return (prefix || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -249,6 +260,7 @@
       persist(['users']);
       sessionWrite({ account: u.id, role: u.role, since: Date.now(), last: Date.now() });
       audit('auth.login', u.id, '');
+      if (expect !== 'staff') asraToken(u.id, password);
       return { ok: true, user: publicUser(u), mustChange: false };   // 目前統一不強制改密碼
     },
     acceptConsent: function () {
