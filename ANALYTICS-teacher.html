@@ -571,7 +571,7 @@
                     <div id="seq-controls" class="flex flex-wrap gap-2 mb-2" role="group" aria-label="選擇要看的階段"></div>
                     <div id="seq-insight" class="text-xs text-slate-700 leading-relaxed mb-2"></div>
                     <div id="seq-network" class="w-full"></div>
-                    <p class="text-[11px] text-slate-500 leading-relaxed mt-1"><b>怎麼看:</b>圓越大,表示這一類貼文越多。<b>箭頭 A → B</b> = 有人回應了一則 A 之後,常常接著寫 B;箭頭越粗,機率越高;繞著自己的圈圈 = 接著又寫同一類。只畫出機率 15% 以上的接續。(反例併入「改進」)<br><b>想知道百分比怎麼來的?</b>把滑鼠移到線上的百分比(手機點一下),會說明「有幾則貼文在回應這一類、其中幾則是哪一類」和算式。</p>
+                    <p class="text-[11px] text-slate-500 leading-relaxed mt-1"><b>怎麼看:</b>圓越大,表示這一類貼文越多。<b>箭頭 A → B</b> = 有人回應了一則 A 之後,常常接著寫 B;箭頭越粗,機率越高;繞著自己的圈圈 = 接著又寫同一類。只畫出機率 15% 以上的接續。(紅色是「反例」;這個範圍裡還沒有反例的話,紅球照樣在,只是旁邊沒有連線。)<br><b>想知道百分比怎麼來的?</b>把滑鼠移到線上的百分比(手機點一下),會說明「有幾則貼文在回應這一類、其中幾則是哪一類」和算式。</p>
                     <details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">看數字表格(每一列加起來是 100%)</summary>
                         <div class="overflow-x-auto mt-2"><div id="sequential-matrix-container" class="min-w-[300px]"></div></div>
                         <div class="mt-2 text-xs text-slate-400 italic text-right">* 數值代表轉移機率 (%)，顏色越深機率越高。把滑鼠移到數字上可以看它是怎麼算出來的。參考 Jeong (2003)。</div>
@@ -1699,13 +1699,14 @@ async function geminiFetchRaw(key, init) {
         }
 
         // ===== 言談序列轉移:轉移網絡圖 =====
-        // 節點 = 貼文類型(反例併入改進);箭頭 A→B = 回應一則 A 之後接著寫 B 的機率(每一列加起來 100%)。
+        // 節點 = 貼文類型(提問、延伸、改進、反例、整合共五顆球;還沒有的類型球照樣在,只是沒有連線);箭頭 A→B = 回應一則 A 之後接著寫 B 的機率(每一列加起來 100%)。
         // 前/中/後期:把目前看得到的貼文依時間平分成三段,「回應」算在它自己所在的那一段。
         const SEQ_TYPES = [
-            { k: 'question', name: '提問', color: '#3b82f6', x: 70, y: 150 },
-            { k: 'extend', name: '延伸', color: '#eab308', x: 230, y: 62 },
-            { k: 'improve', name: '改進', color: '#22c55e', x: 390, y: 150 },
-            { k: 'riseabove', name: '整合', color: '#a855f7', x: 230, y: 238 }
+            { k: 'question', name: '提問', color: '#3b82f6', x: 104, y: 126 },
+            { k: 'extend', name: '延伸', color: '#eab308', x: 230, y: 66 },
+            { k: 'improve', name: '改進', color: '#22c55e', x: 356, y: 126 },
+            { k: 'counter', name: '反例', color: '#ef4444', x: 312, y: 224 },
+            { k: 'riseabove', name: '整合', color: '#a855f7', x: 148, y: 224 }
         ];
         const seqUI = { view: 'all', m: null, z: 1, px: 0, py: 0 };
         const SEQ_HOME = {}; SEQ_TYPES.forEach(t => { SEQ_HOME[t.k] = { x: t.x, y: t.y }; });
@@ -1714,7 +1715,7 @@ async function geminiFetchRaw(key, init) {
         window.__seqRig = seqRig;
         if (seqRig) { seqRig.flat = true; seqRig.zmap = { question: 0, extend: 40, improve: 70, counter: 70, riseabove: 105 }; }   // 高度 = 想法的深度:提問在盤面上,延伸、改進/不同觀點、昇華越來越高(不是隨機)
         const SEQ_TOOLS = '<div class="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500"><span>👆 拖拖看圓球!選「浮動」別的球會跟著跑,選「固定」只有你拖的那顆會動。滾輪(或兩個按鈕)放大縮小;按住空白處拖曳,可以平移或 3D 旋轉整張圖(右邊選;空白處連點兩下切換、連點三下回正)。</span><button type="button" data-seq-z="in" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" aria-label="放大">＋</button><button type="button" data-seq-z="out" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" aria-label="縮小">－</button><button type="button" data-seq-z="reset" class="px-2 py-0.5 rounded border border-slate-300 bg-white font-bold" title="圓球、旋轉角度、縮放和位置都回到最初的樣子">還原位置</button><span data-seq-mv></span><span data-seq-dm></span><button type="button" data-seq-zoom class="px-2 py-0.5 rounded-full border border-indigo-600 bg-indigo-50 text-indigo-700 font-black" title="放大視窗:整個視窗放大來看,操作和原本一樣" aria-label="放大視窗">⤢ 放大</button></div>';
-        const seqKey = t => t === 'counter' ? 'improve' : t;
+        const seqKey = t => t;   // 五種類型各自算(反例不再併入改進)
         function seqCompute(nodes) {
             const list = (nodes || []).slice().sort((a, b) => trajTs(a) - trajTs(b)), byId = {};
             list.forEach(n => { byId[n.id] = n; });
@@ -1742,14 +1743,14 @@ async function geminiFetchRaw(key, init) {
                 parts.push('同一列(接在「' + an + '」後面)的百分比加起來是 100%。');
                 if (tot < 10) parts.push('⚠ 只有 ' + tot + ' 則,樣本很少,僅供參考。');
             }
-            if (an === '改進' || bn === '改進') parts.push('「反例」併在「改進」裡一起算。');
             return seqEsc(parts.join('||'));
         }
-        const SEQ_HEIGHT_WORD = { question: '提問在盤面上(想法的起點)', extend: '延伸比提問高', improve: '改進比延伸更高', riseabove: '整合最高(想法的整理與昇華)' };
+        const SEQ_HEIGHT_WORD = { question: '提問在盤面上(想法的起點)', extend: '延伸比提問高', improve: '改進比延伸更高', counter: '反例和改進一樣高(都是在檢驗、修正想法)', riseabove: '整合最高(想法的整理與昇華)' };
         function seqBallTip(t, m, colTot) {
             const row = seqRowTotal(m, t.k), outs = SEQ_TYPES.filter(b => row && m[t.k][b.k]).map(b => ({ n: b.name, p: Math.round(m[t.k][b.k] / row * 100) })).sort((a, b) => b.p - a.p).slice(0, 3);
             const parts = [t.name + '(這一類想法)', '被當作回應的貼文:' + colTot[t.k] + ' 則(球越大,這一類貼文越多)。', '被回應的次數:有 ' + row + ' 則貼文是在回應「' + t.name + '」。'];
             if (outs.length) parts.push('回應「' + t.name + '」之後,最常接:' + outs.map(o => o.n + ' ' + o.p + '%').join('、') + '。');
+            if (!colTot[t.k]) parts.splice(1, 0, '這個範圍裡還沒有「' + t.name + '」的貼文,所以球旁邊沒有連線;出現之後線才會長出來。');
             parts.push('球的高度:' + (SEQ_HEIGHT_WORD[t.k] || '') + '。轉動可以看出高低。');
             parts.push('拖曳這顆球,其他球會慢慢跟過來。');
             return seqEsc(parts.join('||'));
@@ -1838,7 +1839,7 @@ async function geminiFetchRaw(key, init) {
                     labels += '<text' + tipA + ' x="' + mx.toFixed(1) + '" y="' + (my + 4).toFixed(1) + '" text-anchor="middle" class="seq-lb">' + Math.round(p * 100) + '%</text>';
                 }
             }));
-            const nodes = SEQ_TYPES.slice().sort((a, b) => (a.zz || 0) - (b.zz || 0)).map(t => '<g data-seqn="' + t.k + '" style="cursor:grab" data-seqtip="' + seqBallTip(t, m, colTot) + '"><circle cx="' + t.x.toFixed(1) + '" cy="' + t.y.toFixed(1) + '" r="' + t.r.toFixed(1) + '" fill="url(#seq-ball-' + t.k + ')" stroke="#fff" stroke-opacity=".9" stroke-width="2.5" filter="url(#seq-sh)"/><ellipse cx="' + (t.x - t.r * 0.27).toFixed(1) + '" cy="' + (t.y - t.r * 0.47).toFixed(1) + '" rx="' + (t.r * 0.5).toFixed(1) + '" ry="' + (t.r * 0.25).toFixed(1) + '" fill="#fff" opacity=".45" pointer-events="none" transform="rotate(-20 ' + (t.x - t.r * 0.27).toFixed(1) + ' ' + (t.y - t.r * 0.47).toFixed(1) + ')"/><ellipse cx="' + (t.x + t.r * 0.22).toFixed(1) + '" cy="' + (t.y + t.r * 0.62).toFixed(1) + '" rx="' + (t.r * 0.42).toFixed(1) + '" ry="' + (t.r * 0.13).toFixed(1) + '" fill="#fff" opacity=".16" pointer-events="none"/><text x="' + t.x.toFixed(1) + '" y="' + (t.y + 5).toFixed(1) + '" text-anchor="middle" class="seq-nm">' + t.name + '</text></g>').join('');
+            const nodes = SEQ_TYPES.slice().sort((a, b) => (a.zz || 0) - (b.zz || 0)).map(t => '<g data-seqn="' + t.k + '" style="cursor:grab"' + (colTot[t.k] ? '' : ' opacity=".6"') + ' data-seqtip="' + seqBallTip(t, m, colTot) + '"><circle cx="' + t.x.toFixed(1) + '" cy="' + t.y.toFixed(1) + '" r="' + t.r.toFixed(1) + '" fill="url(#seq-ball-' + t.k + ')" stroke="#fff" stroke-opacity=".9" stroke-width="2.5" filter="url(#seq-sh)"/><ellipse cx="' + (t.x - t.r * 0.27).toFixed(1) + '" cy="' + (t.y - t.r * 0.47).toFixed(1) + '" rx="' + (t.r * 0.5).toFixed(1) + '" ry="' + (t.r * 0.25).toFixed(1) + '" fill="#fff" opacity=".45" pointer-events="none" transform="rotate(-20 ' + (t.x - t.r * 0.27).toFixed(1) + ' ' + (t.y - t.r * 0.47).toFixed(1) + ')"/><ellipse cx="' + (t.x + t.r * 0.22).toFixed(1) + '" cy="' + (t.y + t.r * 0.62).toFixed(1) + '" rx="' + (t.r * 0.42).toFixed(1) + '" ry="' + (t.r * 0.13).toFixed(1) + '" fill="#fff" opacity=".16" pointer-events="none"/><text x="' + t.x.toFixed(1) + '" y="' + (t.y + 5).toFixed(1) + '" text-anchor="middle" class="seq-nm">' + t.name + '</text></g>').join('');
             return defs + edges + nodes + labels;
         }
         function seqSvg(m) {
@@ -1941,8 +1942,8 @@ async function geminiFetchRaw(key, init) {
         function renderSequentialMatrix(nodes) {
             const container = document.getElementById('sequential-matrix-container');
             if(container) {
-                const types = ['question', 'extend', 'improve', 'riseabove'];
-                const labels = {'question':'提問', 'extend':'延伸', 'improve':'改進', 'riseabove':'整合'};
+                const types = ['question', 'extend', 'improve', 'counter', 'riseabove'];
+                const labels = {'question':'提問', 'extend':'延伸', 'improve':'改進', 'counter':'反例', 'riseabove':'整合'};
                 const matrix = {};
 
                 types.forEach(t1 => {
@@ -1956,8 +1957,6 @@ async function geminiFetchRaw(key, init) {
                         if(parent) {
                             let t1 = parent.type;
                             let t2 = n.type;
-                            if(t1 === 'counter') t1 = 'improve';
-                            if(t2 === 'counter') t2 = 'improve';
 
                             if(matrix[t1] && matrix[t1][t2] !== undefined) {
                                 matrix[t1][t2]++;
@@ -4089,7 +4088,7 @@ async function fetchRefAIInsight(key, aiPrompt, currentVal, currentStatus, force
                 title: "言談序列轉移",
                 theory: "序列分析:看「回應某一類貼文時,同學接著常用哪一類」,找出對話的慣性。畫成網絡後,可以一眼看出哪些接續最常發生,以及前期、中期、後期的對話習慣有沒有改變。",
                 source: "Jeong, A. C. (2003). The sequential analysis of group interaction and critical thinking in online threaded discussions. <i>American Journal of Distance Education, 17</i>(1), 25–43. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1207/s15389286ajde1701_3\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Jeong, A. C. (2005). A guide to analyzing message–response sequences and group interaction patterns in computer-mediated communication. <i>Distance Education, 26</i>(3), 367–383. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1080/01587910500291470\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a><br>Allison, P. D., & Liker, J. K. (1982). Analyzing sequential categorical data on dyadic interaction: A comment on Gottman. <i>Psychological Bulletin, 91</i>(2), 393–403. <a class=\"text-indigo-600 underline\" href=\"https://doi.org/10.1037/0033-2909.91.2.393\" target=\"_blank\" rel=\"noopener noreferrer\">DOI</a>",
-                how: "節點是貼文類型(提問、延伸、改進、整合;反例併入改進)。每一則回應和它回應的那則貼文配成一對「被回應的類型 → 回應的類型」,統計每一列的百分比(每一列加起來 100%)。箭頭越粗,機率越高;繞著自己的圈圈是「接著又寫同一類」;只畫 15% 以上的接續,樣本少於 10 次的箭頭用虛線。前、中、後期是把目前看得到的貼文依時間平分成三段,回應算在它自己所在的那一段。表格仍收在「看數字表格」。",
+                how: "節點是貼文類型(提問、延伸、改進、反例、整合共五顆球;還沒有的類型球照樣在,只是沒有連線)。每一則回應和它回應的那則貼文配成一對「被回應的類型 → 回應的類型」,統計每一列的百分比(每一列加起來 100%)。箭頭越粗,機率越高;繞著自己的圈圈是「接著又寫同一類」;只畫 15% 以上的接續,樣本少於 10 次的箭頭用虛線。前、中、後期是把目前看得到的貼文依時間平分成三段,回應算在它自己所在的那一段。表格仍收在「看數字表格」。",
                 diff: "Jeong 的序列分析會用統計檢定(如 z 值)判斷哪些接續比隨機更常發生;這裡只呈現百分比,所以只能說「常見」,不能說「顯著」。類型是學生自己選的,不是人工編碼。階段是依貼文數平分,不一定對應真正的教學單元。",
                 ai_prompt: '如何打破無效的討論循環？'
             },
