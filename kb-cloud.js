@@ -7,7 +7,8 @@
  *    kb_v2/nodes__<討論區>__<序號>                     貼文,每份最多 500 則
  *    kb_v2/settings                                    { value: {...} }
  *    kb_v2/asra__<學號>                                ASRA 反思與計畫的歷史紀錄 { items: { 紀錄編號: 紀錄 } }(只增不改,見 kb-asra.js)
- *    kb_v2_media/<附件編號>                             發言附的照片/錄音(壓縮後的 data URL),看貼文時才載入(見 kb-media.js)
+ *    kb_v2_asrapack / kb_v2_asrapack_idx               ASRA 學習單資料包(老師瀏覽器先用密碼加密,雲端只有密文;見 kb-asra-cloudpack.js)
+ *    kb_v2_media/<附件編號>                            發言附的照片/錄音(壓縮後的 data URL),看貼文時才載入(見 kb-media.js)
  *    kb_v2_audit/<日期>                                稽核紀錄,依日期分文件
  *  寫入只改「有變動的那一筆」(欄位層級更新),所以兩個人同時發文不會互相蓋掉。
  *  備份檔只存在各裝置瀏覽器,不上雲端(請定期匯出完整備份)。
@@ -42,6 +43,33 @@
     return KB.ready.then(function () {
       if (!db) throw new Error('offline');
       return withTimeout(db.collection(MCOL).doc(String(id)).get(), 25000).then(function (s) { return s.exists ? s.data() : null; });
+    });
+  };
+
+  /* ---------- ASRA 學習單資料包(已在老師的瀏覽器加密,雲端只有亂碼)----------
+   *  kb_v2_asrapack/<編號>      { c: 密文(base64), iv }
+   *  kb_v2_asrapack_idx/<編號>  { n 名稱, t 時間, k 'pack'|'del', a 學生數, r 回答數, s salt, i 迭代數, sz 位元組 }
+   *  兩個集合都只能新增、不能改、不能刪;「覆蓋」與「移除」都是再新增一筆新的(以最新一筆為準)。 */
+  var PCOL = CFG.packCollection || 'kb_v2_asrapack', PIDX = PCOL + '_idx';
+  KB.cloud.packPut = function (id, dataDoc, idxDoc) {
+    return KB.ready.then(function () {
+      if (!db) throw new Error('offline');
+      var first = dataDoc ? withTimeout(db.collection(PCOL).doc(String(id)).set(dataDoc), 40000) : Promise.resolve();
+      return first.then(function () { return withTimeout(db.collection(PIDX).doc(String(id)).set(idxDoc), 25000); });
+    });
+  };
+  KB.cloud.packList = function () {
+    return KB.ready.then(function () {
+      if (!db) throw new Error('offline');
+      return withTimeout(db.collection(PIDX).get(), 25000).then(function (snap) {
+        var out = []; snap.forEach(function (d) { var o = d.data() || {}; o.id = d.id; out.push(o); }); return out;
+      });
+    });
+  };
+  KB.cloud.packGet = function (id) {
+    return KB.ready.then(function () {
+      if (!db) throw new Error('offline');
+      return withTimeout(db.collection(PCOL).doc(String(id)).get(), 40000).then(function (s) { return s.exists ? s.data() : null; });
     });
   };
 

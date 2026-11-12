@@ -3,7 +3,7 @@
  *
  *  想法可以來自:論壇貼文(原本的做法)/ 學習單(匯入的資料包)/ 學生自己新增。
  *  這支檔案負責「學習單資料包」:
- *    - 存在這台電腦的 localStorage(不上雲端、不進任何網站);
+ *    - 存在這台電腦的 localStorage(預設不上雲端;老師要換電腦用時,由 kb-asra-cloudpack.js 先加密再存雲端);
  *    - 依學生整理成「想法卡」(五種單位可選,見 UNITS);
  *    - 依三種時間方式(回到當時/回顧全部/前後對照)決定看得到哪些回答(見 MODES);
  *    - 題目對照:每一種題目已先對到 ASRA 的 Q3~Q6 / 想法材料 / 證據材料 / 無對應。
@@ -116,6 +116,12 @@
     st = { v: 2, packs: st.packs.filter(function (p) { return p.id !== id; }) };
     if (!writePacks(st)) return { ok: false, error: '這台電腦的儲存空間有問題,沒有刪成功。' };
     return { ok: true, name: info.name, students: info.students, records: info.records };
+  }
+
+  // 取出某個資料包的完整內容(給「加密存雲端」用);回傳 { id, name, added, data } 或 null
+  function packData(id) {
+    var pk = readPacks().packs.filter(function (p) { return p.id === id; })[0];
+    return pk ? { id: pk.id, name: pk.name, added: pk.added, data: JSON.parse(JSON.stringify(pk.data)) } : null;
   }
 
   /* ---------- 匯入(每次一個資料包,可以一次匯入好幾個) ---------- */
@@ -379,7 +385,7 @@
 
   global.KBSrc = {
     STAGES: STAGES, CATS: CATS, CAT_ORDER: CAT_ORDER, UNITS: UNITS, UNIT_ORDER: UNIT_ORDER, MODES: MODES, FROM: FROM,
-    load: load, clear: clear, reset: reset, importPack: importPack, listPacks: listPacks, removePack: removePack, validate: validate, exportStudent: exportStudent, setThreads: setThreads,
+    load: load, clear: clear, reset: reset, importPack: importPack, listPacks: listPacks, removePack: removePack, packData: packData, validate: validate, exportStudent: exportStudent, setThreads: setThreads,
     mapGet: mapGet, mapSet: mapSet, codeOf: codeOf, has: has, groupOf: groupOf,
     ordOf: ordOf, stageName: stageName, records: records, latestOrd: latestOrd, stagesWithData: stagesWithData,
     cards: cards, cardById: cardById, manualCards: manualCards, counts: counts, visibleCard: visibleCard,

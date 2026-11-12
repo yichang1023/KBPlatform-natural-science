@@ -45,6 +45,34 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ASRA 學習單資料包(老師的瀏覽器先用密碼加密,這裡只有密文):
+    //   kb_v2_asrapack/<編號>      { c: 密文(base64), iv }      密文上限 900000 字元(Firestore 單份文件約 1MB)
+    //   kb_v2_asrapack_idx/<編號>  { n 名稱, t 時間, k 'pack'|'del', a 學生數, r 回答數, s salt, i 迭代數, sz 大小 }
+    // 兩個都只能新增、不能改、不能刪;「覆蓋」「移除」都是再新增一筆新的。
+    // 讀取是公開的,但內容是 AES-256-GCM 密文,沒有老師的密碼看不到;名稱與人數是明文,檔名請不要放學生姓名。
+    match /kb_v2_asrapack/{pid} {
+      allow read: if true;
+      allow create: if pid.matches('k[a-z0-9_]{8,40}')
+        && request.resource.data.keys().hasOnly(['c', 'iv'])
+        && request.resource.data.c is string
+        && request.resource.data.c.size() <= 900000
+        && request.resource.data.iv is string
+        && request.resource.data.iv.size() <= 40;
+      allow update, delete: if false;
+    }
+    match /kb_v2_asrapack_idx/{pid} {
+      allow read: if true;
+      allow create: if pid.matches('k[a-z0-9_]{8,40}')
+        && request.resource.data.keys().hasOnly(['n', 't', 'k', 'a', 'r', 's', 'i', 'sz'])
+        && request.resource.data.n is string
+        && request.resource.data.n.size() <= 120
+        && request.resource.data.k in ['pack', 'del']
+        && request.resource.data.t is number
+        && request.resource.data.s is string
+        && request.resource.data.s.size() <= 40;
+      allow update, delete: if false;
+    }
+
     // 稽核紀錄:每天一份文件,只能新增與更新
     match /kb_v2_audit/{day} {
       allow read: if true;

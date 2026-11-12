@@ -459,9 +459,10 @@
     var S = K.summary(), msg = UI.srcMsg ? '<span class="text-xs font-bold ' + (UI.srcMsgBad ? 'text-rose-600' : 'text-emerald-700') + '">' + esc(UI.srcMsg) + '</span>' : '';
     var intro = '<section class="rounded-xl bg-white border border-slate-200 p-4"><h4 class="font-black text-slate-800">學習單資料(讓沒有論壇的班級也能用 ASRA)<span class="ml-2 text-xs font-bold text-slate-400">多來源想法</span></h4>' +
       '<p class="text-sm text-slate-600 mt-1">ASRA 不一定要先有論壇貼文。只要有「一個可以被反思的想法」就能進行五個步驟。想法可以來自<b>論壇</b>、<b>學習單</b>(在這裡匯入),或由<b>學生自己新增</b>。</p>' +
-      '<ul class="text-xs text-slate-500 mt-2 list-disc pl-5 space-y-0.5"><li>資料包只存在<b>這台電腦的瀏覽器</b>,不會上傳到雲端或任何網站。學生要在自己的電腦用,請匯出「個別學生資料包」,再讓學生在 ASRA 頁自己匯入。</li><li>資料包由 <code>build_asra_pack.py</code> 從研究資料 Excel 轉出,內容只有:學生原話、題目、各階段自評平均、各循環前後測平均。<b>不含</b>質性主題編碼、教師觀察與反思。</li><li>歷史原話只當「反思的材料」給學生看,不會自動變成學生現在的想法;學生寫下的反思會另外存成新的紀錄,並標明用的是哪一種時間方式。</li></ul>' +
-      '<div class="flex flex-wrap items-center gap-3 mt-3"><label class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold cursor-pointer"><i class="fas fa-file-import mr-1"></i>匯入資料包(.json,可一次選好幾個)<input type="file" accept=".json,application/json" multiple data-act="src-file" class="hidden"></label>' + msg + '</div></section>';
-    if (!S) return intro;
+      '<ul class="text-xs text-slate-500 mt-2 list-disc pl-5 space-y-0.5"><li>資料包預設只存在<b>這台電腦的瀏覽器</b>。要換電腦用,請用下面的「雲端同步(加密)」:先在你的瀏覽器用密碼加密才上傳,雲端只有看不懂的亂碼。學生要在自己的電腦用,請匯出「個別學生資料包」,再讓學生在 ASRA 頁自己匯入。</li><li>資料包由 <code>build_asra_pack.py</code> 從研究資料 Excel 轉出,內容只有:學生原話、題目、各階段自評平均、各循環前後測平均。<b>不含</b>質性主題編碼、教師觀察與反思。</li><li>歷史原話只當「反思的材料」給學生看,不會自動變成學生現在的想法;學生寫下的反思會另外存成新的紀錄,並標明用的是哪一種時間方式。</li></ul>' +
+      '<div class="flex flex-wrap items-center gap-3 mt-3"><label class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold cursor-pointer"><i class="fas fa-file-import mr-1"></i>匯入資料包(.json,可一次選好幾個)<input type="file" accept=".json,application/json" multiple data-act="src-file" class="hidden"></label>' + autoUpBox() + msg + '</div></section>' + cloudSection(global.KBSrc);
+    if (!S) { cloudLoad(false); return intro; }
+    cloudLoad(false);
     var cmax = Math.max.apply(null, K.CAT_ORDER.map(function (k) { return S.cat[k] || 0; }).concat([1]));
     var cats = K.CAT_ORDER.map(function (k) { return bar(K.CATS[k].name.replace(/^Q\d /, ''), S.cat[k] || 0, cmax, K.CATS[k].color, ' 筆'); }).join('');
     var users = D.rows.map(function (r) { return r.u; });
@@ -513,6 +514,86 @@
     else if (a === 'src-suggest') { var lines = []; K.groupsInPack().forEach(function (g) { K.autoThreads(g, 4).forEach(function (t) { lines.push(g + '|' + t.title + '|' + t.kw.join(',')); }); }); UI.thrDraft = lines.join('\n'); UI.thrMsg = lines.length ? '已把 ' + lines.length + ' 條建議填進下面,請檢查、修改後按「儲存想法線」。' : '資料不夠,系統沒有找到建議。'; UI.thrBad = !lines.length; draw(); }
     else if (a === 'src-ai') { aiThreads(); }
   }
+  /* ---------- 雲端同步(加密):資料包先在這個瀏覽器用密碼加密,雲端只有亂碼 ---------- */
+  function cloudOn() { var K = global.KB; return !!(K && K.cloud && K.cloud.mode === 'cloud' && global.KBSrcCloud); }
+  function cl() { return UI.cloud || (UI.cloud = { list: null, loading: false, busy: '', msg: '', bad: false, err: '' }); }
+  function cloudLoad(force) {
+    if (!cloudOn()) return; var C = cl(); if (C.loading || (C.list && !force)) return;
+    C.loading = true;
+    global.KBSrcCloud.list().then(function (l) { C.list = l; C.err = ''; }, function (x) { C.err = String(x && (x.code || x.message) || x).slice(0, 100); if (!C.list) C.list = []; }).then(function () { C.loading = false; draw(); });
+  }
+  function autoUpBox() {
+    if (!cloudOn()) return '';
+    return '<label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer"><input type="checkbox" data-act="cl-auto"' + (UI.autoUp ? ' checked' : '') + '> 匯入後順便加密存雲端(要先在下面「雲端同步」填好密碼)</label>';
+  }
+  function cloudSection(K) {
+    var head = '<section class="rounded-xl bg-white border border-emerald-200 p-4 mt-4" id="asra-cloudpack"><h4 class="font-black text-slate-800"><i class="fas fa-cloud mr-1 text-emerald-600"></i>雲端同步(加密)<span class="ml-2 text-xs font-bold text-slate-400">換電腦也能用同一批資料包</span></h4>';
+    if (!cloudOn()) return head + '<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2"><i class="fas fa-triangle-exclamation mr-1"></i>目前是單機模式(沒有連上雲端),資料包只能存在這台電腦。正式上線並連上雲端後,這裡可以把資料包加密存到雲端。</p></section>';
+    var av = global.KBSrcCloud.available(); if (!av.ok) return head + '<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">' + esc(av.why) + '</p></section>';
+    var C = cl(), L = C.list, local = K.listPacks(), first = L && !L.length;
+    var names = {}; local.forEach(function (p) { names[p.name] = p; });
+    var h = head + '<ul class="text-xs text-slate-500 mt-2 list-disc pl-5 space-y-0.5"><li>資料包是學生的原話,所以<b>先在你的瀏覽器用密碼加密</b>才上傳。雲端上只有看不懂的亂碼;沒有密碼,任何人(包含管理這個平台的人)都看不到內容。</li><li>在另一台電腦打開這一頁,輸入同一組密碼,按「載入到這台電腦」就能用。</li><li><b>密碼忘了就解不開,而且沒有任何辦法救回</b>,請自己記好。密碼不會存在雲端、也不會存在瀏覽器。</li><li>同一個名稱再存一次,會變成最新的一版(舊版不會被改掉);「從雲端移除」是把它從清單藏起來。</li></ul>';
+    h += '<div class="flex flex-wrap items-end gap-3 mt-3"><label class="text-xs font-bold text-slate-600">密碼(至少 ' + global.KBSrcCloud.MIN_PW + ' 個字)<br><input type="password" data-act="cl-pw" autocomplete="new-password" value="' + esc(UI.cpw || '') + '" class="mt-0.5 w-48 border border-slate-300 rounded-lg px-2 py-1 text-sm font-normal"></label>' +
+      (first ? '<label class="text-xs font-bold text-slate-600">再輸入一次<br><input type="password" data-act="cl-pw2" autocomplete="new-password" value="' + esc(UI.cpw2 || '') + '" class="mt-0.5 w-48 border border-slate-300 rounded-lg px-2 py-1 text-sm font-normal"></label>' : '') +
+      '<button type="button" data-act="cl-upall" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold"' + (local.length ? '' : ' disabled style="opacity:.45;cursor:not-allowed"') + '><i class="fas fa-cloud-arrow-up mr-1"></i>這台電腦的資料包,全部加密存雲端</button>' +
+      '<button type="button" data-act="cl-refresh" class="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-600 text-sm font-bold border border-slate-300"><i class="fas fa-rotate mr-1"></i>重新整理雲端清單</button></div>';
+    h += '<div class="text-xs mt-2 min-h-[1.25rem] ' + (C.bad ? 'text-rose-600' : 'text-emerald-700') + ' font-bold" id="cl-msg" role="status">' + (C.busy ? '<i class="fas fa-spinner fa-spin mr-1"></i>' + esc(C.busy) : esc(C.msg || '')) + '</div>';
+    if (C.err) h += '<p class="text-xs text-rose-600 mt-1">讀不到雲端清單(' + esc(C.err) + ')。如果是「permission-denied」,表示雲端規則還沒開通資料包區,請先到 Firebase 發布新規則。</p>';
+    if (!L) h += '<p class="text-xs text-slate-400 mt-2"><i class="fas fa-spinner fa-spin mr-1"></i>正在讀雲端清單…</p>';
+    else if (!L.length) h += '<p class="text-xs text-slate-500 mt-2">雲端上還沒有資料包。在這台電腦匯入資料包後,按上面「全部加密存雲端」;第一次存的密碼就是之後要用的密碼。</p>';
+    else h += '<div class="overflow-x-auto mt-3"><table class="w-full text-sm text-left"><thead><tr class="text-xs text-slate-500"><th class="pb-1">雲端上的資料包</th><th>學生</th><th>回答</th><th>存到雲端的時間</th><th>這台電腦</th><th></th></tr></thead><tbody>' +
+      L.map(function (r) {
+        var lp = names[r.name];
+        return '<tr class="border-t border-slate-100"><td class="py-1.5 font-bold text-slate-800">' + esc(r.name) + '</td><td>' + r.students + ' 位</td><td>' + r.records + ' 則</td><td class="text-xs text-slate-500">' + fmtDT(r.t) + '</td><td class="text-xs ' + (lp ? 'text-emerald-700' : 'text-slate-400') + '">' + (lp ? '已有同名(載入會更新它)' : '還沒有') + '</td><td class="text-xs whitespace-nowrap"><button type="button" data-act="cl-down" data-id="' + esc(r.id) + '" class="text-indigo-600 font-bold underline mr-3">載入到這台電腦</button><button type="button" data-act="cl-rm" data-name="' + esc(r.name) + '" class="text-rose-600 font-bold underline">從雲端移除</button></td></tr>';
+      }).join('') + '</tbody></table></div><div class="mt-2"><button type="button" data-act="cl-downall" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold"><i class="fas fa-cloud-arrow-down mr-1"></i>雲端上的資料包,全部載入到這台電腦</button></div>';
+    return h + '</section>';
+  }
+  function clSay(msg, bad) { var C = cl(); C.busy = ''; C.msg = msg; C.bad = !!bad; draw(); }
+  function clBusy(msg) { var C = cl(); C.busy = msg; C.msg = ''; C.bad = false; draw(); }
+  function clPwOk() {
+    var C = cl(), S = global.KBSrcCloud, p = S.pwProblem(UI.cpw); if (p) { clSay(p, true); return false; }
+    if (C.list && !C.list.length && UI.cpw !== UI.cpw2) { clSay('兩次輸入的密碼不一樣。', true); return false; }
+    return true;
+  }
+  function clUploadIds(ids) {
+    var S = global.KBSrcCloud, K = global.KBSrc, C = cl(), done = [], bad = [];
+    return S.checkPassword(UI.cpw, C.list).then(function (ck) {
+      if (!ck.ok) { clSay(ck.error, true); return null; }
+      return ids.reduce(function (p, id) {
+        return p.then(function () { var nm = (K.listPacks().filter(function (x) { return x.id === id; })[0] || {}).name || '資料包'; clBusy('正在加密並上傳「' + nm + '」…'); return S.upload(id, UI.cpw, { checked: true }).then(function (r) { if (r.ok) done.push(r); else bad.push({ name: nm, error: r.error }); }); });
+      }, Promise.resolve()).then(function () {
+        var msg = (done.length ? '已加密存到雲端:' + done.map(function (r) { return r.name; }).join('、') + '。' : '') + (bad.length ? '沒有存成功:' + bad.map(function (r) { return r.name + '(' + r.error + ')'; }).join(';') : '');
+        C.list = null; C.busy = ''; C.msg = msg; C.bad = !done.length && !!bad.length; cloudLoad(true); draw(); return { done: done, bad: bad };
+      });
+    });
+  }
+  function clAction(el, a) {
+    var C = cl(), S = global.KBSrcCloud, K = global.KBSrc;
+    if (C.busy) return;
+    if (a === 'cl-refresh') { C.list = null; C.msg = ''; cloudLoad(true); draw(); return; }
+    if (a === 'cl-up' || a === 'cl-upall') {
+      if (!clPwOk()) return;
+      var ids = a === 'cl-up' ? [el.getAttribute('data-id')] : K.listPacks().map(function (p) { return p.id; });
+      if (!ids.length) { clSay('這台電腦還沒有資料包。', true); return; }
+      clBusy('檢查密碼…'); clUploadIds(ids); return;
+    }
+    if (a === 'cl-down' || a === 'cl-downall') {
+      var p0 = S.pwProblem(UI.cpw); if (p0) { clSay(p0, true); return; }
+      var items = (C.list || []).filter(function (r) { return a === 'cl-downall' || r.id === el.getAttribute('data-id'); });
+      if (!items.length) return;
+      var ok = [], bad = [];
+      items.reduce(function (p, it) { return p.then(function () { clBusy('正在下載並解開「' + it.name + '」…'); return S.download(it, UI.cpw).then(function (r) { if (r.ok) ok.push(r); else bad.push({ name: it.name, error: r.error }); }); }); }, Promise.resolve()).then(function () {
+        UI.srcMsg = ok.length ? '已從雲端載入 ' + ok.length + ' 個資料包:' + ok.map(function (r) { return r.name + (r.replaced ? '(更新)' : '') + ':' + r.students + ' 位、' + r.records + ' 則'; }).join(';') : ''; UI.srcMsgBad = false;
+        clSay((ok.length ? '載入完成,資料已放進這台電腦。' : '') + (bad.length ? (ok.length ? ' ' : '') + '沒有載入:' + bad.map(function (r) { return r.name + '(' + r.error + ')'; }).join(';') : ''), !ok.length);
+      });
+      return;
+    }
+    if (a === 'cl-rm') {
+      var nm = el.getAttribute('data-name');
+      if (global.confirm && !global.confirm('把「' + nm + '」從雲端清單移除?\n(只是從清單藏起來;這台電腦和其他電腦已經載入的不受影響。)')) return;
+      clBusy('移除中…'); S.remove(nm).then(function (r) { C.list = null; if (r.ok) { C.busy = ''; C.msg = '已從雲端移除「' + nm + '」。'; C.bad = false; cloudLoad(true); draw(); } else clSay(r.error, true); });
+    }
+  }
   function fmtDT(ts) { var d = new Date(ts || 0); return d.getFullYear() + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + ('0' + d.getDate()).slice(-2) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
   // 已匯入的資料包:系統把它們「合在一起」使用;刪除時可以自己選要刪哪一個
   function packsSection(K) {
@@ -520,7 +601,7 @@
     return '<section class="rounded-xl bg-white border border-slate-200 p-4 mt-4"><h4 class="font-black text-slate-800">已匯入的資料包<span class="ml-2 text-xs font-bold text-slate-400">共 ' + list.length + ' 個,系統會合在一起使用</span></h4>' +
       '<p class="text-xs text-slate-500 mt-1 mb-2">同一位學生出現在好幾個資料包時,回答會合併(來源碼相同的,以較晚匯入的為準)。刪除其中一個,只會移除那個資料包提供的資料,其他資料包不受影響。重新匯入同名的檔案,會更新那個資料包。</p>' +
       '<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead><tr class="text-xs text-slate-500"><th class="pb-1">資料包</th><th>學生</th><th>回答</th><th>匯入時間</th><th></th></tr></thead><tbody>' +
-      list.map(function (p) { return '<tr class="border-t border-slate-100"><td class="py-1.5 font-bold text-slate-800">' + esc(p.name) + '</td><td>' + p.students + ' 位</td><td>' + p.records + ' 則</td><td class="text-xs text-slate-500">' + fmtDT(p.added) + '</td><td class="text-xs"><button type="button" data-act="src-del" data-id="' + esc(p.id) + '" class="text-rose-600 font-bold underline">刪除這個資料包</button></td></tr>'; }).join('') + '</tbody></table></div></section>';
+      list.map(function (p) { return '<tr class="border-t border-slate-100"><td class="py-1.5 font-bold text-slate-800">' + esc(p.name) + '</td><td>' + p.students + ' 位</td><td>' + p.records + ' 則</td><td class="text-xs text-slate-500">' + fmtDT(p.added) + '</td><td class="text-xs whitespace-nowrap">' + (cloudOn() ? '<button type="button" data-act="cl-up" data-id="' + esc(p.id) + '" class="text-emerald-700 font-bold underline mr-3">加密存雲端</button>' : '') + '<button type="button" data-act="src-del" data-id="' + esc(p.id) + '" class="text-rose-600 font-bold underline">刪除這個資料包</button></td></tr>'; }).join('') + '</tbody></table></div></section>';
   }
   // 一次可以選好幾個檔案;每個檔案是一個資料包(檔名當名稱)
   function srcFile(el) {
@@ -543,6 +624,10 @@
       UI.srcMsg = (good.length ? '匯入完成:' + good.length + ' 個資料包 — ' + good.map(function (r) { return r.name + (r.replaced ? '(更新)' : '') + ':' + r.students + ' 位、' + r.records + ' 則'; }).join(';') : '') + (bad.length ? (good.length ? '。' : '') + '沒有匯入:' + bad.map(function (r) { return (r.fileName || r.name) + '(' + r.error + ')'; }).join(';') : '');
       try { el.value = ''; } catch (e) {}
       draw();
+      if (UI.autoUp && cloudOn() && good.length) {
+        if (!clPwOk()) return;
+        clBusy('檢查密碼…'); clUploadIds(good.map(function (r) { return r.id; }));
+      }
     });
   }
 
@@ -572,10 +657,12 @@
     else if (a === 'sortcol') { var sk = el.getAttribute('data-key'); if (UI.sort === sk) UI.dir = UI.dir === 'asc' ? 'desc' : 'asc'; else { UI.sort = sk; UI.dir = sortCol(sk).d0 || 'desc'; } draw(); }
     else if (a === 'csv') { exportCSV(); }
     else if (a === 'src-export' || a === 'src-del' || a === 'src-clear' || a === 'src-threads' || a === 'src-threads-clear' || a === 'src-suggest' || a === 'src-ai') { ev.preventDefault(); srcAction(el, a); }
+    else if (a.indexOf('cl-') === 0 && a !== 'cl-pw' && a !== 'cl-pw2' && a !== 'cl-auto') { ev.preventDefault(); clAction(el, a); }
   }
   function onChange(ev) {
     var el = ev.target, a = el.getAttribute && el.getAttribute('data-act'); if (!a) return;
     if (a === 'src-file') { srcFile(el); return; }
+    if (a === 'cl-auto') { UI.autoUp = !!el.checked; return; }
     if (a === 'src-map') { var K = global.KBSrc, code = el.getAttribute('data-code'), mp = K.mapGet(); Object.keys(mp).forEach(function (u) { if (mp[u] === code) K.mapSet(u, null); }); if (el.value) K.mapSet(el.value, code); draw(); return; }
     if (a === 'stu') { UI.stu = el.value; UI.limit = 40; draw(); } else if (a === 'kind') { UI.kind = el.value; UI.limit = 40; draw(); } else if (a === 'sort') { UI.sort = el.value; UI.dir = sortCol(el.value).d0 || 'desc'; draw(); } else if (a === 'eff') { UI.eff = el.value; draw(); }
   }
@@ -595,7 +682,7 @@
   var bound = false;
   function render(root, ctx) {
     UI.root = root; UI.ctx = ctx;
-    if (!bound) { bound = true; root.addEventListener('click', onClick); root.addEventListener('change', onChange); KBAsra.onChange(function () { if (UI.root && UI.root.offsetParent !== null) { try { draw(); } catch (e) {} } }); }
+    if (!bound) { bound = true; root.addEventListener('click', onClick); root.addEventListener('change', onChange); root.addEventListener('input', function (ev) { var t = ev.target, a = t && t.getAttribute && t.getAttribute('data-act'); if (a === 'cl-pw') UI.cpw = t.value; else if (a === 'cl-pw2') UI.cpw2 = t.value; }); KBAsra.onChange(function () { if (UI.root && UI.root.offsetParent !== null) { try { draw(); } catch (e) {} } }); }
     draw();
   }
   global.KBAsraTeacher = { render: render, compute: compute, state: function () { return UI; }, _csv: exportCSV };
