@@ -68,6 +68,18 @@
       '.kf-lock{font-size:12.5px;color:#9a8790;margin-top:4px}',
       '.kf-now-tag{font-size:11px;font-weight:800;color:#be185d;background:#fde2ec;border-radius:99px;padding:1px 8px}',
       '@media (max-width:640px){.kf-log{max-height:440px}}',
+      '.kf-b.kf-pick>circle:first-child{stroke:#db2777;stroke-width:1.8;stroke-opacity:.95}',
+      '.kf-pop{background:#fff;border:1px solid #f3a6c3;border-radius:14px;box-shadow:0 16px 40px -14px rgba(190,24,93,.55);color:#3f2a35;z-index:20;overflow:hidden;display:flex;flex-direction:column;font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}',
+      '.kf-pop-side{position:absolute;left:8px;right:8px;top:8px;max-height:calc(100% - 16px)}',
+      '.kf-pop-fix{position:fixed;right:12px;bottom:12px;width:min(380px,calc(100vw - 24px));max-height:72vh;z-index:10060}',
+      '.kf-ph{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;background:#fff1f6;border-bottom:1px solid #fbd5e3}.kf-ph .kf-pt{flex:1;font-size:14px;font-weight:800;color:#9d174d;line-height:1.45;word-break:break-word}.kf-ph .kf-pd{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:1px solid rgba(0,0,0,.1)}',
+      '.kf-px{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid #f3a6c3;background:#fff;color:#9d174d;font-size:16px;font-weight:800;line-height:1;cursor:pointer}.kf-px:hover{background:#fde2ec}',
+      '.kf-pb{padding:10px 12px 12px;overflow-y:auto;font-size:13px;line-height:1.65}',
+      '.kf-pr{display:flex;gap:8px;margin:2px 0}.kf-pr>span:first-child{flex:none;min-width:48px;color:#8b6477;font-weight:700}.kf-pr>span:last-child{min-width:0;word-break:break-word}',
+      '.kf-ps{margin-top:10px;padding-top:8px;border-top:1px dashed #f3c4d6;font-weight:800;color:#9d174d;font-size:13px}',
+      '.kf-pl{margin:4px 0 0;padding:0;list-style:none}.kf-pl li{font-size:13px;line-height:1.65;padding-left:2px;word-break:break-word}.kf-pl li+li{margin-top:2px}',
+      '.kf-pa{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.kf-pbtn{border:1px solid #f3a6c3;background:#fff;color:#9d174d;font-weight:800;font-size:12.5px;border-radius:99px;padding:6px 12px;cursor:pointer}.kf-pbtn:hover{background:#fde2ec}',
+      '.kf-ent.kf-flash{animation:kf-flash 1.8s ease}@keyframes kf-flash{0%,100%{box-shadow:0 0 0 0 rgba(236,72,153,0)}25%,60%{box-shadow:0 0 0 5px rgba(236,72,153,.5)}}',
       '.kf-tip{position:fixed;z-index:10050;pointer-events:none;background:rgba(15,23,42,.92);color:#fff;border-radius:10px;padding:8px 10px;font-size:11px;line-height:1.55;max-width:240px;box-shadow:0 12px 30px -10px rgba(0,0,0,.6);display:none}',
       '.kf-legend{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:10px;color:#7c5a69;margin-top:8px}',
       '.kf-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:3px;vertical-align:-1px;border:1px solid rgba(0,0,0,.08)}'
@@ -318,13 +330,19 @@
           tip.style.display = 'block'; tip.style.left = Math.min(e.clientX + 14, global.innerWidth - 250) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
         });
         d.svg.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+        d.svg.addEventListener('click', function (e) {   // 點一朵花:右邊跳出這朵花的日期與說明
+          var g = e.target.closest ? e.target.closest('.kf-b') : null;
+          if (!g || !g.classList.contains('on')) return;
+          openPetal(t, g.getAttribute('data-id'), g);
+        });
       });
 
       var legend = doc.createElement('div'); legend.className = 'kf-legend';
-      legend.innerHTML = ['question', 'extend', 'improve', 'counter', 'riseabove'].map(function (k) { return '<span><i class="kf-dot" style="background:' + PALETTE[k][0] + '"></i>' + TYPE_TXT[k] + (k === 'riseabove' ? '(白櫻、金色花心)' : '') + '</span>'; }).join('') + (opts.youId ? '<span><i class="kf-dot" style="background:#fff;border:1.5px dashed #f59e0b"></i>金色虛線圈 = 你的想法</span>' : '') + '<span style="margin-left:auto">一則貼文 = 一簇花(三朵);分岔越多,樹冠越茂密;滑鼠移到花上可以看內容</span>';
+      legend.innerHTML = ['question', 'extend', 'improve', 'counter', 'riseabove'].map(function (k) { return '<span><i class="kf-dot" style="background:' + PALETTE[k][0] + '"></i>' + TYPE_TXT[k] + (k === 'riseabove' ? '(白櫻、金色花心)' : '') + '</span>'; }).join('') + (opts.youId ? '<span><i class="kf-dot" style="background:#fff;border:1.5px dashed #f59e0b"></i>金色虛線圈 = 你的想法</span>' : '') + '<span style="font-weight:700;color:#be185d">👆 點任何一朵花,就會跳出它的日期與說明(按 ✕ 或 Esc 關閉)</span>' + '<span style="margin-left:auto">一則貼文 = 一簇花(三朵);分岔越多,樹冠越茂密;滑鼠移到花上可以看內容</span>';
       container.appendChild(legend);
 
       function setStepValue(sv) {
+        lastSv = sv;
         trees.forEach(function (t) {
           var lay = t.lay, d = t.d, visCount = {}, total = lay.total, vis = 0;
           t.order.forEach(function (id) { var inf = lay.info[id], on = stepOf[id] <= sv; visCount[id] = (visCount[id] || 0) + (on ? 1 : 0); if (on) vis++; if (inf.parent) visCount[inf.parent] = (visCount[inf.parent] || 0) + visCount[id]; });
@@ -470,9 +488,75 @@
           }
         };
       }
+      /* ========== 點一朵花:跳出這朵花的日期與說明(按 ✕ 或 Esc 關閉) ========== */
+      var pop = null, popFor = null, lastSv = Infinity;
+      function fmtTime(ms) {
+        var d = new Date(ms), p2 = function (x) { return (x < 10 ? '0' : '') + x; };
+        return d.getFullYear() + '/' + p2(d.getMonth() + 1) + '/' + p2(d.getDate()) + ((d.getHours() || d.getMinutes()) ? ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) : '');
+      }
+      function mk(tag, cls, txt) { var e = doc.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+      function row(k, v) { var r = mk('div', 'kf-pr'); r.appendChild(mk('span', '', k)); var s2 = mk('span'); if (v && v.nodeType) s2.appendChild(v); else s2.textContent = v; r.appendChild(s2); return r; }
+      function closePetal() {
+        if (popFor && popFor.g) popFor.g.classList.remove('kf-pick');
+        if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+        pop = null; popFor = null; doc.removeEventListener('keydown', onPetalKey, true);
+      }
+      function onPetalKey(e) { if (pop && (e.key === 'Escape' || e.key === 'Esc')) { closePetal(); if (e.stopPropagation) e.stopPropagation(); } }
+      function placePop() {
+        var lg = opts.logEl, side = false;
+        if (lg && popFor) { var a = lg.getBoundingClientRect(), c = popFor.t.card.getBoundingClientRect(); side = a.width > 180 && a.left >= c.right - 6; }   // 說明欄在樹的右邊:蓋在說明欄上;手機(上下排)就從畫面下方跳出
+        var parent = side ? lg : doc.body; pop.className = 'kf-pop ' + (side ? 'kf-pop-side' : 'kf-pop-fix');
+        if (pop.parentNode !== parent) parent.appendChild(pop);
+      }
+      function focusLog(dIdx) {
+        if (typeof entries === 'undefined' || !entries || typeof lb === 'undefined') return;
+        var e = entries.filter(function (x) { return x.d === dIdx; })[0]; if (!e || !e.el) return;
+        userAt = Date.now(); if (tw) { clearInterval(tw); tw = null; }
+        var a = e.el.getBoundingClientRect(), b = lb.getBoundingClientRect(); lb.scrollTop = Math.max(0, lb.scrollTop + (a.top - b.top) - 10);
+        e.el.classList.remove('kf-flash'); void e.el.offsetWidth; e.el.classList.add('kf-flash'); setTimeout(function () { e.el.classList.remove('kf-flash'); }, 1900);
+        if (e.el.scrollIntoView) { try { var r = lb.getBoundingClientRect(); if (r.bottom < 0 || r.top > global.innerHeight) e.el.scrollIntoView({ block: 'center' }); } catch (e2) {} }
+      }
+      function fillPop() {
+        if (!pop || !popFor) return;
+        var t = popFor.t, lay = t.lay, id = popFor.id, inf = lay.info[id], n = inf.n, dIdx = dayOf[id], col = (PALETTE[n.type] || PALETTE.extend)[0];
+        pop.innerHTML = '';
+        var head = mk('div', 'kf-ph'), tt = mk('div', 'kf-pt'), dot = mk('i', 'kf-pd'); dot.style.background = col; tt.appendChild(dot); tt.appendChild(doc.createTextNode(n.title || '(無標題)'));
+        var x = mk('button', 'kf-px', '✕'); x.type = 'button'; x.setAttribute('aria-label', '關閉這個訊息(也可以按 Esc)'); x.title = '關閉(Esc)'; x.addEventListener('click', closePetal);
+        head.appendChild(tt); head.appendChild(x); pop.appendChild(head);
+        var body = mk('div', 'kf-pb');
+        body.appendChild(row('日期', fmtTime(n.date)));
+        body.appendChild(row('發言', who(n) + ' · ' + (TYPE_TXT[n.type] || n.type)));
+        var par = inf.parent ? lay.info[inf.parent] : null;
+        body.appendChild(row('來歷', par ? '回應了 ' + who(par.n) + ' 的「' + (par.n.title || '(無標題)') + '」(' + (TYPE_TXT[par.n.type] || par.n.type) + ')' : '🌰 這棵樹的第一個念頭(種子)'));
+        var kids = inf.kids.filter(function (k) { return stepOf[k.id] <= lastSv; }).sort(function (a, b) { return a.date - b.date; });
+        body.appendChild(row('回應', kids.length ? '引來 ' + kids.length + ' 則回應' : '目前還沒有人回應'));
+        if (kids.length) { var kl = mk('ul', 'kf-pl'); kids.slice(0, 6).forEach(function (k) { kl.appendChild(mk('li', '', '・' + who(k) + ' · ' + (TYPE_TXT[k.type] || k.type) + ' · ' + fmtTime(k.date).replace(/^\d{4}\//, '') + '「' + (k.title || '(無標題)') + '」')); }); if (kids.length > 6) kl.appendChild(mk('li', '', '…還有 ' + (kids.length - 6) + ' 則')); body.appendChild(kl); }
+        var tDays = t.nodes.map(function (m) { return dayOf[m.id]; }), firstD = Math.min.apply(null, tDays), lastD = Math.max.apply(null, tDays);
+        var sv = Math.min(lastSv, END(dIdx)), g = digest(t, dIdx, sv);
+        var lines = treeLines(g, dIdx === firstD, dIdx === lastD && sv >= END(dIdx) - 1e-6 && g.after === g.total);
+        body.appendChild(mk('div', 'kf-ps', '📖 ' + (days.labels[dIdx] || '這一天') + ' 的歷程演進說明'));
+        var ul = mk('ul', 'kf-pl'); lines.forEach(function (ln) { ul.appendChild(mk('li', '', ln)); }); body.appendChild(ul);
+        var act = mk('div', 'kf-pa');
+        if (global.KBUI && global.KBUI.postViewer && global.KBUI.postViewer.open) { var b1 = mk('button', 'kf-pbtn', '📄 看原文'); b1.type = 'button'; b1.addEventListener('click', function () { try { (opts.onOpenPost || function (pid) { global.KBUI.postViewer.open(pid, {}); })(id); } catch (e) {} }); act.appendChild(b1); }
+        if (typeof entries !== 'undefined' && entries && entries.some(function (e) { return e.d === dIdx; })) { var b2 = mk('button', 'kf-pbtn', '📍 在說明欄找到這一天'); b2.type = 'button'; b2.addEventListener('click', function () { closePetal(); focusLog(dIdx); }); act.appendChild(b2); }
+        if (act.firstChild) body.appendChild(act);
+        pop.appendChild(body);
+      }
+      function openPetal(t, id, g) {
+        if (pop && popFor && popFor.id === id && popFor.t === t) { closePetal(); return; }   // 再點同一朵 = 收起來
+        if (popFor && popFor.g) popFor.g.classList.remove('kf-pick');
+        popFor = { t: t, id: id, g: g }; g.classList.add('kf-pick');
+        if (!pop) { pop = mk('div', 'kf-pop'); pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', '這朵花的日期與說明'); doc.addEventListener('keydown', onPetalKey, true); }
+        placePop(); fillPop();
+      }
+      function refreshPop() {
+        if (!pop || !popFor) return;
+        if (!popFor.g.classList.contains('on')) { closePetal(); return; }   // 時間倒回去、這朵花還沒長出來:收起
+        fillPop();
+      }
       var ctl = {
         labels: days.stepLabels, steps: days.steps, trees: trees, log: logApi,
-        setStep: function (i) { var j = Math.max(0, Math.min(days.steps.length - 1, i)); setStepValue(days.steps[j]); if (logApi) logApi.update(j); },
+        setStep: function (i) { var j = Math.max(0, Math.min(days.steps.length - 1, i)); setStepValue(days.steps[j]); if (logApi) logApi.update(j); refreshPop(); },
         valuesAt: function (i, scrub) {
           var sv = days.steps[Math.max(0, Math.min(days.steps.length - 1, i))];
           return trees.map(function (t) {
@@ -493,7 +577,9 @@
           }
           return rows.join(String.fromCharCode(10));
         },
-        destroy: function () { try { tip.remove(); } catch (e) {} forests.delete(container); }
+        destroy: function () { try { closePetal(); } catch (e) {} try { tip.remove(); } catch (e) {} forests.delete(container); },
+        openPetal: function (id) { var tt = null, gg = null; trees.forEach(function (t) { if (t.lay.info[id] && t.d.blooms[id]) { tt = t; gg = t.d.blooms[id]; } }); if (tt) openPetal(tt, id, gg); },
+        closePetal: function () { closePetal(); }
       };
       forests.set(container, ctl);
       ctl.setStep(days.steps.length - 1);   // 預設顯示完整盛開的樣子
