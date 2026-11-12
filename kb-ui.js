@@ -259,9 +259,9 @@
    *  按鈕裡面的小按鈕(例如編輯、刪除)不受影響。 */
   function wantsNewTab(e) { return !!(e && (e.ctrlKey || e.metaKey || e.button === 1)); }
   function openTab(href) {
-    var w = null;
-    try { w = global.open(href, '_blank', 'noopener'); } catch (err) { w = null; }
-    if (!w) { try { global.open(href, '_blank'); } catch (err2) {} }
+    // 注意:加了 noopener 之後 window.open 一律回傳 null(不代表被擋掉),所以不能用回傳值判斷要不要再開一次——
+    // 以前這樣寫,Ctrl+點選會一次跳出兩個新分頁。只有真的丟出例外才用不加 noopener 的方式再試一次。
+    try { global.open(href, '_blank', 'noopener'); } catch (err) { try { global.open(href, '_blank'); } catch (err2) {} }
   }
   function go(href, ev) {
     ev = ev || global.event;
