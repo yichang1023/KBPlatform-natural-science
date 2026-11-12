@@ -145,49 +145,108 @@
   function clampZ(z) { z = Math.round(+z); if (!isFinite(z) || !z) z = 50; return z < 10 ? 10 : z > 100 ? 100 : z; }
   function layOf(m) { return { z: clampZ((m && m.z) || 50), l: m && LAYK[m.l] ? m.l : 'blockC', p: m && typeof m.p === 'number' && m.p >= 0 ? Math.floor(m.p) : -1 }; }
   function hasLay(m) { return !!(m && m.kind === 'image' && LAYK[m.l]); }
-  /* 把「文字 + 照片」排成一塊。imgs: [{ src, alt, z, l, p, click }] */
-  function flow(box, text, imgs) {
-    box.innerHTML = ''; box.classList.add('kbm-flow');
-    var lines = String(text == null ? '' : text).split('\n'), n = lines.length, by = {}, back = [], inl = [];
-    imgs.forEach(function (x) {
-      var p = typeof x.p === 'number' && x.p >= 0 && x.p <= n ? x.p : n, o = { src: x.src, alt: x.alt, z: clampZ(x.z), l: LAYK[x.l] ? x.l : 'blockC', p: p, click: x.click };
-      if (o.l === 'back') back.push(o); else if (o.l === 'inline') inl.push(o); else (by[p] = by[p] || []).push(o);
-    });
-    function imgEl(x) {
-      var im = doc.createElement('img'); im.className = 'kbm-fi'; im.alt = x.alt || '附圖'; im.src = x.src; im.style.width = x.z + '%';
+  /* ----- 裁切:c = [x, y, w, h],都是佔「原圖」的比例(0~1)。只有使用者自己裁才會有;看貼文時照片永遠不變形 ----- */
+  var MINC = 0.08;
+  function r3(v) { return Math.round(v * 1000) / 1000; }
+  function cropOf(m) {
+    var c = m && m.c; if (!Array.isArray(c) || c.length !== 4) return null;
+    var x = +c[0], y = +c[1], w = +c[2], h = +c[3];
+    if (!(isFinite(x) && isFinite(y) && isFinite(w) && isFinite(h)) || x < 0 || y < 0 || w < MINC || h < MINC) return null;
+    w = Math.min(w, 1 - x); h = Math.min(h, 1 - y); if (w < MINC || h < MINC) return null;
+    if (x < 0.001 && y < 0.001 && w > 0.999 && h > 0.999) return null;
+    return [r3(x), r3(y), r3(w), r3(h)];
+  }
+  /* 框(clip)的長寬比 = 裁下來那塊的長寬比;圖片放大到「整張圖」該有的大小再位移,所以只會露出裁切框裡的部分,不會擠壓 */
+  function cropStyle(clip, im, c, W, H) {
+    clip.style.aspectRatio = (c[2] * W) + ' / ' + (c[3] * H);
+    im.style.width = (100 / c[2]) + '%'; im.style.left = (-c[0] / c[2] * 100) + '%'; im.style.top = (-c[1] / c[3] * 100) + '%';
+  }
+  /* 拖曳用的純計算(好測試) */
+  function dropAt(lines, box, x, y) {   // lines: [{top,bottom}] 每行文字的位置;box: {left,width};回傳要放在第 p 行前面、靠哪一側
+    var n = lines.length, p = n;
+    for (var i = 0; i < n; i++) { if (y < (lines[i].top + lines[i].bottom) / 2) { p = i; break; } }
+    var f = box.width > 0 ? (x - box.left) / box.width : 0.5;
+    return { p: p >= n ? -1 : p, side: f < 0.33 ? 'L' : f > 0.67 ? 'R' : 'C', y: !n ? 0 : p < n ? lines[p].top : lines[n - 1].bottom };
+  }
+  function layAfterDrop(cur, side) { return side === 'L' ? 'wrapL' : side === 'R' ? 'wrapR' : (cur === 'inline' ? 'inline' : 'blockC'); }
+  function cropDrag(h, c, dxf, dyf) {   // h: 'nw' 'n' 'ne' 'e' 'se' 's' 'sw' 'w';dxf/dyf: 滑鼠移動量(佔原圖寬高的比例)
+    var x = c[0], y = c[1], r = c[0] + c[2], b = c[1] + c[3];
+    if (h.indexOf('w') >= 0) x = Math.max(0, Math.min(x + dxf, r - MINC));
+    if (h.indexOf('e') >= 0) r = Math.min(1, Math.max(r + dxf, x + MINC));
+    if (h.indexOf('n') >= 0) y = Math.max(0, Math.min(y + dyf, b - MINC));
+    if (h.indexOf('s') >= 0) b = Math.min(1, Math.max(b + dyf, y + MINC));
+    return [r3(x), r3(y), r3(r - x), r3(b - y)];
+  }
+  function sizeDrag(h, startW, dx, Cw) { return clampZ((h.indexOf('w') >= 0 ? startW - dx : startW + dx) / Cw * 100); }
+
+  /* 一張照片的元素。沒裁切、不在編輯區 = 單純一張 <img>;有裁切或在編輯區 = 外框(.kbm-ie)>裁切框(.kbm-cw)>圖 */
+  function imgNode(x, edit) {
+    var im = doc.createElement('img'); im.alt = x.alt || '附圖'; im.src = x.src; im.draggable = false;
+    var hasWH = x.w > 0 && x.h > 0, c = hasWH ? (x.c || null) : null;
+    if (!c && !edit) {
+      im.className = 'kbm-fi'; im.style.width = x.z + '%';
       if (x.click) im.addEventListener('click', function () { x.click(x.src); });
       return im;
     }
-    back.forEach(function (x) { var b = doc.createElement('div'); b.className = 'kbm-bg'; b.setAttribute('aria-hidden', 'true'); b.style.backgroundImage = 'url("' + x.src + '")'; b.style.backgroundSize = x.z + '% auto'; box.appendChild(b); });
+    var ie = doc.createElement('div'), clip = doc.createElement('div');
+    ie.className = 'kbm-ie' + (x.l === 'wrapL' ? ' kbm-fl' : x.l === 'wrapR' ? ' kbm-fr' : ''); ie.style.width = x.z + '%';
+    if (x.key) ie.setAttribute('data-key', x.key);
+    clip.className = 'kbm-cw'; clip.appendChild(im); ie.appendChild(clip);
+    if (hasWH) cropStyle(clip, im, c || [0, 0, 1, 1], x.w, x.h); else { im.style.position = 'static'; im.style.width = '100%'; }
+    if (x.click && !edit) im.addEventListener('click', function () { x.click(x.src); });
+    return ie;
+  }
+  /* 把「文字 + 照片」排成一塊。imgs: [{ src, alt, z, l, p, click, c, w, h, key }];opts.edit = 編輯區(照片外框可選取) */
+  function flow(box, text, imgs, opts) {
+    var edit = !!(opts && opts.edit);
+    box.innerHTML = ''; box.classList.add('kbm-flow');
+    var lines = String(text == null ? '' : text).split('\n'), n = lines.length, by = {}, back = [], inl = [];
+    imgs.forEach(function (x) {
+      var p = typeof x.p === 'number' && x.p >= 0 && x.p <= n ? x.p : n;
+      var o = { src: x.src, alt: x.alt, z: clampZ(x.z), l: LAYK[x.l] ? x.l : 'blockC', p: p, click: x.click, c: x.c || null, w: x.w, h: x.h, key: x.key };
+      if (o.l === 'back') back.push(o); else if (o.l === 'inline') inl.push(o); else (by[p] = by[p] || []).push(o);
+    });
+    /* 文字在後:圖和文字疊在同一格(grid),格子高度取兩者較高的,所以底圖不會被切掉 */
+    var root = box; box.classList.toggle('kbm-grid', back.length > 0);
+    if (back.length) {
+      back.forEach(function (x) { var b = imgNode(x, edit); b.classList.add('kbm-bgi'); box.appendChild(b); });
+      root = doc.createElement('div'); root.className = 'kbm-txt'; box.appendChild(root);
+    }
     var els = lines.map(function (ln) { var d = doc.createElement('div'); d.className = 'kbm-ln'; d.textContent = ln; return d; });
-    inl.forEach(function (x) { var d = els[x.p >= 1 ? x.p - 1 : 0], im = imgEl(x); if (x.p === 0) d.insertBefore(im, d.firstChild); else d.appendChild(im); });
+    inl.forEach(function (x) { var d = els[x.p >= 1 ? x.p - 1 : 0], im = imgNode(x, edit); if (x.p === 0) d.insertBefore(im, d.firstChild); else d.appendChild(im); });
     function put(p) {
       (by[p] || []).forEach(function (x) {
         var el;
-        if (x.l === 'wrapL' || x.l === 'wrapR') { el = imgEl(x); el.classList.add(x.l === 'wrapL' ? 'kbm-fl' : 'kbm-fr'); }
-        else { el = doc.createElement('div'); el.className = 'kbm-bk'; el.style.textAlign = x.l === 'blockL' ? 'left' : x.l === 'blockR' ? 'right' : 'center'; el.appendChild(imgEl(x)); }
-        box.appendChild(el);
+        if (x.l === 'wrapL' || x.l === 'wrapR') { el = imgNode(x, edit); el.classList.add(x.l === 'wrapL' ? 'kbm-fl' : 'kbm-fr'); }
+        else { el = doc.createElement('div'); el.className = 'kbm-bk'; el.style.textAlign = x.l === 'blockL' ? 'left' : x.l === 'blockR' ? 'right' : 'center'; el.appendChild(imgNode(x, edit)); }
+        root.appendChild(el);
       });
     }
-    for (var i = 0; i <= n; i++) { put(i); if (i < n) box.appendChild(els[i]); }
+    for (var i = 0; i <= n; i++) { put(i); if (i < n) root.appendChild(els[i]); }
     return box;
   }
 
   /* ---------- 發言視窗:附件區 ---------- */
-  var ST = { items: [], rec: null, host: null, hintEl: null };
+  var ST = { items: [], rec: null, host: null, hintEl: null, sel: null, crop: false, drag: null };
   function css() {
     if (doc.getElementById('kbm-style')) return;
     var s = doc.createElement('style'); s.id = 'kbm-style';
     s.textContent = '.kbm{margin-top:10px}.kbm-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.kbm-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;font-weight:800;font-size:15px;color:#334155;cursor:pointer;min-height:44px}.kbm-btn:hover{border-color:#94a3b8}.kbm-btn[disabled]{opacity:.45;cursor:not-allowed}.kbm-btn.rec{background:#fee2e2;border-color:#f87171;color:#b91c1c}' +
       '.kbm-hint{font-size:12px;color:#64748b;margin-top:6px;min-height:16px}.kbm-hint.err{color:#b91c1c}.kbm-list{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}.kbm-it{position:relative;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:6px;display:flex;flex-direction:column;gap:4px;max-width:100%}' +
-      '.kbm-it img{width:96px;height:72px;object-fit:cover;border-radius:8px;display:block;background:#e2e8f0}.kbm-it audio{height:34px;max-width:240px}.kbm-x{position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:0;background:#0f172a;color:#fff;font-size:13px;line-height:24px;cursor:pointer}' +
+      '.kbm-it img{width:96px;height:72px;object-fit:contain;border-radius:8px;display:block;background:#e2e8f0}.kbm-it audio{height:34px;max-width:240px}.kbm-x{position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:0;background:#0f172a;color:#fff;font-size:13px;line-height:24px;cursor:pointer}' +
       '.kbm-st{font-size:11px;font-weight:700;color:#64748b}.kbm-st.err{color:#b91c1c}.kbm-st.ok{color:#15803d}.kbm-st button{margin-left:6px;text-decoration:underline;color:#4338ca;font-weight:800;background:none;border:0;cursor:pointer;font-size:11px}' +
       '.kbm-view{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.kbm-view img{max-width:100%;max-height:220px;border-radius:12px;border:1px solid #e2e8f0;cursor:zoom-in;background:#e2e8f0;min-width:96px;min-height:72px}.kbm-view audio{width:100%;max-width:340px}.kbm-view .kbm-ph{font-size:12px;color:#64748b;padding:10px;border:1px dashed #cbd5e1;border-radius:10px}' +
       '.kbm-it.open{width:calc(100% - 12px)}.kbm-adjb{font-size:12px;font-weight:800;color:#4338ca;background:none;border:0;cursor:pointer;text-decoration:underline;text-align:left;padding:2px 0;min-height:28px}.kbm-adj{display:flex;flex-direction:column;gap:8px;padding:8px;background:#fff;border:1px solid #e2e8f0;border-radius:10px}.kbm-r{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px}.kbm-r b{min-width:36px;color:#334155}.kbm-note{font-size:11px;color:#64748b}' +
       '.kbm-chip{padding:4px 10px;border-radius:999px;border:1.5px solid #cbd5e1;background:#fff;font-size:13px;font-weight:700;cursor:pointer;min-height:32px;color:#334155}.kbm-chip.on{background:#4338ca;border-color:#4338ca;color:#fff}.kbm-adj select{max-width:100%;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;min-height:36px}.kbm-adj input[type=range]{flex:1;min-width:110px}' +
-      '.kbm-prevw{margin-top:10px}.kbm-prevt{font-size:12px;font-weight:800;color:#64748b;margin-bottom:4px}.kbm-prev{border:1px dashed #cbd5e1;border-radius:10px;padding:10px;font-size:14px;line-height:1.7;color:#334155;background:#fff;max-height:460px;overflow:auto}' +
-      '.kbm-flow{position:relative;display:flow-root}.kbm-flow>*{position:relative;z-index:1}.kbm-flow>.kbm-bg{position:absolute;z-index:0;top:0;right:0;bottom:0;left:0;background-repeat:no-repeat;background-position:center;opacity:.22;pointer-events:none}.kbm-ln{white-space:pre-wrap;word-break:break-word}.kbm-ln:empty{min-height:1.2em}' +
-      '.kbm-fi{max-width:100%;height:auto;border-radius:10px;border:1px solid #e2e8f0;cursor:zoom-in;background:#e2e8f0}.kbm-ln .kbm-fi{display:inline-block;vertical-align:middle;margin:2px 6px}.kbm-fl{float:left;margin:2px 14px 8px 0}.kbm-fr{float:right;margin:2px 0 8px 14px}.kbm-bk{clear:both;margin:8px 0}.kbm-bk .kbm-fi{display:inline-block}@media(max-width:520px){.kbm-fl,.kbm-fr{max-width:55%}}' +
+      '.kbm-prevw{margin-top:12px}.kbm-prevt{font-size:13px;font-weight:800;color:#334155;margin-bottom:6px}.kbm-prev{border:1px dashed #94a3b8;border-radius:10px;padding:12px;font-size:14px;line-height:1.7;color:#334155;background:#fff;max-height:560px;overflow:auto}' +
+      '.kbm-tb{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}.kbm-tbr{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.kbm-tbh{font-size:12px;color:#64748b}.kbm-it img[data-sel]{cursor:pointer}' +
+      '.kbm-flow{position:relative;display:flow-root}.kbm-flow>*{position:relative;z-index:1}.kbm-flow.kbm-grid{display:grid;grid-template-columns:minmax(0,1fr)}.kbm-grid>.kbm-bgi{grid-area:1/1;justify-self:center;align-self:center;max-width:100%;z-index:0}.kbm-grid>img.kbm-bgi,.kbm-grid>.kbm-bgi .kbm-cw{opacity:.22}.kbm-grid>.kbm-txt{grid-area:1/1;display:flow-root}' +
+      '.kbm-ln{white-space:pre-wrap;word-break:break-word}.kbm-ln:empty{min-height:1.2em}' +
+      '.kbm-fi{max-width:100%;height:auto;border-radius:10px;border:1px solid #e2e8f0;cursor:zoom-in;background:#e2e8f0}.kbm-ie{position:relative;display:block;max-width:100%}.kbm-cw{position:relative;overflow:hidden;border-radius:10px;border:1px solid #e2e8f0;background:#e2e8f0;line-height:0}.kbm-cw img{position:absolute;max-width:none;height:auto;display:block;cursor:zoom-in;-webkit-user-drag:none;user-select:none}' +
+      '.kbm-ln .kbm-fi,.kbm-ln .kbm-ie{display:inline-block;vertical-align:middle;margin:2px 6px}.kbm-fl{float:left;margin:2px 14px 8px 0}.kbm-fr{float:right;margin:2px 0 8px 14px}.kbm-bk{clear:both;margin:8px 0}.kbm-bk .kbm-fi,.kbm-bk .kbm-ie{display:inline-block}@media(max-width:520px){.kbm-fl,.kbm-fr{max-width:55%}}' +
+      '.kbm-edit .kbm-ie:hover{outline:2px dashed #a5b4fc;outline-offset:2px}.kbm-vtb{margin:8px 0}.kbm-edit .kbm-ie{cursor:grab;user-select:none;-webkit-user-select:none}.kbm-edit .kbm-cw img{cursor:inherit}.kbm-edit .kbm-ie.kbm-sel{outline:2px solid #4f46e5;outline-offset:2px;touch-action:none}.kbm-edit .kbm-ie.kbm-dragging{opacity:.35}.kbm-edit .kbm-ie.kbm-cropping .kbm-cw{box-shadow:inset 0 0 0 3px #f59e0b}.kbm-edit.kbm-grid .kbm-txt{pointer-events:none}.kbm-edit.kbm-grid .kbm-txt .kbm-ie{pointer-events:auto}.kbm-edit.kbm-grid>.kbm-bgi.kbm-sel .kbm-cw{opacity:.55}' +
+      '.kbm-h{position:absolute;width:16px;height:16px;background:#fff;border:2px solid #4f46e5;border-radius:4px;z-index:5;touch-action:none;box-sizing:border-box}.kbm-h-nw{top:-8px;left:-8px;cursor:nwse-resize}.kbm-h-ne{top:-8px;right:-8px;cursor:nesw-resize}.kbm-h-se{bottom:-8px;right:-8px;cursor:nwse-resize}.kbm-h-sw{bottom:-8px;left:-8px;cursor:nesw-resize}.kbm-h-n{top:-8px;left:calc(50% - 8px);cursor:ns-resize}.kbm-h-s{bottom:-8px;left:calc(50% - 8px);cursor:ns-resize}.kbm-h-e{right:-8px;top:calc(50% - 8px);cursor:ew-resize}.kbm-h-w{left:-8px;top:calc(50% - 8px);cursor:ew-resize}.kbm-cropping .kbm-h{background:#f59e0b;border-color:#b45309}' +
+      '.kbm-ghost{position:fixed;width:110px;height:auto;opacity:.75;border-radius:8px;pointer-events:none;z-index:100001;box-shadow:0 6px 18px rgba(0,0,0,.25)}.kbm-ind{position:absolute;left:6px;right:6px;height:0;border-top:3px solid #4f46e5;z-index:10;pointer-events:none}.kbm-ind span{position:absolute;top:-24px;background:#4f46e5;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;white-space:nowrap;line-height:1.4}.kbm-ind.L span{left:0}.kbm-ind.C span{left:50%;transform:translateX(-50%)}.kbm-ind.R span{right:0}' +
       '.kbm-lb{position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.88);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}.kbm-lb img{max-width:100%;max-height:100%;border-radius:10px;background:#fff}';
     (doc.head || doc.documentElement).appendChild(s);
   }
@@ -198,7 +257,7 @@
     var host = doc.getElementById('kbm-box'); if (!host) return null;
     ST.host = host; if (host.__kbm) return host; host.__kbm = true; css();
     host.className = 'kbm';
-    host.innerHTML = '<div class="kbm-row"><button type="button" class="kbm-btn" data-k="img"><span aria-hidden="true">📷</span> 加照片</button><button type="button" class="kbm-btn" data-k="rec"><span aria-hidden="true">🎙️</span> <span data-k="rect">錄音</span></button><button type="button" class="kbm-btn" data-k="aud"><span aria-hidden="true">🎵</span> 加錄音檔</button><input type="file" accept="image/*" multiple data-k="file" style="display:none"><input type="file" accept="audio/*" data-k="afile" style="display:none"></div><div class="kbm-hint"></div><div class="kbm-list" aria-live="polite"></div><div class="kbm-prevw" style="display:none"><div class="kbm-prevt">排版預覽(發布後大概的樣子)</div><div class="kbm-prev"></div></div>';
+    host.innerHTML = '<div class="kbm-row"><button type="button" class="kbm-btn" data-k="img"><span aria-hidden="true">📷</span> 加照片</button><button type="button" class="kbm-btn" data-k="rec"><span aria-hidden="true">🎙️</span> <span data-k="rect">錄音</span></button><button type="button" class="kbm-btn" data-k="aud"><span aria-hidden="true">🎵</span> 加錄音檔</button><input type="file" accept="image/*" multiple data-k="file" style="display:none"><input type="file" accept="audio/*" data-k="afile" style="display:none"></div><div class="kbm-hint"></div><div class="kbm-list" aria-live="polite"></div><div class="kbm-prevw" style="display:none"><div class="kbm-prevt">✏️ 版面編輯區(發布後就是這個樣子)</div><div class="kbm-tb"></div><div class="kbm-prev kbm-edit"></div></div>';
     ST.hintEl = host.querySelector('.kbm-hint');
     host.querySelector('[data-k="img"]').addEventListener('click', function () { if (count('image') >= CFG.maxImages) return say('照片最多 ' + CFG.maxImages + ' 張喔。', 'error'); host.querySelector('[data-k="file"]').click(); });
     host.querySelector('[data-k="file"]').addEventListener('change', function (e) { var fs = Array.prototype.slice.call(e.target.files || []); e.target.value = ''; addImages(fs); });
@@ -207,8 +266,10 @@
     host.querySelector('[data-k="afile"]').addEventListener('change', function (e) { var f = (e.target.files || [])[0]; e.target.value = ''; if (f) addAudioFile(f); });
     host.addEventListener('click', function (e) {
       var c = function (q) { return e.target.closest ? e.target.closest(q) : null; };
-      var x = c('[data-x]'), r = c('[data-retry]'), a = c('[data-adj]'), z = c('[data-z]');
+      var x = c('[data-x]'), r = c('[data-retry]'), a = c('[data-adj]'), z = c('[data-z]'), tl = c('[data-tl]'), tc = c('[data-tc]'), sl = c('[data-sel]');
       if (x) removeItem(x.getAttribute('data-x')); else if (r) retry(r.getAttribute('data-retry'));
+      else if (tl || tc) tbAction(CCX, e);
+      else if (sl) { select(CCX, sl.getAttribute('data-sel')); var eb = host.querySelector('.kbm-prev'); try { if (eb && eb.scrollIntoView) eb.scrollIntoView({ block: 'nearest' }); } catch (e2) {} }
       else if (a) { var ia = itemOf(a); if (ia) { ia.open = !ia.open; render(); } }
       else if (z) { var iz = itemOf(z); if (iz) { setLay(iz, { z: +z.getAttribute('data-z') }); render(); } }
     });
@@ -226,6 +287,7 @@
     /* 「放在哪裡」的選項要跟著現在打的文字走:打開選單前重新產生 */
     host.addEventListener('mousedown', refreshPos); host.addEventListener('focusin', refreshPos);
     var ta = doc.getElementById('node-content'); if (ta) ta.addEventListener('input', schedPrev);
+    host.querySelector('.kbm-prev').addEventListener('pointerdown', function (e) { onDown(e, CCX); });
     render(); return host;
   }
   function render() {
@@ -233,7 +295,7 @@
     var list = host.querySelector('.kbm-list'), on = enabled();
     host.style.display = on ? '' : 'none';
     list.innerHTML = ST.items.map(function (it) {
-      var body = it.kind === 'image' ? '<img alt="附圖" src="' + esc(it.d || '') + '">' + (it.d ? '<button type="button" class="kbm-adjb" data-adj="1" aria-expanded="' + (it.open ? 'true' : 'false') + '">' + (it.open ? '▲ 收起' : '⚙ 調整大小與位置') + '</button>' + (it.open ? panelHtml(it) : '') : '') : '<div style="font-size:12px;font-weight:700">🎙️ 錄音 ' + mmss(it.dur || 0) + '</div>' + (it.d ? '<audio controls preload="metadata" src="' + esc(it.d) + '"></audio>' : '');
+      var body = it.kind === 'image' ? '<img alt="附圖(點一下在下方版面編輯區選取)" title="點一下,在下方版面編輯區選取這張照片" data-sel="' + esc(it.key) + '" src="' + esc(it.d || '') + '">' + (it.d ? '<button type="button" class="kbm-adjb" data-adj="1" aria-expanded="' + (it.open ? 'true' : 'false') + '">' + (it.open ? '▲ 收起' : '⚙ 用數字調整') + '</button>' + (it.open ? panelHtml(it) : '') : '') : '<div style="font-size:12px;font-weight:700">🎙️ 錄音 ' + mmss(it.dur || 0) + '</div>' + (it.d ? '<audio controls preload="metadata" src="' + esc(it.d) + '"></audio>' : '');
       var st = it.state === 'ok' ? '<span class="kbm-st ok">✓ 已準備好</span>' : it.state === 'err' ? '<span class="kbm-st err">⚠ ' + esc(it.err || '沒有傳成功') + '<button type="button" data-retry="' + esc(it.key) + '">重試</button></span>' : '<span class="kbm-st">傳送中…</span>';
       return '<div class="kbm-it' + (it.open ? ' open' : '') + '" data-key="' + esc(it.key) + '">' + body + st + '<button type="button" class="kbm-x" data-x="' + esc(it.key) + '" aria-label="拿掉這個附件">✕</button></div>';
     }).join('');
@@ -266,7 +328,7 @@
     return '<div class="kbm-adj"><div class="kbm-r"><b>大小</b>' + zb + '<input type="range" min="10" max="100" step="5" value="' + l.z + '" data-zr="1" aria-label="照片大小"><span class="kbm-zv">' + l.z + '%</span></div>' +
       '<div class="kbm-r"><b>排列</b><select data-lay="1" aria-label="照片排列方式">' + lo + '</select></div>' +
       '<div class="kbm-r"><b>位置</b><select data-pos="1" aria-label="照片放在哪裡">' + posHtml(l.p) + '</select></div>' +
-      '<div class="kbm-note">' + (it.lay ? '位置 = 照片放在哪一行文字的後面;「文字環繞」是文字繞著圖排。' : '這是舊貼文的照片,調整後才會改用新版面。') + '</div></div>';
+      '<div class="kbm-note">' + (it.lay ? '也可以直接在下方「版面編輯區」用滑鼠拖曳、拉角落、裁切。位置 = 照片放在哪一行文字的後面。' : '這是舊貼文的照片,調整後才會改用新版面。') + '</div></div>';
   }
   var prevT = 0;
   function schedPrev() { clearTimeout(prevT); prevT = setTimeout(prev, 100); }
@@ -274,9 +336,97 @@
     clearTimeout(prevT); var host = ST.host; if (!host) return;
     var w = host.querySelector('.kbm-prevw'), pv = host.querySelector('.kbm-prev'); if (!w || !pv) return;
     var imgs = ST.items.filter(function (x) { return x.kind === 'image' && x.d; });
-    w.style.display = imgs.length ? '' : 'none'; if (!imgs.length) return;
+    w.style.display = imgs.length ? '' : 'none'; if (!imgs.length) { ST.sel = null; ST.crop = false; return; }
     var ta = doc.getElementById('node-content'), text = ta ? ta.value : '';
-    flow(pv, text || '(這裡會顯示你寫的文字)', imgs.map(function (x, i) { var l = layFor(x); return { src: x.d, alt: '預覽 ' + (i + 1), z: l.z, l: l.l, p: l.p }; }));
+    flow(pv, text || '(這裡會顯示你寫的文字)', imgs.map(function (x, i) { var l = layFor(x); return { src: x.d, alt: '預覽 ' + (i + 1), z: l.z, l: l.l, p: l.p, key: x.key, c: x.crop || null, w: x.w, h: x.h }; }), { edit: true });
+    pv.classList.add('kbm-edit'); decorate(CCX);
+  }
+  /* ----- 直接操作照片:點選、拖曳移動、拉角落縮放、裁切 -----
+   * 做成「操作環境 cx」:發言視窗的編輯區(cx = CCX)和貼文視窗(作者本人)共用同一套。
+   * cx = { S: { items, sel, crop }, box(): 放文字+照片的元素, tb(): 工具列元素, hint, again(): 改完重畫, changed(it): 改完存起來 } */
+  var TB = [['inline', '與文字排列', '像一個字,接在那一行後面'], ['wrapL', '文字環繞・左', '圖在左邊,文字繞著圖排'], ['wrapR', '文字環繞・右', '圖在右邊,文字繞著圖排'], ['blockL', '上及下・靠左', '圖自己一行,靠左'], ['blockC', '上及下・置中', '圖自己一行,置中'], ['blockR', '上及下・靠右', '圖自己一行,靠右'], ['back', '文字在後', '當淡淡的底圖,文字蓋在上面']];
+  var HINT = '💡 點一下照片就能選取:按住拖曳 = 移動(拖到左邊或右邊 = 文字環繞)、拖角落 = 調整大小、「✂ 裁切」= 切掉不要的部分。';
+  var CCX = { S: ST, box: function () { return ST.host && ST.host.querySelector('.kbm-prev'); }, tb: function () { return ST.host && ST.host.querySelector('.kbm-tb'); }, hint: HINT, again: function () { render(); }, changed: null };
+  var DRAG = null;
+  function itemByKey(cx, k) { return cx.S.items.filter(function (x) { return x.key === k; })[0] || null; }
+  function selItem(cx) { var S = cx.S, it = S.sel && itemByKey(cx, S.sel); if (!it || it.kind !== 'image' || !it.d) { S.sel = null; S.crop = false; return null; } return it; }
+  function select(cx, key) { cx.S.sel = key; cx.S.crop = false; decorate(cx); }
+  function decorate(cx) {
+    var S = cx.S, box = cx.box(), tb = cx.tb(); if (!box || !tb) return;
+    Array.prototype.forEach.call(box.querySelectorAll('.kbm-h'), function (h) { h.parentNode.removeChild(h); });
+    Array.prototype.forEach.call(box.querySelectorAll('.kbm-sel'), function (e) { e.classList.remove('kbm-sel'); e.classList.remove('kbm-cropping'); });
+    var it = selItem(cx);
+    if (!it) { tb.innerHTML = '<span class="kbm-tbh">' + cx.hint + '</span>'; return; }
+    var l = layFor(it), canCrop = it.w > 0 && it.h > 0;
+    tb.innerHTML = '<div class="kbm-tbr">' + TB.map(function (b) { return '<button type="button" class="kbm-chip' + (l.l === b[0] ? ' on' : '') + '" data-tl="' + b[0] + '" title="' + esc(b[2]) + '">' + b[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="kbm-tbr">' + (canCrop ? '<button type="button" class="kbm-chip' + (S.crop ? ' on' : '') + '" data-tc="crop">' + (S.crop ? '✓ 完成裁切' : '✂ 裁切') + '</button>' : '') + (it.crop ? '<button type="button" class="kbm-chip" data-tc="uncrop">↺ 還原裁切</button>' : '') + '<button type="button" class="kbm-chip" data-tc="zoom">🔍 放大看</button>' +
+      '<span class="kbm-tbh">' + (S.crop ? '拖邊或角落,切掉不要的部分(原圖不會被改,可隨時還原)' : l.l === 'back' ? '底圖不能拖曳,拉角落調整大小' : '按住照片拖曳移動;拖角落調整大小') + '</span></div>';
+    var el = box.querySelector('.kbm-ie[data-key="' + it.key + '"]'); if (!el) return;
+    el.classList.add('kbm-sel'); if (S.crop) el.classList.add('kbm-cropping');
+    (S.crop ? ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] : ['nw', 'ne', 'se', 'sw']).forEach(function (h) { var sp = doc.createElement('span'); sp.className = 'kbm-h kbm-h-' + h; sp.setAttribute('data-h', h); el.appendChild(sp); });
+  }
+  /* 工具列按鈕(排列 / 裁切 / 放大) */
+  function tbAction(cx, e) {
+    var q = function (s) { return e.target && e.target.closest ? e.target.closest(s) : null; }, tl = q('[data-tl]'), tc = q('[data-tc]'), it = selItem(cx);
+    if (!it || !(tl || tc)) return false;
+    if (tl) { setLay(it, { l: tl.getAttribute('data-tl') }); if (cx.changed) cx.changed(it); cx.again(); return true; }
+    var k = tc.getAttribute('data-tc');
+    if (k === 'zoom') { lightbox(it.d); return true; }
+    if (k === 'crop') cx.S.crop = !cx.S.crop; else if (k === 'uncrop') { it.crop = null; cx.S.crop = false; if (cx.changed) cx.changed(it); }
+    cx.again(); return true;
+  }
+  function onDown(e, cx) {
+    if (e.button > 0 || !cx) return;
+    var S = cx.S, t = e.target, hEl = t && t.closest ? t.closest('[data-h]') : null, ie = t && t.closest ? t.closest('.kbm-ie') : null;
+    if (!ie) { if (S.sel) { S.sel = null; S.crop = false; decorate(cx); } return; }
+    var it = itemByKey(cx, ie.getAttribute('data-key')); if (!it) return;
+    if (e.preventDefault) e.preventDefault();
+    if (S.sel !== it.key) { S.sel = it.key; S.crop = false; decorate(cx); }
+    var l = layFor(it), clip = ie.querySelector('.kbm-cw'), im = clip.querySelector('img'), r = ie.getBoundingClientRect(), cr = clip.getBoundingClientRect();
+    DRAG = { cx: cx, it: it, ie: ie, clip: clip, im: im, x0: e.clientX, y0: e.clientY, h: hEl ? hEl.getAttribute('data-h') : '',
+      mode: hEl ? (S.crop ? 'crop' : 'size') : (l.l === 'back' || S.crop ? 'none' : 'move'),
+      startW: r.width, Cw: (ie.parentNode && ie.parentNode.clientWidth) || 0, c0: it.crop || [0, 0, 1, 1], cw: cr.width, ch: cr.height, moved: false, z: l.z, crop: it.crop || null, drop: null };
+    doc.addEventListener('pointermove', onMove); doc.addEventListener('pointerup', onUp); doc.addEventListener('pointercancel', onUp);
+  }
+  function onMove(e) {
+    var G = DRAG; if (!G) return; var dx = e.clientX - G.x0, dy = e.clientY - G.y0;
+    if (G.mode === 'size') {
+      if (!G.Cw) return; G.z = sizeDrag(G.h, G.startW, dx, G.Cw); G.moved = true; G.ie.style.width = G.z + '%';
+    } else if (G.mode === 'crop') {
+      var Dw = G.cw / G.c0[2], Dh = G.ch / G.c0[3]; if (!(Dw > 0 && Dh > 0 && G.Cw)) return;
+      var nc = cropDrag(G.h, G.c0, dx / Dw, dy / Dh);
+      G.crop = nc; G.z = clampZ(Dw * nc[2] / G.Cw * 100); G.moved = true; G.ie.style.width = G.z + '%'; cropStyle(G.clip, G.im, nc, G.it.w, G.it.h);
+    } else if (G.mode === 'move') {
+      if (!G.moved && Math.abs(dx) + Math.abs(dy) < 6) return;
+      G.moved = true; moveGhost(G, e);
+    }
+  }
+  function moveGhost(G, e) {
+    var box = G.cx.box(), br = box.getBoundingClientRect();
+    if (!G.ghost) {
+      var g = doc.createElement('img'); g.src = G.it.d; g.className = 'kbm-ghost'; doc.body.appendChild(g); G.ghost = g;
+      var ind = doc.createElement('div'); ind.className = 'kbm-ind'; ind.innerHTML = '<span></span>'; box.appendChild(ind); G.ind = ind; G.ie.classList.add('kbm-dragging');
+    }
+    G.ghost.style.left = (e.clientX + 12) + 'px'; G.ghost.style.top = (e.clientY + 12) + 'px';
+    var lines = Array.prototype.map.call(box.querySelectorAll('.kbm-ln'), function (d) { var r = d.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; });
+    var d = dropAt(lines, { left: br.left, width: br.width }, e.clientX, e.clientY); G.drop = d;
+    var cur = layFor(G.it).l, nl = layAfterDrop(cur, d.side);
+    G.ind.className = 'kbm-ind ' + d.side; G.ind.style.top = (d.y - br.top + box.scrollTop) + 'px';
+    G.ind.firstChild.textContent = nl === 'wrapL' ? '放這裡:靠左・文字環繞' : nl === 'wrapR' ? '放這裡:靠右・文字環繞' : nl === 'inline' ? '放這裡:接在這行文字裡' : '放這裡:自己一行・置中';
+  }
+  function onUp() {
+    var G = DRAG; DRAG = null;
+    doc.removeEventListener('pointermove', onMove); doc.removeEventListener('pointerup', onUp); doc.removeEventListener('pointercancel', onUp);
+    if (!G) return;
+    if (G.ghost && G.ghost.parentNode) G.ghost.parentNode.removeChild(G.ghost);
+    if (G.ind && G.ind.parentNode) G.ind.parentNode.removeChild(G.ind);
+    G.ie.classList.remove('kbm-dragging');
+    if (!G.moved) return;
+    if (G.mode === 'move' && G.drop) setLay(G.it, { p: G.drop.p, l: layAfterDrop(layFor(G.it).l, G.drop.side) });
+    else if (G.mode === 'size') setLay(G.it, { z: G.z });
+    else if (G.mode === 'crop') { setLay(G.it, { z: G.z }); G.it.crop = cropOf({ c: G.crop }); }
+    if (G.cx.changed) G.cx.changed(G.it);
+    G.cx.again();
   }
   var keySeq = 0;
   function addItem(o) { o.key = 'k' + (keySeq++); ST.items.push(o); render(); return o; }
@@ -285,7 +435,7 @@
     return send(it.id, rec).then(function () { it.state = 'ok'; render(); }, function (e) { it.state = 'err'; it.err = errText(e); it.rec = rec; render(); });
   }
   function retry(key) { var it = ST.items.filter(function (x) { return x.key === key; })[0]; if (it && it.rec) upload(it, it.rec); }
-  function removeItem(key) { ST.items = ST.items.filter(function (x) { return x.key !== key; }); setHint(baseHint()); render(); }
+  function removeItem(key) { if (ST.sel === key) { ST.sel = null; ST.crop = false; } ST.items = ST.items.filter(function (x) { return x.key !== key; }); setHint(baseHint()); render(); }
   function addImages(files) {
     if (!mount()) return;
     var room = CFG.maxImages - count('image');
@@ -294,7 +444,7 @@
     if (files.length > room) { say('照片最多 ' + CFG.maxImages + ' 張,多的先不放。', 'error'); files = files.slice(0, room); }
     files.forEach(function (f) {
       var it = addItem({ kind: 'image', state: 'up', name: f.name || '', id: newId(), lay: { z: DEF_LAY.z, l: DEF_LAY.l, p: DEF_LAY.p } });
-      compressImage(f).then(function (r) { it.d = r.d; it.w = r.w; it.h = r.h; it.m = r.m; return upload(it, { d: r.d, m: r.m, t: Date.now(), w: r.w, h: r.h }); }, function (e) { removeItem(it.key); say(errText(e), 'error'); });
+      compressImage(f).then(function (r) { it.d = r.d; it.w = r.w; it.h = r.h; it.m = r.m; ST.sel = it.key; ST.crop = false; return upload(it, { d: r.d, m: r.m, t: Date.now(), w: r.w, h: r.h }); }, function (e) { removeItem(it.key); say(errText(e), 'error'); });
     });
   }
   /* 已經有的錄音檔(手機錄音、別的程式錄的):小檔直接收,太大請改用錄音鈕或先剪短 */
@@ -331,14 +481,14 @@
   }
   function reset() {
     if (ST.rec) { try { ST.rec.cancel(); } catch (e) {} ST.rec = null; }
-    ST.items = []; if (ST.hintEl) setHint(''); render();
+    ST.items = []; ST.sel = null; ST.crop = false; if (ST.hintEl) setHint(''); render();
   }
   /* 編輯舊貼文:把原本的附件放回來(內容之後才載入,先顯示「載入中」) */
   function load(list) {
     reset(); if (!mount()) return;
     (list || []).forEach(function (m) {
       var it = addItem({ kind: m.kind, state: 'ok', id: m.id, w: m.w, h: m.h, dur: m.dur, m: m.m });
-      if (m.kind === 'image') { if (hasLay(m)) it.lay = layOf(m); else it.legacy = true; }
+      if (m.kind === 'image') { if (hasLay(m)) it.lay = layOf(m); else it.legacy = true; var cc = cropOf(m); if (cc && m.w > 0 && m.h > 0) it.crop = cc; }
       get(m.id).then(function (r) { if (r) { it.d = r.d; render(); } }, function () {});
     });
   }
@@ -347,7 +497,7 @@
   function collect() {
     return ST.items.filter(function (x) { return x.state === 'ok'; }).map(function (x) {
       var o = { id: x.id, kind: x.kind }; if (x.m) o.m = x.m; if (x.w) { o.w = x.w; o.h = x.h; } if (x.dur) o.dur = x.dur;
-      if (x.kind === 'image' && x.lay) { var l = layOf(x.lay); o.z = l.z; o.l = l.l; if (l.p >= 0) o.p = l.p; }
+      if (x.kind === 'image' && x.lay) { var l = layOf(x.lay); o.z = l.z; o.l = l.l; if (l.p >= 0) o.p = l.p; if (x.crop && x.w > 0 && x.h > 0) o.c = x.crop; }
       return o;
     });
   }
@@ -383,20 +533,65 @@
       }, function () { ph.textContent = '附件現在打不開,請稍後再試。'; });
     });
   }
-  /* 看貼文:文字 + 附件。照片有設定版面(z/l/p)就依版面排進文字裡;舊貼文維持照片排在文字下面 */
-  function renderBody(textEl, host, text, list) {
+  /* 看貼文:文字 + 附件。照片有設定版面(z/l/p)就依版面排進文字裡;舊貼文維持照片排在文字下面。
+   * opts.editable(作者本人)+ 照片已有版面 → 在這裡就能直接點選、拖曳、拉角落縮放、裁切;opts.onChange(新的附件清單) 會被呼叫來存檔。 */
+  function mediaOf(it, base) {
+    var o = {}; for (var k in base) if (Object.prototype.hasOwnProperty.call(base, k)) o[k] = base[k];
+    delete o.z; delete o.l; delete o.p; delete o.c;
+    if (it.lay) { var l = layOf(it.lay); o.z = l.z; o.l = l.l; if (l.p >= 0) o.p = l.p; }
+    if (it.crop && it.w > 0 && it.h > 0) o.c = it.crop;
+    return o;
+  }
+  function viewTb(textEl) {
+    var tb = textEl.parentNode && textEl.parentNode.querySelector('.kbm-vtb');
+    if (!tb && textEl.parentNode) { tb = doc.createElement('div'); tb.className = 'kbm-tb kbm-vtb'; textEl.parentNode.insertBefore(tb, textEl); }
+    return tb;
+  }
+  function renderBody(textEl, host, text, list, opts) {
     list = list || [];
     var imgs = list.filter(function (m) { return m.kind === 'image'; });
-    if (!textEl || !imgs.some(hasLay)) { if (textEl) { textEl.classList.remove('kbm-flow'); textEl.style.whiteSpace = ''; textEl.__kbmTok = (textEl.__kbmTok || 0) + 1; } return renderView(host, list); }
+    var tb0 = textEl && textEl.parentNode ? textEl.parentNode.querySelector('.kbm-vtb') : null;
+    if (!textEl || !imgs.some(hasLay)) {
+      if (textEl) { textEl.classList.remove('kbm-flow'); textEl.classList.remove('kbm-edit'); textEl.style.whiteSpace = ''; textEl.__kbmTok = (textEl.__kbmTok || 0) + 1; textEl.__cx = null; }
+      if (tb0) { tb0.innerHTML = ''; tb0.style.display = 'none'; }
+      return renderView(host, list);
+    }
     css(); textEl.style.whiteSpace = 'normal'; flow(textEl, text, []);
     renderView(host, list.filter(function (m) { return m.kind === 'audio'; }));
+    var editable = !!(opts && opts.editable), cx = null, tb = null;
+    if (editable) {
+      tb = viewTb(textEl); tb.style.display = '';
+      cx = {
+        S: { items: [], sel: null, crop: false }, box: function () { return textEl; }, tb: function () { return tb; }, missing: 0,
+        hint: '💡 這是你的貼文,可以直接調整照片:點一下照片選取,按住拖曳 = 移動(拖到左邊或右邊 = 文字環繞)、拖角落 = 調整大小、「✂ 裁切」= 切掉不要的部分。改完會自動儲存。',
+        again: function () { redraw(); },
+        changed: function () {
+          var out = list.map(function (m) { if (m.kind !== 'image') return m; var it = cx.S.items.filter(function (x) { return x.id === m.id; })[0]; return it ? mediaOf(it, m) : m; });
+          list = out; if (opts.onChange) opts.onChange(out);
+        }
+      };
+      var redraw = function () {
+        flow(textEl, text, cx.S.items.map(function (it, i) { var l = layFor(it); return { src: it.d, alt: '附圖 ' + (i + 1), z: l.z, l: l.l, p: l.p, key: it.key, c: it.crop || null, w: it.w, h: it.h }; }), { edit: true });
+        textEl.classList.add('kbm-edit');
+        if (cx.missing) { var ph = doc.createElement('div'); ph.className = 'kbm-ph'; ph.textContent = '📷 有 ' + cx.missing + ' 張圖片現在打不開(可能網路還沒連上,或檔案還沒傳好)。'; textEl.appendChild(ph); }
+        decorate(cx);
+      };
+      cx.redraw = redraw; decorate(cx);
+      if (!textEl.__kbmEd) { textEl.__kbmEd = true; textEl.addEventListener('pointerdown', function (e) { if (textEl.__cx) onDown(e, textEl.__cx); }); }
+      if (!tb.__kbmEd) { tb.__kbmEd = true; tb.addEventListener('click', function (e) { if (textEl.__cx) tbAction(textEl.__cx, e); }); }
+    } else { if (tb0) { tb0.innerHTML = ''; tb0.style.display = 'none'; } textEl.classList.remove('kbm-edit'); }
+    textEl.__cx = cx;
     var tok = textEl.__kbmTok = (textEl.__kbmTok || 0) + 1;
     Promise.all(imgs.map(function (m, i) {
       return get(m.id).then(function (r) { return { m: m, i: i, d: r && r.d ? r.d : '' }; }, function () { return { m: m, i: i, d: '' }; });
     })).then(function (rs) {
       if (textEl.__kbmTok !== tok) return;
       var ok = rs.filter(function (x) { return x.d; });
-      flow(textEl, text, ok.map(function (x) { var l = hasLay(x.m) ? layOf(x.m) : OLD_LAY; return { src: x.d, alt: '附圖 ' + (x.i + 1), z: l.z, l: l.l, p: l.p, click: lightbox }; }));
+      if (cx) {
+        cx.S.items = ok.map(function (x) { var m = x.m, it = { key: m.id, id: m.id, kind: 'image', d: x.d, w: m.w, h: m.h, crop: cropOf(m) }; if (hasLay(m)) it.lay = layOf(m); else it.legacy = true; return it; });
+        cx.missing = rs.length - ok.length; cx.redraw(); return;
+      }
+      flow(textEl, text, ok.map(function (x) { var l = hasLay(x.m) ? layOf(x.m) : OLD_LAY; return { src: x.d, alt: '附圖 ' + (x.i + 1), z: l.z, l: l.l, p: l.p, click: lightbox, c: cropOf(x.m), w: x.m.w, h: x.m.h }; }));
       if (ok.length < rs.length) { var ph = doc.createElement('div'); ph.className = 'kbm-ph'; ph.textContent = '📷 有 ' + (rs.length - ok.length) + ' 張圖片現在打不開(可能網路還沒連上,或檔案還沒傳好)。'; textEl.appendChild(ph); }
     });
   }
@@ -411,6 +606,6 @@
     CFG: CFG, enabled: enabled, mount: mount, reset: reset, load: load, collect: collect, gate: gate, pending: pending, failed: failed,
     renderView: renderView, renderBody: renderBody, badge: badge, get: get, send: send, newId: newId, compressImage: compressImage, recSupported: recSupported,
     addImages: addImages, addAudioFile: addAudioFile,
-    _t: { H: H, flow: flow, layOf: layOf, LAYS: LAYS, prev: prev, lput: lput, lget: lget, mem: mem, items: function () { return ST.items; }, toggleRecord: toggleRecord, state: ST }
+    _t: { H: H, flow: flow, layOf: layOf, LAYS: LAYS, prev: prev, cropOf: cropOf, dropAt: dropAt, cropDrag: cropDrag, sizeDrag: sizeDrag, layAfterDrop: layAfterDrop, select: select, decorate: decorate, CCX: CCX, lput: lput, lget: lget, mem: mem, items: function () { return ST.items; }, toggleRecord: toggleRecord, state: ST }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -907,7 +907,10 @@
             document.getElementById('detail-author').innerText = u.name;
             document.getElementById('detail-date').innerText = new Date(n.date).toLocaleDateString('zh-TW');
             document.getElementById('detail-content').innerText = n.content;
-            try { if (window.KBMedia) KBMedia.renderBody(document.getElementById('detail-content'), document.getElementById('detail-media'), n.content || '', n.media || []); } catch (e) {}
+            try { if (window.KBMedia) KBMedia.renderBody(document.getElementById('detail-content'), document.getElementById('detail-media'), n.content || '', n.media || [], {
+                editable: !!KB.can('forum.editOwn', { author: n.author }),   // 作者本人:在這裡就能拖曳/縮放/裁切照片,改完自動存
+                onChange: (list) => { n.media = list; try { KB.content.audit('post.edit', n.id, '調整照片版面'); } catch (e) {} window.dataManager.save(); }
+            }); } catch (e) {}
             document.getElementById('btn-detail-reply').style.display = window.app.canPost() ? '' : 'none';
             document.getElementById('btn-detail-reply').onclick = () => {
                 window.ui.closeModal('modal-detail');
