@@ -287,6 +287,20 @@
     /* 「放在哪裡」的選項要跟著現在打的文字走:打開選單前重新產生 */
     host.addEventListener('mousedown', refreshPos); host.addEventListener('focusin', refreshPos);
     var ta = doc.getElementById('node-content'); if (ta) ta.addEventListener('input', schedPrev);
+    /* 縮圖/照片不能被瀏覽器「拖出去」:否則一不小心拖進文字框,會變成一長串圖片資料 */
+    host.addEventListener('dragstart', function (e) { if (e.target && e.target.tagName === 'IMG') e.preventDefault(); });
+    ['node-title', 'node-content'].forEach(function (id) {
+      var f = doc.getElementById(id); if (!f) return;
+      f.addEventListener('dragover', function (e) { var ty = e.dataTransfer && e.dataTransfer.types; if (ty && Array.prototype.indexOf.call(ty, 'Files') >= 0) e.preventDefault(); });
+      f.addEventListener('drop', function (e) {
+        var dt = e.dataTransfer; if (!dt) return;
+        var fs = Array.prototype.slice.call(dt.files || []).filter(function (x) { return /^image\//.test(x.type); });
+        if (fs.length) { e.preventDefault(); addImages(fs); return; }          // 把照片檔拖進來 = 加照片
+        var tx = ''; try { tx = dt.getData('text') || ''; } catch (e2) {}
+        if (/data:(image|audio)\//.test(tx)) e.preventDefault();               // 圖片資料不要變成文字
+      });
+      f.addEventListener('paste', function (e) { var tx = ''; try { tx = (e.clipboardData && e.clipboardData.getData('text')) || ''; } catch (e2) {} if (/^\s*data:(image|audio)\/[a-z0-9.+-]+;base64,/i.test(tx)) e.preventDefault(); });
+    });
     host.querySelector('.kbm-prev').addEventListener('pointerdown', function (e) { onDown(e, CCX); });
     render(); return host;
   }
@@ -295,7 +309,7 @@
     var list = host.querySelector('.kbm-list'), on = enabled();
     host.style.display = on ? '' : 'none';
     list.innerHTML = ST.items.map(function (it) {
-      var body = it.kind === 'image' ? '<img alt="附圖(點一下在下方版面編輯區選取)" title="點一下,在下方版面編輯區選取這張照片" data-sel="' + esc(it.key) + '" src="' + esc(it.d || '') + '">' + (it.d ? '<button type="button" class="kbm-adjb" data-adj="1" aria-expanded="' + (it.open ? 'true' : 'false') + '">' + (it.open ? '▲ 收起' : '⚙ 用數字調整') + '</button>' + (it.open ? panelHtml(it) : '') : '') : '<div style="font-size:12px;font-weight:700">🎙️ 錄音 ' + mmss(it.dur || 0) + '</div>' + (it.d ? '<audio controls preload="metadata" src="' + esc(it.d) + '"></audio>' : '');
+      var body = it.kind === 'image' ? '<img draggable="false" alt="附圖(點一下在下方版面編輯區選取)" title="點一下,在下方版面編輯區選取這張照片" data-sel="' + esc(it.key) + '" src="' + esc(it.d || '') + '">' + (it.d ? '<button type="button" class="kbm-adjb" data-adj="1" aria-expanded="' + (it.open ? 'true' : 'false') + '">' + (it.open ? '▲ 收起' : '⚙ 用數字調整') + '</button>' + (it.open ? panelHtml(it) : '') : '') : '<div style="font-size:12px;font-weight:700">🎙️ 錄音 ' + mmss(it.dur || 0) + '</div>' + (it.d ? '<audio controls preload="metadata" src="' + esc(it.d) + '"></audio>' : '');
       var st = it.state === 'ok' ? '<span class="kbm-st ok">✓ 已準備好</span>' : it.state === 'err' ? '<span class="kbm-st err">⚠ ' + esc(it.err || '沒有傳成功') + '<button type="button" data-retry="' + esc(it.key) + '">重試</button></span>' : '<span class="kbm-st">傳送中…</span>';
       return '<div class="kbm-it' + (it.open ? ' open' : '') + '" data-key="' + esc(it.key) + '">' + body + st + '<button type="button" class="kbm-x" data-x="' + esc(it.key) + '" aria-label="拿掉這個附件">✕</button></div>';
     }).join('');
