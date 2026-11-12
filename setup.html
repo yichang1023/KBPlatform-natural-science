@@ -19,6 +19,9 @@
 <script src="kb-ai.js"></script>
 <script src="kb-xlsx.js"></script>
 <script src="kb-vocab.js"></script>
+<script src="kb-asra.js"></script>
+<script src="kb-media.js"></script>
+<script src="kb-research-export.js"></script>
 <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Noto Sans TC', 'sans-serif'] } } } }</script>
 <style>
   html, body { height: 100%; }
@@ -594,25 +597,126 @@
 
 
   /* ================= 7 資料與備份 ================= */
-  function dlBackup(id) { var snap = id ? KB.backup.get(id) : KB.backup.snapshot(); if (!snap) return; download('KB備份_' + dateStr() + '.json', JSON.stringify(snap), 'application/json'); }
+  /* 貼文(含垃圾桶裡的)附的照片/錄音編號。貼文裡只有清單(含大小、位置、排列設定),檔案本身要另外收 */
+  function mediaIds(snap) {
+    var ids = {}, seen = [];
+    (function walk(o, depth) {
+      if (!o || typeof o !== 'object' || depth > 6 || seen.indexOf(o) >= 0) return; seen.push(o);
+      if (Array.isArray(o)) { o.forEach(function (x) { walk(x, depth + 1); }); return; }
+      if (Array.isArray(o.media)) o.media.forEach(function (m) { if (m && typeof m.id === 'string' && /^m[A-Za-z0-9_-]{6,60}$/.test(m.id)) ids[m.id] = 1; });
+      Object.keys(o).forEach(function (k) { if (k !== 'media') walk(o[k], depth + 1); });
+    })([snap.nodes, snap.trash], 0);
+    return Object.keys(ids);
+  }
+  function packMedia(snap) {
+    var ids = mediaIds(snap); snap.media = {}; if (!ids.length || !window.KBMedia) return Promise.resolve({ n: ids.length, got: 0, miss: ids.length });
+    var got = 0;
+    return Promise.all(ids.map(function (i) { return KBMedia.get(i).then(function (r) { if (r && r.d) { snap.media[i] = r; got++; } }, function () {}); })).then(function () { return { n: ids.length, got: got, miss: ids.length - got }; });
+  }
+  function dlBackup(id) {
+    var snap = id ? KB.backup.get(id) : KB.backup.snapshot(); if (!snap) return;
+    // 完整備份(不是下載舊的自動備份)時,把全班的 ASRA 反思紀錄、貼文附的照片與錄音一起放進去
+    if (!id && window.KBAsra && KBAsra.exportAll) { try { snap.asra = KBAsra.exportAll(); } catch (x) {} }
+    if (id) { download('KB備份_' + dateStr() + '.json', JSON.stringify(snap), 'application/json'); return; }
+    return packMedia(snap).then(function (m) {
+      download('KB備份_' + dateStr() + '.json', JSON.stringify(snap), 'application/json');
+      if (m.n) KBUI.toast('備份已下載,含 ' + m.got + ' 個照片/錄音附件' + (m.miss ? '(有 ' + m.miss + ' 個現在讀不到,沒放進去)' : ''), m.miss ? 'err' : 'ok');
+    });
+  }
+  /* 還原時把附件檔放回去:本機存起來;有雲端就再傳雲端(已經在雲端的會被當成功) */
+  function restoreMedia(snap) {
+    var ids = Object.keys(snap.media || {}); if (!ids.length || !window.KBMedia) return Promise.resolve({ n: 0, ok: 0, fail: 0 });
+    var okn = 0, bad = 0;
+    return Promise.all(ids.map(function (i) { var r = snap.media[i]; if (!r || typeof r.d !== 'string') { bad++; return null; } return KBMedia.send(i, r).then(function () { okn++; }, function () { bad++; }); })).then(function () { return { n: ids.length, ok: okn, fail: bad }; });
+  }
   R.data = function () {
     var bk = KB.backup.list().slice().reverse(), c = KB.content.get(), st = KB.stats();
     var bl = bk.length ? '<div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>時間</th><th>說明</th><th>使用者</th><th>貼文</th><th>操作</th></tr></thead><tbody>' + bk.map(function (b) { return '<tr><td>' + fmt(b.time) + '</td><td>' + esc(b.label) + '</td><td>' + b.users + '</td><td>' + b.posts + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="b-dl" data-id="' + b.id + '"><i class="fa-solid fa-download"></i>下載</button> <button class="btn btn-g btn-sm" data-act="b-restore" data-id="' + b.id + '"><i class="fa-solid fa-clock-rotate-left"></i>還原</button> <button class="btn btn-d btn-sm" data-act="b-del" data-id="' + b.id + '"><i class="fa-solid fa-trash"></i></button></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="text-sm text-slate-400 py-6 text-center">還沒有備份。系統最多保留最近 5 份,清空或還原前會自動備份。</div>';
     var tr = c.trash.length ? '<div class="overflow-x-auto max-h-[40vh] border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>類型</th><th>內容</th><th>刪除者</th><th>時間</th><th>操作</th></tr></thead><tbody>' + c.trash.map(function (it) { var topic = it.type === 'topic'; var name = topic ? it.data.name + '(含 ' + (it.relatedNodes || []).length + ' 則貼文)' : (function (d) { d = Array.isArray(d) ? d : [d]; return ((d[0] && d[0].title) || '(無標題)') + '(共 ' + d.length + ' 則)'; })(it.data); return '<tr><td>' + (topic ? '討論區' : '貼文') + '</td><td>' + esc(String(name).slice(0, 60)) + '</td><td>' + esc(KB.display.label(it.deletedBy, 'teacher')) + '</td><td class="text-xs text-slate-500">' + fmt(it.deletedAt) + '</td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="tr-restore" data-id="' + esc(it.id) + '"><i class="fa-solid fa-rotate-left"></i>還原</button> <button class="btn btn-d btn-sm" data-act="tr-del" data-id="' + esc(it.id) + '"><i class="fa-solid fa-xmark"></i>永久刪除</button></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="text-sm text-slate-400 py-6 text-center">回收桶是空的</div>';
     $('#content').innerHTML =
-      card('匯出', 'fa-file-export', '<div class="flex flex-wrap gap-2"><button class="btn btn-p" data-act="d-json"><i class="fa-solid fa-file-code"></i>匯出完整備份(JSON)</button><button class="btn btn-g" data-act="d-posts"><i class="fa-solid fa-file-csv"></i>匯出全部貼文(CSV)</button><button class="btn btn-g" data-act="u-export"><i class="fa-solid fa-users"></i>匯出使用者名單(CSV)</button></div><p class="text-xs text-slate-500 mt-2">完整備份包含使用者(含加密後的密碼)、班級、討論區、貼文、回收桶與設定;不含 AI 金鑰與稽核紀錄。</p>') +
-      card('備份與還原', 'fa-clock-rotate-left', bl + '<div class="flex flex-wrap gap-2 mt-3"><button class="btn btn-s" data-act="quick-backup"><i class="fa-solid fa-floppy-disk"></i>立即建立備份</button><button class="btn btn-g" data-act="b-file"><i class="fa-solid fa-file-import"></i>從備份檔還原…</button><input type="file" id="b-file-inp" accept=".json,application/json" style="display:none"></div>') +
+      card('匯出', 'fa-file-export', '<div class="flex flex-wrap gap-2"><button class="btn btn-p" data-act="d-json"><i class="fa-solid fa-file-code"></i>匯出完整備份(JSON)</button><button class="btn btn-g" data-act="d-posts"><i class="fa-solid fa-file-csv"></i>匯出全部貼文(CSV)</button><button class="btn btn-g" data-act="u-export"><i class="fa-solid fa-users"></i>匯出使用者名單(CSV)</button></div><p class="text-xs text-slate-500 mt-2">完整備份包含使用者(含加密後的密碼)、班級、討論區、貼文、回收桶與設定,全班的 ASRA 反思紀錄(含每次修改的版本),以及貼文附的照片與錄音(含照片的大小與位置設定;檔案較多時備份檔會比較大);不含 AI 金鑰、稽核紀錄與學習單資料包。這個檔案有真實姓名,請妥善保管。</p>') +
+      card('研究匯出(給 KBDeX)', 'fa-diagram-project', rxCard()) +
+      card('備份與還原', 'fa-clock-rotate-left', bl + '<div class="flex flex-wrap gap-2 mt-3"><button class="btn btn-s" data-act="quick-backup"><i class="fa-solid fa-floppy-disk"></i>立即建立備份</button><button class="btn btn-g" data-act="b-file"><i class="fa-solid fa-file-import"></i>從備份檔還原…</button><span class="text-xs text-slate-500 self-center">(也可以選「ASRA 紀錄檔」,只補上 ASRA 紀錄,不動其他資料)</span><input type="file" id="b-file-inp" accept=".json,application/json" style="display:none"></div>') +
       card('回收桶(' + c.trash.length + ')', 'fa-trash-can', tr, c.trash.length ? '<button class="btn btn-d btn-sm" data-act="tr-empty">清空回收桶</button>' : '') +
       '<div class="danger-zone"><div class="flex items-center gap-2 mb-2"><i class="fa-solid fa-triangle-exclamation text-red-600"></i><h2 class="font-bold text-red-700">危險操作</h2></div><p class="text-xs text-red-700/80 mb-3">以下操作都會先「自動備份」,並需要輸入確認文字才能執行。</p><div class="flex flex-wrap gap-2"><button class="btn btn-d" data-act="d-clear"><i class="fa-solid fa-eraser"></i>清空全部貼文與回收桶(' + st.posts + ' 則)</button><button class="btn btn-d" data-act="d-reset"><i class="fa-solid fa-skull-crossbones"></i>完整重置整個平台</button></div></div>';
-    var fi = $('#b-file-inp'); if (fi) fi.onchange = function () { var file = this.files[0]; if (!file) return; var fr = new FileReader(); fr.onload = function () { var o; try { o = JSON.parse(fr.result); } catch (e) { KBUI.toast('這不是有效的備份檔(JSON 格式錯誤)', 'err'); return; } restoreFlow(o, file.name); }; fr.readAsText(file, 'utf-8'); fi.value = ''; };
+    rxPreview();
+    var fi = $('#b-file-inp'); if (fi) fi.onchange = function () { var file = this.files[0]; if (!file) return; var fr = new FileReader(); fr.onload = function () { var o; try { o = JSON.parse(fr.result); } catch (e) { KBUI.toast('這不是有效的備份檔(JSON 格式錯誤)', 'err'); return; } if (o && o.app === 'kb-asra-entries') { asraEntriesFlow(o, file.name); return; } restoreFlow(o, file.name); }; fr.readAsText(file, 'utf-8'); fi.value = ''; };
   };
+  function asraCount(o) { var n = 0; Object.keys(o || {}).forEach(function (u) { n += (o[u] || []).length; }); return n; }
+  /* ---- 研究匯出(給 KBDeX):作者標記、討論區、期間 ---- */
+  function rxCard() {
+    if (!window.KBResearch) return '<p class="text-sm text-slate-500">研究匯出模組沒有載入。</p>';
+    var c = KB.content.get(), topics = c.topics || [];
+    var tp = topics.map(function (t) { return '<label class="flex items-center gap-1 text-sm"><input type="checkbox" class="rx-topic" value="' + esc(t.id) + '" checked> ' + esc(t.name || t.title || t.id) + '</label>'; }).join('');
+    var an = [['code', '代號(P01、P02…)', '最保險。學號、姓名都不會出現在資料裡;對照表另外下載、另外保管。'], ['id', '學號', '資料裡是學號。若學號是真實學號,仍然看得出是誰。'], ['name', '姓名(不匿名)', '只給自己用。不要公開、不要寄給研究團隊以外的人。']]
+      .map(function (a, i) { return '<label class="flex items-start gap-2 text-sm"><input type="radio" name="rx-anon" value="' + a[0] + '"' + (i === 0 ? ' checked' : '') + ' class="mt-1"><span><b>' + a[1] + '</b><span class="block text-xs text-slate-500">' + a[2] + '</span></span></label>'; }).join('');
+    return '<p class="text-xs text-slate-500 mb-3 leading-relaxed">把論壇發言整理成 KBDeX 要的格式(發言表、關鍵詞清單、小組成員、回覆關係)。關鍵詞清單會一起產生:用內建單元詞庫與你在「分析設定」補充的自訂詞,比對發言後挑出真的有出現的詞;匯入 KBDeX 中文版後,還會再檢查有沒有需要補充的詞。</p>' +
+      '<div class="grid md:grid-cols-2 gap-4"><div><div class="font-bold text-sm mb-1">作者怎麼標記</div><div class="space-y-2">' + an + '</div><p class="text-xs text-slate-500 mt-2">選代號或學號時,發言內容裡出現的同學姓名(和學號)也會換成同一個標記。</p></div>' +
+      '<div><div class="font-bold text-sm mb-1">要匯出哪些討論區</div><div class="space-y-1 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-2">' + (tp || '<span class="text-xs text-slate-400">沒有討論區</span>') + '</div>' +
+      '<div class="font-bold text-sm mt-3 mb-1">期間(可留空 = 全部)</div><div class="flex items-center gap-2 text-sm"><input type="date" id="rx-from" class="inp"> ~ <input type="date" id="rx-to" class="inp"></div>' +
+      '<label class="flex items-center gap-2 text-sm mt-2"><input type="checkbox" id="rx-staff"> 也包含老師的發言</label></div></div>' +
+      '<div id="rx-stat" class="text-xs text-slate-600 mt-3"></div>' +
+      '<div class="flex flex-wrap gap-2 mt-3"><button class="btn btn-p" data-act="rx-json"><i class="fa-solid fa-file-code"></i>下載 KBDeX 資料(JSON,給 KBDeX 中文版)</button><button class="btn btn-g" data-act="rx-zip"><i class="fa-solid fa-file-zipper"></i>下載資料夾(ZIP,給原版 KBDeX)</button><button class="btn btn-g" data-act="rx-map"><i class="fa-solid fa-key"></i>下載代號對照表(CSV)</button></div>' +
+      '<p class="text-xs text-slate-500 mt-2">代號對照表有學號與姓名,請和資料檔分開保管。</p>';
+  }
+  function rxOpts() {
+    var o = { topicIds: [], anon: 'code', includeStaff: false, from: null, to: null }, all = document.querySelectorAll('.rx-topic'), on = document.querySelectorAll('.rx-topic:checked');
+    if (on.length && on.length < all.length) on.forEach(function (x) { o.topicIds.push(x.value); });
+    var r = document.querySelector('input[name="rx-anon"]:checked'); if (r) o.anon = r.value;
+    var s = document.getElementById('rx-staff'); if (s) o.includeStaff = s.checked;
+    var f = document.getElementById('rx-from'), t = document.getElementById('rx-to');
+    if (f && f.value) { var a = new Date(f.value + 'T00:00:00').getTime(); if (isFinite(a)) o.from = a; }
+    if (t && t.value) { var b = new Date(t.value + 'T23:59:59.999').getTime(); if (isFinite(b)) o.to = b; }
+    return o;
+  }
+  function rxNone(on) { return on.length === 0 && document.querySelectorAll('.rx-topic').length > 0; }
+  function rxPreview() {
+    var el = document.getElementById('rx-stat'); if (!el || !window.KBResearch) return;
+    if (rxNone(document.querySelectorAll('.rx-topic:checked'))) { el.innerHTML = '<span class="text-red-600">請至少選一個討論區。</span>'; return; }
+    try { var o = rxOpts(); o.words = false; var r = KBResearch.build(o); el.textContent = '會匯出 ' + r.stats.posts + ' 則發言、' + r.stats.authors + ' 位作者、' + r.stats.groups + ' 個小組。'; } catch (x) { el.textContent = ''; }
+  }
+  function rxRun(kind) {
+    if (rxNone(document.querySelectorAll('.rx-topic:checked'))) { KBUI.toast('請至少選一個討論區', 'err'); return; }
+    var o = rxOpts();
+    var go = function () {
+      var r = KBResearch.build(o);
+      if (!r.stats.posts) { KBUI.toast('這個範圍沒有發言可以匯出', 'err'); return; }
+      if (kind === 'zip') download(r.name + '.zip', KBResearch.zip(r.files, r.name), 'application/zip');
+      else download(r.name + '.json', KBResearch.packJSON(r), 'application/json');
+      KB.audit.add('data.export', 'research.' + kind + '.' + o.anon, r.stats.posts + ' posts');
+      KBUI.toast('已下載:' + r.stats.posts + ' 則發言、' + r.stats.authors + ' 位作者、關鍵詞 ' + r.stats.words + ' 個', 'ok');
+    };
+    if (o.anon === 'name') KBUI.confirm({ title: '匯出含真實姓名的資料', html: '這份資料的作者是<b>真實姓名</b>。不要公開、不要寄給研究團隊以外的人。確定要匯出嗎?', okText: '確定匯出' }).then(function (y) { if (y) go(); });
+    else go();
+  }
+  function rxMap() {
+    var o = rxOpts(); if (o.anon !== 'code') { KBUI.toast('只有選「代號」匿名時才有對照表', 'err'); return; }
+    var r = KBResearch.build(o); if (!r.mapping) return;
+    download('代號對照表_' + dateStr() + '.csv', '\ufeff' + r.mapping, 'text/csv');
+    KB.audit.add('data.export', 'research.map', '');
+    KBUI.toast('已下載代號對照表。請和資料檔分開保管', 'ok');
+  }
+  document.addEventListener('change', function (e) { var t = e.target; if (t && (t.className === 'rx-topic' || t.name === 'rx-anon' || t.id === 'rx-from' || t.id === 'rx-to' || t.id === 'rx-staff')) rxPreview(); });
+  /* ASRA 紀錄檔(kb-asra-entries):只補上 ASRA 反思紀錄,不動論壇、使用者與設定;已經有的不會被刪除或改動 */
+  function asraEntriesFlow(o, label) {
+    if (!window.KBAsra || !KBAsra.importAll) { KBUI.toast('這個頁面沒有載入 ASRA 模組', 'err'); return; }
+    var n = asraCount(o.asra), ids = Object.keys(o.asra || {}).length;
+    if (!n) { KBUI.toast('這個檔案裡沒有 ASRA 紀錄', 'err'); return; }
+    KBUI.confirm({ title: '匯入 ASRA 紀錄檔', html: '「' + esc(o.name || label || '') + '」有 ' + ids + ' 位學生、' + n + ' 筆 ASRA 紀錄。只會補上缺的,不會刪除或改動現有的紀錄。' + (o.note ? '<br><span class="text-xs text-amber-700">' + esc(o.note) + '</span>' : ''), okText: '匯入' }).then(function (y) {
+      if (!y) return; var r = KBAsra.importAll(o.asra);
+      KB.audit.add('data.import', 'asra-entries', r.added + ' entries');
+      KBUI.toast('ASRA 紀錄:補上 ' + r.added + ' 筆(' + r.students + ' 位學生)' + (r.skipped ? ',' + r.skipped + ' 筆已經有了' : ''), 'ok');
+    });
+  }
   function restoreFlow(snap, label) {
     var err = null; if (!snap || snap.app !== 'kb-platform') err = '這不是本平台的備份檔';
     if (err) { KBUI.toast(err, 'err'); return; }
-    KBUI.confirmText({ title: '還原備份', html: '將用「' + esc(label || snap.label || snap.time) + '」取代目前所有資料(使用者 ' + (snap.users || []).length + ' 人、貼文 ' + (snap.nodes || []).length + ' 則)。', expected: '還原備份', autoBackup: true, okText: '確認還原' }).then(function (y) {
+    KBUI.confirmText({ title: '還原備份', html: '將用「' + esc(label || snap.label || snap.time) + '」取代目前所有資料(使用者 ' + (snap.users || []).length + ' 人、貼文 ' + (snap.nodes || []).length + ' 則)。' + (snap.asra && window.KBAsra ? '<br>備份裡的 ASRA 反思紀錄(' + asraCount(snap.asra) + ' 筆)會補回來;已經有的不會被刪除或改動。' : '') + (snap.media && Object.keys(snap.media).length && window.KBMedia ? '<br>貼文附的照片與錄音(' + Object.keys(snap.media).length + ' 個)也會一起放回去。' : ''), expected: '還原備份', autoBackup: true, okText: '確認還原' }).then(function (y) {
       if (!y) return; var r = KB.backup.restore(snap);
       if (!ok(r, '已還原(還原前的資料已自動備份)')) return;
-      var cu = KB.auth.current(); if (!cu) { location.href = 'index.html'; return; } renderNav(); render();
+      if (snap.asra && window.KBAsra && KBAsra.importAll) { var ar = KBAsra.importAll(snap.asra); KBUI.toast('ASRA 反思紀錄:補回 ' + ar.added + ' 筆(' + ar.students + ' 位學生)' + (ar.skipped ? ',' + ar.skipped + ' 筆已經有了' : ''), 'ok'); }
+      var after = function () { var cu = KB.auth.current(); if (!cu) { location.href = 'index.html'; return; } renderNav(); render(); };
+      if (snap.media && Object.keys(snap.media).length) restoreMedia(snap).then(function (m) { KBUI.toast('照片/錄音附件:放回 ' + m.ok + ' 個' + (m.fail ? ',' + m.fail + ' 個沒成功(雲端規則或網路問題,可再還原一次)' : ''), m.fail ? 'err' : 'ok'); after(); }); else after();
     });
   }
   function postsCSV() {
@@ -811,6 +915,9 @@
     // data
     'd-json': function () { dlBackup(); KB.audit.add('data.export', 'json', ''); },
     'd-posts': function () { download('全部貼文_' + dateStr() + '.csv', postsCSV(), 'text/csv'); KB.audit.add('data.export', 'posts.csv', ''); },
+    'rx-json': function () { rxRun('json'); },
+    'rx-zip': function () { rxRun('zip'); },
+    'rx-map': function () { rxMap(); },
     'b-dl': function (b) { dlBackup(b.dataset.id); },
     'b-restore': function (b) { var s = KB.backup.get(b.dataset.id); restoreFlow(s, s && s.label); },
     'b-del': function (b) { KB.backup.removeBackup(b.dataset.id); R.data(); },

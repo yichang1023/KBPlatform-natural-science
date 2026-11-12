@@ -7,12 +7,13 @@
  *    · 檔案本身(壓縮後的 data URL)另存:雲端 kb_v2_media/<id>,本機 IndexedDB(離線/測試版只有這個)
  *    · 看貼文的時候才去載入(不會一打開論壇就下載全班的圖與錄音)
  *  上傳時機:選好照片/錄完音當下就先傳;傳好才能按「發布」,所以發出去的貼文一定附得到。
- *  限制:每則最多 3 張照片 + 1 段錄音;照片縮到長邊 1280px、約 380KB 以內;錄音最長 2 分鐘(24kbps,約 360KB)。
+ *  限制:每則最多 3 張照片 + 1 段錄音;照片縮到長邊 2048px、約 640KB 以內(雲端單份文件上限約 1MB);錄音最長 2 分鐘(24kbps,約 360KB)。
+ *  照片的「大小/位置/排列」(仿 Word 的文字繞圖)只記在貼文的附件清單裡: z 大小%、l 排列、p 放在第幾行後面;不動雲端檔案,所以改版面不用重傳。
  * ===================================================================== */
 (function (global) {
   'use strict';
   var doc = global.document;
-  var CFG = { maxImages: 3, maxAudio: 1, maxSide: 1280, imgBytes: 380000, audioMaxSec: 120, audioBps: 24000, docMax: 880000, audioFileBytes: 640000 };
+  var CFG = { maxImages: 3, maxAudio: 1, maxSide: 2048, imgBytes: 640000, audioMaxSec: 120, audioBps: 24000, docMax: 880000, audioFileBytes: 640000 };
   var H = {};          // 測試用:可換掉壓縮 / 錄音
   var seq = 0;
 
@@ -78,11 +79,16 @@
       var w0 = im.width || im.naturalWidth, h0 = im.height || im.naturalHeight; if (!w0 || !h0) throw new Error('bad-image');
       var k = Math.min(1, CFG.maxSide / Math.max(w0, h0)), w = Math.round(w0 * k), h = Math.round(h0 * k);
       var cv = doc.createElement('canvas'), cx = cv.getContext('2d');
-      var draw = function () { cv.width = w; cv.height = h; cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); cx.drawImage(im, 0, 0, w, h); };
-      draw();
-      var q = 0.82, d = cv.toDataURL('image/jpeg', q);
-      while (d.length * 0.75 > CFG.imgBytes && q > 0.45) { q -= 0.1; d = cv.toDataURL('image/jpeg', q); }
-      for (var i = 0; i < 4 && d.length * 0.75 > CFG.imgBytes; i++) { w = Math.round(w * 0.8); h = Math.round(h * 0.8); draw(); d = cv.toDataURL('image/jpeg', 0.6); }
+      var draw = function () { cv.width = w; cv.height = h; cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); try { cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high'; } catch (e) {} cx.drawImage(im, 0, 0, w, h); };
+      /* 先保住尺寸、慢慢降畫質(0.92 → 0.62);還是太大才把長寬縮小 12%,再來一次 */
+      var d = '';
+      for (var i = 0; i < 10; i++) {
+        draw();
+        var q = 0.92; d = cv.toDataURL('image/jpeg', q);
+        while (d.length * 0.75 > CFG.imgBytes && q > 0.62) { q -= 0.06; d = cv.toDataURL('image/jpeg', q); }
+        if (d.length * 0.75 <= CFG.imgBytes) break;
+        w = Math.round(w * 0.88); h = Math.round(h * 0.88);
+      }
       if (d.length > CFG.docMax) throw new Error('too-big');
       return { d: d, m: 'image/jpeg', w: w, h: h };
     });
@@ -130,6 +136,43 @@
   };
   function errText(e) { var k = e && (e.name in ERR ? e.name : e.message); if (k in ERR) return ERR[k]; return (e && e.code === 'permission-denied') ? '雲端還不能存附件(請老師先更新雲端規則)。' : '沒有傳成功,請檢查網路後按「重試」。'; }
 
+  /* ---------- 版面(仿 Word「文字繞圖」)----------
+   * 附件清單裡每張照片可有:z 大小(佔文字區寬度的 %)、l 排列、p 放在第幾行後面(沒有 = 最後面)。
+   * 沒有 l 的是舊貼文,維持原本「照片排在文字下面」的樣子。 */
+  var LAYS = [['inline', '與文字排列(像一個字,接在那一行後面)'], ['wrapL', '矩形・文字環繞(圖在左)'], ['wrapR', '矩形・文字環繞(圖在右)'], ['blockL', '上及下・靠左'], ['blockC', '上及下・置中'], ['blockR', '上及下・靠右'], ['back', '文字在後(淡淡的底圖)']];
+  var LAYK = {}; LAYS.forEach(function (x) { LAYK[x[0]] = 1; });
+  var DEF_LAY = { z: 50, l: 'blockC', p: -1 }, OLD_LAY = { z: 35, l: 'blockL', p: -1 };
+  function clampZ(z) { z = Math.round(+z); if (!isFinite(z) || !z) z = 50; return z < 10 ? 10 : z > 100 ? 100 : z; }
+  function layOf(m) { return { z: clampZ((m && m.z) || 50), l: m && LAYK[m.l] ? m.l : 'blockC', p: m && typeof m.p === 'number' && m.p >= 0 ? Math.floor(m.p) : -1 }; }
+  function hasLay(m) { return !!(m && m.kind === 'image' && LAYK[m.l]); }
+  /* 把「文字 + 照片」排成一塊。imgs: [{ src, alt, z, l, p, click }] */
+  function flow(box, text, imgs) {
+    box.innerHTML = ''; box.classList.add('kbm-flow');
+    var lines = String(text == null ? '' : text).split('\n'), n = lines.length, by = {}, back = [], inl = [];
+    imgs.forEach(function (x) {
+      var p = typeof x.p === 'number' && x.p >= 0 && x.p <= n ? x.p : n, o = { src: x.src, alt: x.alt, z: clampZ(x.z), l: LAYK[x.l] ? x.l : 'blockC', p: p, click: x.click };
+      if (o.l === 'back') back.push(o); else if (o.l === 'inline') inl.push(o); else (by[p] = by[p] || []).push(o);
+    });
+    function imgEl(x) {
+      var im = doc.createElement('img'); im.className = 'kbm-fi'; im.alt = x.alt || '附圖'; im.src = x.src; im.style.width = x.z + '%';
+      if (x.click) im.addEventListener('click', function () { x.click(x.src); });
+      return im;
+    }
+    back.forEach(function (x) { var b = doc.createElement('div'); b.className = 'kbm-bg'; b.setAttribute('aria-hidden', 'true'); b.style.backgroundImage = 'url("' + x.src + '")'; b.style.backgroundSize = x.z + '% auto'; box.appendChild(b); });
+    var els = lines.map(function (ln) { var d = doc.createElement('div'); d.className = 'kbm-ln'; d.textContent = ln; return d; });
+    inl.forEach(function (x) { var d = els[x.p >= 1 ? x.p - 1 : 0], im = imgEl(x); if (x.p === 0) d.insertBefore(im, d.firstChild); else d.appendChild(im); });
+    function put(p) {
+      (by[p] || []).forEach(function (x) {
+        var el;
+        if (x.l === 'wrapL' || x.l === 'wrapR') { el = imgEl(x); el.classList.add(x.l === 'wrapL' ? 'kbm-fl' : 'kbm-fr'); }
+        else { el = doc.createElement('div'); el.className = 'kbm-bk'; el.style.textAlign = x.l === 'blockL' ? 'left' : x.l === 'blockR' ? 'right' : 'center'; el.appendChild(imgEl(x)); }
+        box.appendChild(el);
+      });
+    }
+    for (var i = 0; i <= n; i++) { put(i); if (i < n) box.appendChild(els[i]); }
+    return box;
+  }
+
   /* ---------- 發言視窗:附件區 ---------- */
   var ST = { items: [], rec: null, host: null, hintEl: null };
   function css() {
@@ -140,6 +183,11 @@
       '.kbm-it img{width:96px;height:72px;object-fit:cover;border-radius:8px;display:block;background:#e2e8f0}.kbm-it audio{height:34px;max-width:240px}.kbm-x{position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:0;background:#0f172a;color:#fff;font-size:13px;line-height:24px;cursor:pointer}' +
       '.kbm-st{font-size:11px;font-weight:700;color:#64748b}.kbm-st.err{color:#b91c1c}.kbm-st.ok{color:#15803d}.kbm-st button{margin-left:6px;text-decoration:underline;color:#4338ca;font-weight:800;background:none;border:0;cursor:pointer;font-size:11px}' +
       '.kbm-view{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.kbm-view img{max-width:100%;max-height:220px;border-radius:12px;border:1px solid #e2e8f0;cursor:zoom-in;background:#e2e8f0;min-width:96px;min-height:72px}.kbm-view audio{width:100%;max-width:340px}.kbm-view .kbm-ph{font-size:12px;color:#64748b;padding:10px;border:1px dashed #cbd5e1;border-radius:10px}' +
+      '.kbm-it.open{width:calc(100% - 12px)}.kbm-adjb{font-size:12px;font-weight:800;color:#4338ca;background:none;border:0;cursor:pointer;text-decoration:underline;text-align:left;padding:2px 0;min-height:28px}.kbm-adj{display:flex;flex-direction:column;gap:8px;padding:8px;background:#fff;border:1px solid #e2e8f0;border-radius:10px}.kbm-r{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px}.kbm-r b{min-width:36px;color:#334155}.kbm-note{font-size:11px;color:#64748b}' +
+      '.kbm-chip{padding:4px 10px;border-radius:999px;border:1.5px solid #cbd5e1;background:#fff;font-size:13px;font-weight:700;cursor:pointer;min-height:32px;color:#334155}.kbm-chip.on{background:#4338ca;border-color:#4338ca;color:#fff}.kbm-adj select{max-width:100%;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;min-height:36px}.kbm-adj input[type=range]{flex:1;min-width:110px}' +
+      '.kbm-prevw{margin-top:10px}.kbm-prevt{font-size:12px;font-weight:800;color:#64748b;margin-bottom:4px}.kbm-prev{border:1px dashed #cbd5e1;border-radius:10px;padding:10px;font-size:14px;line-height:1.7;color:#334155;background:#fff;max-height:460px;overflow:auto}' +
+      '.kbm-flow{position:relative;display:flow-root}.kbm-flow>*{position:relative;z-index:1}.kbm-flow>.kbm-bg{position:absolute;z-index:0;top:0;right:0;bottom:0;left:0;background-repeat:no-repeat;background-position:center;opacity:.22;pointer-events:none}.kbm-ln{white-space:pre-wrap;word-break:break-word}.kbm-ln:empty{min-height:1.2em}' +
+      '.kbm-fi{max-width:100%;height:auto;border-radius:10px;border:1px solid #e2e8f0;cursor:zoom-in;background:#e2e8f0}.kbm-ln .kbm-fi{display:inline-block;vertical-align:middle;margin:2px 6px}.kbm-fl{float:left;margin:2px 14px 8px 0}.kbm-fr{float:right;margin:2px 0 8px 14px}.kbm-bk{clear:both;margin:8px 0}.kbm-bk .kbm-fi{display:inline-block}@media(max-width:520px){.kbm-fl,.kbm-fr{max-width:55%}}' +
       '.kbm-lb{position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.88);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}.kbm-lb img{max-width:100%;max-height:100%;border-radius:10px;background:#fff}';
     (doc.head || doc.documentElement).appendChild(s);
   }
@@ -150,7 +198,7 @@
     var host = doc.getElementById('kbm-box'); if (!host) return null;
     ST.host = host; if (host.__kbm) return host; host.__kbm = true; css();
     host.className = 'kbm';
-    host.innerHTML = '<div class="kbm-row"><button type="button" class="kbm-btn" data-k="img"><span aria-hidden="true">📷</span> 加照片</button><button type="button" class="kbm-btn" data-k="rec"><span aria-hidden="true">🎙️</span> <span data-k="rect">錄音</span></button><button type="button" class="kbm-btn" data-k="aud"><span aria-hidden="true">🎵</span> 加錄音檔</button><input type="file" accept="image/*" multiple data-k="file" style="display:none"><input type="file" accept="audio/*" data-k="afile" style="display:none"></div><div class="kbm-hint"></div><div class="kbm-list" aria-live="polite"></div>';
+    host.innerHTML = '<div class="kbm-row"><button type="button" class="kbm-btn" data-k="img"><span aria-hidden="true">📷</span> 加照片</button><button type="button" class="kbm-btn" data-k="rec"><span aria-hidden="true">🎙️</span> <span data-k="rect">錄音</span></button><button type="button" class="kbm-btn" data-k="aud"><span aria-hidden="true">🎵</span> 加錄音檔</button><input type="file" accept="image/*" multiple data-k="file" style="display:none"><input type="file" accept="audio/*" data-k="afile" style="display:none"></div><div class="kbm-hint"></div><div class="kbm-list" aria-live="polite"></div><div class="kbm-prevw" style="display:none"><div class="kbm-prevt">排版預覽(發布後大概的樣子)</div><div class="kbm-prev"></div></div>';
     ST.hintEl = host.querySelector('.kbm-hint');
     host.querySelector('[data-k="img"]').addEventListener('click', function () { if (count('image') >= CFG.maxImages) return say('照片最多 ' + CFG.maxImages + ' 張喔。', 'error'); host.querySelector('[data-k="file"]').click(); });
     host.querySelector('[data-k="file"]').addEventListener('change', function (e) { var fs = Array.prototype.slice.call(e.target.files || []); e.target.value = ''; addImages(fs); });
@@ -158,9 +206,26 @@
     host.querySelector('[data-k="aud"]').addEventListener('click', function () { if (count('audio') >= CFG.maxAudio) return say('錄音最多 ' + CFG.maxAudio + ' 段,要換請先把舊的拿掉。', 'error'); host.querySelector('[data-k="afile"]').click(); });
     host.querySelector('[data-k="afile"]').addEventListener('change', function (e) { var f = (e.target.files || [])[0]; e.target.value = ''; if (f) addAudioFile(f); });
     host.addEventListener('click', function (e) {
-      var x = e.target.closest ? e.target.closest('[data-x]') : null, r = e.target.closest ? e.target.closest('[data-retry]') : null;
+      var c = function (q) { return e.target.closest ? e.target.closest(q) : null; };
+      var x = c('[data-x]'), r = c('[data-retry]'), a = c('[data-adj]'), z = c('[data-z]');
       if (x) removeItem(x.getAttribute('data-x')); else if (r) retry(r.getAttribute('data-retry'));
+      else if (a) { var ia = itemOf(a); if (ia) { ia.open = !ia.open; render(); } }
+      else if (z) { var iz = itemOf(z); if (iz) { setLay(iz, { z: +z.getAttribute('data-z') }); render(); } }
     });
+    /* 大小滑桿:拖的時候只更新數字和預覽(不整個重畫,才不會斷掉);放開才重畫 */
+    host.addEventListener('input', function (e) {
+      var t = e.target; if (!t || !t.getAttribute || t.getAttribute('data-zr') == null) return;
+      var it = itemOf(t); if (!it) return; setLay(it, { z: +t.value });
+      var v = t.parentNode.querySelector('.kbm-zv'); if (v) v.textContent = layFor(it).z + '%'; schedPrev();
+    });
+    host.addEventListener('change', function (e) {
+      var t = e.target; if (!t || !t.getAttribute) return; var it = itemOf(t); if (!it) return;
+      if (t.getAttribute('data-zr') != null) setLay(it, { z: +t.value }); else if (t.getAttribute('data-lay') != null) setLay(it, { l: t.value }); else if (t.getAttribute('data-pos') != null) setLay(it, { p: +t.value }); else return;
+      render();
+    });
+    /* 「放在哪裡」的選項要跟著現在打的文字走:打開選單前重新產生 */
+    host.addEventListener('mousedown', refreshPos); host.addEventListener('focusin', refreshPos);
+    var ta = doc.getElementById('node-content'); if (ta) ta.addEventListener('input', schedPrev);
     render(); return host;
   }
   function render() {
@@ -168,15 +233,50 @@
     var list = host.querySelector('.kbm-list'), on = enabled();
     host.style.display = on ? '' : 'none';
     list.innerHTML = ST.items.map(function (it) {
-      var body = it.kind === 'image' ? '<img alt="附圖" src="' + esc(it.d || '') + '">' : '<div style="font-size:12px;font-weight:700">🎙️ 錄音 ' + mmss(it.dur || 0) + '</div>' + (it.d ? '<audio controls preload="metadata" src="' + esc(it.d) + '"></audio>' : '');
+      var body = it.kind === 'image' ? '<img alt="附圖" src="' + esc(it.d || '') + '">' + (it.d ? '<button type="button" class="kbm-adjb" data-adj="1" aria-expanded="' + (it.open ? 'true' : 'false') + '">' + (it.open ? '▲ 收起' : '⚙ 調整大小與位置') + '</button>' + (it.open ? panelHtml(it) : '') : '') : '<div style="font-size:12px;font-weight:700">🎙️ 錄音 ' + mmss(it.dur || 0) + '</div>' + (it.d ? '<audio controls preload="metadata" src="' + esc(it.d) + '"></audio>' : '');
       var st = it.state === 'ok' ? '<span class="kbm-st ok">✓ 已準備好</span>' : it.state === 'err' ? '<span class="kbm-st err">⚠ ' + esc(it.err || '沒有傳成功') + '<button type="button" data-retry="' + esc(it.key) + '">重試</button></span>' : '<span class="kbm-st">傳送中…</span>';
-      return '<div class="kbm-it" data-key="' + esc(it.key) + '">' + body + st + '<button type="button" class="kbm-x" data-x="' + esc(it.key) + '" aria-label="拿掉這個附件">✕</button></div>';
+      return '<div class="kbm-it' + (it.open ? ' open' : '') + '" data-key="' + esc(it.key) + '">' + body + st + '<button type="button" class="kbm-x" data-x="' + esc(it.key) + '" aria-label="拿掉這個附件">✕</button></div>';
     }).join('');
     var rb = host.querySelector('[data-k="rect"]'), recBtn = host.querySelector('[data-k="rec"]');
     if (!ST.rec) { rb.textContent = '錄音'; recBtn.className = 'kbm-btn'; recBtn.disabled = !ST.rec && count('audio') >= CFG.maxAudio; }
     host.querySelector('[data-k="img"]').disabled = count('image') >= CFG.maxImages;
     host.querySelector('[data-k="aud"]').disabled = !!ST.rec || count('audio') >= CFG.maxAudio;
     if (!ST.hintEl.textContent) setHint(baseHint());
+    prev();
+  }
+  /* ----- 調整大小與位置 ----- */
+  function layFor(it) { return it.lay || (it.legacy ? OLD_LAY : DEF_LAY); }
+  function setLay(it, o) { var b = layFor(it), n = { z: b.z, l: b.l, p: b.p }; for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) n[k] = o[k]; n.z = clampZ(n.z); it.lay = n; schedPrev(); }
+  function itemOf(el) { var q = el.closest ? el.closest('.kbm-it') : null, k = q && q.getAttribute('data-key'); return ST.items.filter(function (x) { return x.key === k; })[0] || null; }
+  function posOpts(sel) {
+    var ta = doc.getElementById('node-content'), lines = String((ta && ta.value) || '').split('\n'), o = [[0, '最上面(文字之前)']];
+    lines.forEach(function (ln, i) { var t = ln.replace(/\s+/g, ' ').trim(); if (t && i + 1 < lines.length) o.push([i + 1, '「' + t.slice(0, 14) + (t.length > 14 ? '…' : '') + '」後面']); });
+    o.push([-1, '最下面(文字之後)']);
+    if (sel >= 0 && sel < lines.length && !o.some(function (x) { return x[0] === sel; })) o.push([sel, '第 ' + sel + ' 行後面']);
+    return o;
+  }
+  function posHtml(sel) { return posOpts(sel).map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === sel ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join(''); }
+  function refreshPos(e) {
+    var t = e && e.target; if (!t || !t.getAttribute || t.getAttribute('data-pos') == null) return;
+    var it = itemOf(t); if (!it) return; var h = posHtml(layFor(it).p); if (t.__h !== h) { t.innerHTML = h; t.__h = h; }
+  }
+  function panelHtml(it) {
+    var l = layFor(it), zb = [[25, '小'], [50, '中'], [75, '大'], [100, '滿版']].map(function (b) { return '<button type="button" class="kbm-chip' + (l.z === b[0] ? ' on' : '') + '" data-z="' + b[0] + '">' + b[1] + '</button>'; }).join('');
+    var lo = LAYS.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === l.l ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('');
+    return '<div class="kbm-adj"><div class="kbm-r"><b>大小</b>' + zb + '<input type="range" min="10" max="100" step="5" value="' + l.z + '" data-zr="1" aria-label="照片大小"><span class="kbm-zv">' + l.z + '%</span></div>' +
+      '<div class="kbm-r"><b>排列</b><select data-lay="1" aria-label="照片排列方式">' + lo + '</select></div>' +
+      '<div class="kbm-r"><b>位置</b><select data-pos="1" aria-label="照片放在哪裡">' + posHtml(l.p) + '</select></div>' +
+      '<div class="kbm-note">' + (it.lay ? '位置 = 照片放在哪一行文字的後面;「文字環繞」是文字繞著圖排。' : '這是舊貼文的照片,調整後才會改用新版面。') + '</div></div>';
+  }
+  var prevT = 0;
+  function schedPrev() { clearTimeout(prevT); prevT = setTimeout(prev, 100); }
+  function prev() {
+    clearTimeout(prevT); var host = ST.host; if (!host) return;
+    var w = host.querySelector('.kbm-prevw'), pv = host.querySelector('.kbm-prev'); if (!w || !pv) return;
+    var imgs = ST.items.filter(function (x) { return x.kind === 'image' && x.d; });
+    w.style.display = imgs.length ? '' : 'none'; if (!imgs.length) return;
+    var ta = doc.getElementById('node-content'), text = ta ? ta.value : '';
+    flow(pv, text || '(這裡會顯示你寫的文字)', imgs.map(function (x, i) { var l = layFor(x); return { src: x.d, alt: '預覽 ' + (i + 1), z: l.z, l: l.l, p: l.p }; }));
   }
   var keySeq = 0;
   function addItem(o) { o.key = 'k' + (keySeq++); ST.items.push(o); render(); return o; }
@@ -193,7 +293,7 @@
     if (!files.length) return say('請選圖片檔(照片或圖片)。', 'error');
     if (files.length > room) { say('照片最多 ' + CFG.maxImages + ' 張,多的先不放。', 'error'); files = files.slice(0, room); }
     files.forEach(function (f) {
-      var it = addItem({ kind: 'image', state: 'up', name: f.name || '', id: newId() });
+      var it = addItem({ kind: 'image', state: 'up', name: f.name || '', id: newId(), lay: { z: DEF_LAY.z, l: DEF_LAY.l, p: DEF_LAY.p } });
       compressImage(f).then(function (r) { it.d = r.d; it.w = r.w; it.h = r.h; it.m = r.m; return upload(it, { d: r.d, m: r.m, t: Date.now(), w: r.w, h: r.h }); }, function (e) { removeItem(it.key); say(errText(e), 'error'); });
     });
   }
@@ -238,6 +338,7 @@
     reset(); if (!mount()) return;
     (list || []).forEach(function (m) {
       var it = addItem({ kind: m.kind, state: 'ok', id: m.id, w: m.w, h: m.h, dur: m.dur, m: m.m });
+      if (m.kind === 'image') { if (hasLay(m)) it.lay = layOf(m); else it.legacy = true; }
       get(m.id).then(function (r) { if (r) { it.d = r.d; render(); } }, function () {});
     });
   }
@@ -245,7 +346,9 @@
   function failed() { return ST.items.filter(function (x) { return x.state === 'err'; }).length; }
   function collect() {
     return ST.items.filter(function (x) { return x.state === 'ok'; }).map(function (x) {
-      var o = { id: x.id, kind: x.kind }; if (x.m) o.m = x.m; if (x.w) { o.w = x.w; o.h = x.h; } if (x.dur) o.dur = x.dur; return o;
+      var o = { id: x.id, kind: x.kind }; if (x.m) o.m = x.m; if (x.w) { o.w = x.w; o.h = x.h; } if (x.dur) o.dur = x.dur;
+      if (x.kind === 'image' && x.lay) { var l = layOf(x.lay); o.z = l.z; o.l = l.l; if (l.p >= 0) o.p = l.p; }
+      return o;
     });
   }
   /* 發布前檢查:還在傳/錄音中/失敗 → 回傳要告訴小朋友的話;可以發布則回傳 '' */
@@ -280,6 +383,23 @@
       }, function () { ph.textContent = '附件現在打不開,請稍後再試。'; });
     });
   }
+  /* 看貼文:文字 + 附件。照片有設定版面(z/l/p)就依版面排進文字裡;舊貼文維持照片排在文字下面 */
+  function renderBody(textEl, host, text, list) {
+    list = list || [];
+    var imgs = list.filter(function (m) { return m.kind === 'image'; });
+    if (!textEl || !imgs.some(hasLay)) { if (textEl) { textEl.classList.remove('kbm-flow'); textEl.style.whiteSpace = ''; textEl.__kbmTok = (textEl.__kbmTok || 0) + 1; } return renderView(host, list); }
+    css(); textEl.style.whiteSpace = 'normal'; flow(textEl, text, []);
+    renderView(host, list.filter(function (m) { return m.kind === 'audio'; }));
+    var tok = textEl.__kbmTok = (textEl.__kbmTok || 0) + 1;
+    Promise.all(imgs.map(function (m, i) {
+      return get(m.id).then(function (r) { return { m: m, i: i, d: r && r.d ? r.d : '' }; }, function () { return { m: m, i: i, d: '' }; });
+    })).then(function (rs) {
+      if (textEl.__kbmTok !== tok) return;
+      var ok = rs.filter(function (x) { return x.d; });
+      flow(textEl, text, ok.map(function (x) { var l = hasLay(x.m) ? layOf(x.m) : OLD_LAY; return { src: x.d, alt: '附圖 ' + (x.i + 1), z: l.z, l: l.l, p: l.p, click: lightbox }; }));
+      if (ok.length < rs.length) { var ph = doc.createElement('div'); ph.className = 'kbm-ph'; ph.textContent = '📷 有 ' + (rs.length - ok.length) + ' 張圖片現在打不開(可能網路還沒連上,或檔案還沒傳好)。'; textEl.appendChild(ph); }
+    });
+  }
   /* 卡片上的小標記(只顯示有幾個,不載入檔案) */
   function badge(list) {
     if (!list || !list.length) return '';
@@ -289,8 +409,8 @@
 
   global.KBMedia = {
     CFG: CFG, enabled: enabled, mount: mount, reset: reset, load: load, collect: collect, gate: gate, pending: pending, failed: failed,
-    renderView: renderView, badge: badge, get: get, send: send, newId: newId, compressImage: compressImage, recSupported: recSupported,
+    renderView: renderView, renderBody: renderBody, badge: badge, get: get, send: send, newId: newId, compressImage: compressImage, recSupported: recSupported,
     addImages: addImages, addAudioFile: addAudioFile,
-    _t: { H: H, lput: lput, lget: lget, mem: mem, items: function () { return ST.items; }, toggleRecord: toggleRecord, state: ST }
+    _t: { H: H, flow: flow, layOf: layOf, LAYS: LAYS, prev: prev, lput: lput, lget: lget, mem: mem, items: function () { return ST.items; }, toggleRecord: toggleRecord, state: ST }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

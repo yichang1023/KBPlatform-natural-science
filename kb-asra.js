@@ -195,9 +195,31 @@
     return '﻿' + rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
   }
 
+  /* ---------- 整份匯出 / 匯入(放進平台「完整備份」,換平台或還原時用) ----------
+   * exportAll():{ 學號: [紀錄…] }(本機 + 雲端合併,含每一個版本,不整理)
+   * importAll(obj):只「補上缺的」(以紀錄編號為準),不會刪除或改動現有紀錄;有連雲端時一併送上雲端(老師還原時,學生的紀錄也回到雲端) */
+  function exportAll() { var out = {}; uids().forEach(function (u) { out[u] = entries(u); }); return out; }
+  function importAll(obj) {
+    var res = { students: 0, added: 0, skipped: 0 }, c = cloud();
+    Object.keys(obj || {}).forEach(function (u) {
+      var list = Array.isArray(obj[u]) ? obj[u] : []; if (!list.length) return;
+      var have = {}; entries(u).forEach(function (e) { have[e.id] = 1; });
+      var rec = loadLocal(u), fresh = [];
+      list.forEach(function (e) {
+        if (!e || typeof e !== 'object' || !e.id || !e.kind || have[e.id]) { res.skipped++; return; }
+        var x = Object.assign({}, e); x.uid = u; have[e.id] = 1; rec.log.push(x); fresh.push(x);
+      });
+      if (!fresh.length) return;
+      saveLocal(u, rec); res.students++; res.added += fresh.length;
+      if (c && c.pushAsra) { var r = remote[u] || {}; var up = fresh.filter(function (x) { return !r[x.id]; }); if (up.length) c.pushAsra(u, up); }
+    });
+    if (res.added) notify();
+    return res;
+  }
+
   global.KBAsra = {
     KINDS: KINDS, ACT_NAME: ACT_NAME, QS: QS, PHASE: PHASE, ROLE_NAME: ROLE_NAME, CHOICE_NAME: CHOICE_NAME,
-    append: append, newId: rid, entries: entries, entriesCollapsed: entriesCollapsed, uids: uids, derive: derive, describe: describe, pending: pending,
+    exportAll: exportAll, importAll: importAll, append: append, newId: rid, entries: entries, entriesCollapsed: entriesCollapsed, uids: uids, derive: derive, describe: describe, pending: pending,
     seenGet: seenGet, seenSet: seenSet, fmtTime: fmtTime, fmtDate: fmtDate, toCSV: toCSV,
     onChange: function (f) { if (typeof f === 'function') listeners.push(f); },
     _remote: _remote, _sync: function () { var me = curUid(); if (me) sync(me); },
