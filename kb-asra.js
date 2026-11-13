@@ -137,10 +137,10 @@
     var list = collapse(entries(uid)), S = { notes: {}, refl: [], plans: [], concepts: [], ideas: [], seen: seenGet(uid) }, byPlan = {};
     list.forEach(function (e) {
       if (e.kind === 'note') S.notes[e.ref || 'mon'] = e.text;
-      else if (e.kind === 'idea') S.ideas.push({ id: e.id, title: e.title || '', text: e.text || '', srcFrom: e.srcFrom || 'other', stageKey: e.stageKey || '', ts: e.ts, open: !!e._open, versions: e._versions || 1 });
-      else if (e.kind === 'refl') S.refl.push(Object.assign({ id: e.id, postId: e.postId, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle, q3: e.q3 || '', q4: e.q4 || '', open: !!e._open, versions: e._versions || 1, firstTs: e._firstTs || e.ts }, pickSrc(e)));
+      else if (e.kind === 'idea') S.ideas.push({ imported: !!(e.imp && !e.imp.undo), id: e.id, title: e.title || '', text: e.text || '', srcFrom: e.srcFrom || 'other', stageKey: e.stageKey || '', ts: e.ts, open: !!e._open, versions: e._versions || 1 });
+      else if (e.kind === 'refl') S.refl.push(Object.assign({ imported: !!(e.imp && !e.imp.undo), id: e.id, postId: e.postId, text: e.text, ts: e.ts, ideaTitle: e.ideaTitle, q3: e.q3 || '', q4: e.q4 || '', open: !!e._open, versions: e._versions || 1, firstTs: e._firstTs || e.ts }, pickSrc(e)));
       else if (e.kind === 'concept') S.concepts.push({ id: e.id, term: e.term, role: e.role, choice: e.choice || '', text: e.text || '', ts: e.ts });
-      else if (e.kind === 'plan') { var p = Object.assign({ id: e.id, postId: e.postId, act: e.act, text: e.text, q5: e.q5 || '', ts: e._firstTs || e.ts, updTs: e.ts, open: !!e._open, versions: e._versions || 1, ideaTitle: e.ideaTitle, ideaStatus: (e._first || e).ideaStatus, push: e.push || null, reeval: [] }, pickSrc(e)); S.plans.push(p); byPlan[e.id] = p; }
+      else if (e.kind === 'plan') { var p = Object.assign({ imported: !!(e.imp && !e.imp.undo), id: e.id, postId: e.postId, act: e.act, text: e.text, q5: e.q5 || '', ts: e._firstTs || e.ts, updTs: e.ts, open: !!e._open, versions: e._versions || 1, ideaTitle: e.ideaTitle, ideaStatus: (e._first || e).ideaStatus, push: e.push || null, reeval: [] }, pickSrc(e)); S.plans.push(p); byPlan[e.id] = p; }
     });
     list.forEach(function (e) { if (e.kind === 'reeval' && byPlan[e.planId]) byPlan[e.planId].reeval.push({ result: e.result, ts: e.ts, follow: e.follow, note: e.note || '' }); });
     return S;
