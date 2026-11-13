@@ -241,7 +241,10 @@
   function flushAudit() { var q = auditQueue; auditQueue = []; q.forEach(pushAudit); }
   function loadAudit() {
     if (!db) return Promise.resolve([]);
-    return db.collection(ACOL).orderBy(FP.documentId(), 'desc').limit(14).get().then(function (snap) {
+    // 文件編號就是日期(YYYY-MM-DD)。用「編號 >= 起始日」的範圍查詢:不需要另外建索引
+    // (以前用 orderBy(documentId,'desc') 在正式資料庫會被拒絕、又被吞掉錯誤,所以雲端其他電腦的紀錄一直讀不到)
+    var from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+    return db.collection(ACOL).where(FP.documentId(), '>=', from).get().then(function (snap) {
       var out = []; snap.forEach(function (d) { var it = (d.data() || {}).items || {}; Object.keys(it).forEach(function (k) { out.push(it[k]); }); }); return out;
     }).catch(function () { return []; });
   }

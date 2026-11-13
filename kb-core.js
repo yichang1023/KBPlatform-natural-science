@@ -223,6 +223,28 @@
   function sessionRead() { return readJSON('session', null); }
   function sessionWrite(s) { if (s) writeJSON('session', s); else rawDel('session'); }
   function idleLimitMs() { return (S.settings.idleMinutes || 0) * 60000; }
+
+  /* ---------- 上線足跡:每個登入階段在雲端記一筆 session(開始、最後活動、進入過哪些頁面) ----------
+   * 目的:總控制平台看得到「哪天登入、停留多久、進了哪些頁面」。
+   * 為了不浪費雲端寫入:登入時寫 1 次;使用中最多每 5 分鐘更新 1 次(同一筆,不會越寫越多);換到沒去過的頁面、登出時各更新 1 次。
+   * 只存雲端稽核集合(不放進本機的稽核清單,畫面上的稽核紀錄不會被塞滿)。訪客不記。 */
+  var PRES_EVERY = 5 * 60000, PAGE_OF = { 'knowledge building forum.html': 'forum', 'analytics-student.html': 'student', 'analytics-teacher.html': 'teacher', 'asra.html': 'asra', 'setup.html': 'setup', 'index.html': 'home', '': 'home' };
+  function pageName() {
+    var p = ''; try { p = decodeURIComponent(((global.location && global.location.pathname) || '').split('/').pop()).toLowerCase(); } catch (e) {}
+    return PAGE_OF[p] || 'other';
+  }
+  function presenceSend(s, force, ended) {
+    if (!cloud || !cloud.pushAudit || !s || !s.sid || s.role === 'guest') return;
+    var now = Date.now(); if (!force && now - (s.pw || 0) < PRES_EVERY) return;
+    var last = Math.max(s.last || 0, s.since || 0);
+    if (!ended) { s.pw = now; sessionWrite(s); }
+    try { cloud.pushAudit({ _k: 'ses_' + s.sid, t: new Date(s.since).toISOString(), actor: s.account, role: s.role, action: 'session', target: s.sid, detail: '', ok: true, last: new Date(last).toISOString(), pages: s.pages || {}, end: ended || '' }); } catch (e) {}
+  }
+  var pageNoted = false;
+  function presenceNote() {   // 這一頁載入時:記一次「進入了這個頁面」
+    if (pageNoted) return; var s = sessionRead(); if (!s || !s.sid || s.role === 'guest') return;
+    pageNoted = true; var n = pageName(); s.pages = s.pages || {}; var first = !s.pages[n]; s.pages[n] = (s.pages[n] || 0) + 1; sessionWrite(s); presenceSend(s, first);
+  }
   function publicUser(u) {
     return { id: u.id, role: u.role, label: labelFor(u.id, u.role), avatar: avatarFor(u.id, u.role), realName: u.realName, classId: u.classId, groupId: u.groupId, mustChange: false,
       needConsent: u.role === 'student' && !!(S.settings.consent && S.settings.consent.enabled) && u.consentVersion !== S.settings.consent.version };
@@ -234,10 +256,10 @@
       if (s.role === 'guest') return { id: 'guest', role: 'guest', label: ROLE_LABEL.guest, avatar: avatarFor('guest', 'guest'), realName: '', classId: '', groupId: '', mustChange: false };
       var u = userById(s.account);
       if (!u || u.status !== 'active') { sessionWrite(null); return null; }
-      if (isStaffRole(u.role) && idleLimitMs() > 0 && s.last && Date.now() - s.last > idleLimitMs()) { audit('auth.idleLogout', u.id, ''); sessionWrite(null); return null; }
+      if (isStaffRole(u.role) && idleLimitMs() > 0 && s.last && Date.now() - s.last > idleLimitMs()) { audit('auth.idleLogout', u.id, ''); presenceSend(s, true, 'idle'); sessionWrite(null); return null; }
       return publicUser(u);
     },
-    touch: function () { var s = sessionRead(); if (s && s.role !== 'guest') { s.last = Date.now(); sessionWrite(s); } },
+    touch: function () { var s = sessionRead(); if (s && s.role !== 'guest') { s.last = Date.now(); sessionWrite(s); presenceSend(s, false); } },
     login: function (expect, account, password) {
       account = String(account || '').trim(); password = String(password == null ? '' : password);
       if (!account || !password) return { ok: false, error: '請輸入帳號與密碼' };
@@ -258,8 +280,9 @@
       }
       u.fails = 0; u.lockUntil = 0; u.lastLogin = nowISO();
       persist(['users']);
-      sessionWrite({ account: u.id, role: u.role, since: Date.now(), last: Date.now() });
+      var nowMs = Date.now(); sessionWrite({ account: u.id, role: u.role, since: nowMs, last: nowMs, sid: 'S' + nowMs.toString(36) + Math.random().toString(36).slice(2, 5), pages: {} });
       audit('auth.login', u.id, '');
+      pageNoted = false; presenceSend(sessionRead(), true);
       if (expect !== 'staff') asraToken(u.id, password);
       return { ok: true, user: publicUser(u), mustChange: false };   // 目前統一不強制改密碼
     },
@@ -274,7 +297,7 @@
       audit('auth.guest', 'guest', '');
       return { ok: true, user: { id: 'guest', role: 'guest', label: ROLE_LABEL.guest } };
     },
-    logout: function () { var a = actorInfo(); audit('auth.logout', a.id, ''); sessionWrite(null); },
+    logout: function () { var a = actorInfo(), s = sessionRead(); audit('auth.logout', a.id, ''); if (s) { s.last = Date.now(); presenceSend(s, true, 'logout'); } sessionWrite(null); },
     changePassword: function (oldPw, newPw, opts) {
       var cur = auth.current();
       if (!cur || cur.role === 'guest') return { ok: false, error: '請先登入' };
@@ -889,7 +912,7 @@
     version: '1.1',
     ready: Promise.resolve(),
     cloud: { mode: 'local', state: 'local' },
-    _cloudAttach: function (a) { cloud = a; },
+    _cloudAttach: function (a) { cloud = a; try { var s = sessionRead(); if (s && s.sid) { if (pageNoted) presenceSend(s, true); else presenceNote(); } } catch (e) {} },
     _state: function () { return S; },
     _applyRemote: function (patch) {
       var keys = [];
@@ -898,7 +921,7 @@
     },
     _mergeAudit: function (list) {
       var seen = {}; S.audit.forEach(function (x) { if (x._k) seen[x._k] = 1; });
-      list.forEach(function (x) { if (!x._k || !seen[x._k]) S.audit.push(x); });
+      list.forEach(function (x) { if (x.action === 'session') return; if (!x._k || !seen[x._k]) S.audit.push(x); });   // 上線足跡(session)只給總控制平台看,不放進稽核清單
       S.audit.sort(function (a, b) { return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; });
       if (S.audit.length > 5000) S.audit = S.audit.slice(-4000);
       writeJSON('audit', S.audit);
@@ -917,6 +940,7 @@
         storageBytes: (function () { var n = 0; KEYS.forEach(function (k) { n += (rawGet(k) || '').length; }); return n; })()
       };
     },
-    _sha256: sha256, _isStaff: isStaffRole
+    _sha256: sha256, _isStaff: isStaffRole, _presence: { note: function () { presenceNote(); }, send: function (force) { var s = sessionRead(); if (s) presenceSend(s, !!force); }, pageName: pageName }
   };
+  try { if (typeof document !== 'undefined' && document.addEventListener) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', presenceNote); else setTimeout(presenceNote, 0); } } catch (e) {}
 })(typeof window !== 'undefined' ? window : globalThis);
