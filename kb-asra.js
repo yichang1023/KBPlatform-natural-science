@@ -19,7 +19,7 @@
 (function (global) {
   'use strict';
   var PREFIX = 'kb_asra_v1_';
-  var KINDS = { note: '一句話', refl: '反思', plan: '計畫', reeval: '再評估', concept: '概念追問', idea: '我的想法' };
+  var KINDS = { note: '一句話', refl: '反思', plan: '計畫', reeval: '再評估', concept: '概念追問', idea: '我的想法', void: '撤回' };
   var SRC_NAME = { forum: '論壇', ws: '學習單', manual: '自己新增' };
   // 反思/計畫是從哪一種想法、用哪一種時間方式寫的(研究時要分得清「當時」與「現在重新看」)
   function srcInfo(e) {
@@ -41,6 +41,7 @@
     q6: { no: 6, phase: 'plan', short: '我的行動計畫', zh: '我要怎麼做?寫下具體的行動計畫。', step: 4, orig: '延伸與深化探究的具體行動計畫是什麼?' }
   };
   var PHASE = { analysis: ['我們的分析', 'Our Analysis'], problem: ['我們發現的問題', 'Our Problems'], plan: ['我們的計畫', 'Our Plan'] };
+  var SHOW_IMPORT_TAG = false;   // 老師匯入的紀錄要不要在畫面上標「老師匯入」(目前不標;資料裡仍有 imp 來源記錄)
   var NOTE_Q = { mon: 'q1', q2: 'q2' };   // 「一句話」類紀錄的 ref 對應到第幾題
   var remote = {};            // uid -> { id: entry }(從雲端收到的)
   var listeners = [];
@@ -77,7 +78,8 @@
   function saveLocal(uid, rec) { rawSet(PREFIX + uid, JSON.stringify(rec)); }
 
   /* ---------- 合併(本機 + 雲端) ---------- */
-  function entries(uid) {
+  // 所有紀錄(含「撤回」標記);備份、匯入、雲端同步都用這個,才不會漏掉
+  function rawEntries(uid) {
     var m = {}, out = [];
     loadLocal(uid).log.forEach(function (e) { m[e.id] = e; });
     var r = remote[uid] || {};
@@ -86,6 +88,10 @@
     out.sort(function (a, b) { return ((a.ts || 0) - (b.ts || 0)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
     return out;
   }
+  /* 畫面與統計用:拿掉「撤回」標記,以及被撤回的紀錄(紀錄只增不改,撤回是再加一筆說明「這幾筆不算」,原始紀錄仍留著可查) */
+  function voidedIds(raw) { var dead = {}; raw.forEach(function (e) { if (e.kind === 'void' && Array.isArray(e.targets)) e.targets.forEach(function (t) { dead[t] = 1; }); }); return dead; }
+  function entries(uid) { var raw = rawEntries(uid), dead = voidedIds(raw); return raw.filter(function (e) { return e.kind !== 'void' && !dead[e.id]; }); }
+  function rawUids() { var m = {}; localUids().forEach(function (u) { m[u] = 1; }); Object.keys(remote).forEach(function (u) { m[u] = 1; }); return Object.keys(m); }
   function localUids() {
     var out = [], s = ls();
     try { if (s) for (var i = 0; i < s.length; i++) { var k = s.key(i); if (k && k.indexOf(PREFIX) === 0) out.push(k.slice(PREFIX.length)); } } catch (e) {}
@@ -141,7 +147,7 @@
   }
   // 一筆紀錄的文字說明(畫面與匯出共用)
   function describe(e) {
-    var base = { kind: e.kind, label: KINDS[e.kind] || e.kind, time: fmtTime(e.ts), date: fmtDate(e.ts), idea: e.ideaTitle || '', topic: e.topic || '', text: e.text || '', act: '', result: '', follow: e.follow || null, q3: e.q3 || '', q4: e.q4 || '', q5: e.q5 || '' };
+    var base = { imported: !!(e.imp && !e.imp.undo), importFile: (e.imp && e.imp.f) || '', kind: e.kind, label: KINDS[e.kind] || e.kind, time: fmtTime(e.ts), date: fmtDate(e.ts), idea: e.ideaTitle || '', topic: e.topic || '', text: e.text || '', act: '', result: '', follow: e.follow || null, q3: e.q3 || '', q4: e.q4 || '', q5: e.q5 || '' };
     if (e.kind === 'note' && QS[NOTE_Q[e.ref || 'mon']]) { var qq = QS[NOTE_Q[e.ref || 'mon']]; base.label = '第' + qq.no + '題:' + qq.short; }
     if (e.kind === 'plan') { base.act = ACT_NAME[e.act] || e.act || ''; }
     if (e.kind === 'concept') { base.idea = e.term || ''; base.act = (ROLE_NAME[e.role] || '') + (e.choice ? '・' + (CHOICE_NAME[e.choice] || e.choice) : ''); if (!base.text && e.choice) base.text = '選了「' + (CHOICE_NAME[e.choice] || e.choice) + '」'; }
@@ -183,13 +189,13 @@
   // opts.info(uid) → { name, className };opts.uids 指定哪些學生
   function toCSV(opts) {
     opts = opts || {};
-    var head = ['日期時間', '學號', '姓名', '班級', '類型', '想法標題', '討論區', '做法', '內容', '再評估結果', '計畫後新貼文數', '計畫後新回應數', '計畫後有證據的貼文數', '第3題:想法有越想越深入嗎?為什麼', '第4題:哪些該再想深卻討論很少', '第5題:想深化哪一部分?為什麼', '想法來源', '時間方式', '想法單位', '版本數', '狀態'];
+    var head = ['日期時間', '學號', '姓名', '班級', '類型', '想法標題', '討論區', '做法', '內容', '再評估結果', '計畫後新貼文數', '計畫後新回應數', '計畫後有證據的貼文數', '第3題:想法有越想越深入嗎?為什麼', '第4題:哪些該再想深卻討論很少', '第5題:想深化哪一部分?為什麼', '想法來源', '時間方式', '想法單位', '版本數', '狀態', '資料來源'];
     var rows = [head], list = opts.uids || uids();
     list.forEach(function (u) {
       var info = (opts.info && opts.info(u)) || {};
       collapse(entries(u)).forEach(function (e) {
         var d = describe(e);
-        rows.push([d.time, u, info.name || '', info.className || '', d.label, d.idea, d.topic, d.act, e.kind === 'reeval' ? '' : d.text, d.result, d.follow ? d.follow.mine : '', d.follow ? d.follow.replies : '', d.follow ? d.follow.evid : '', d.q3, d.q4, d.q5, d.src, d.view, d.unit, e._versions || 1, e._open ? '草稿(還沒按存下)' : (e._versions ? '已存下' : '')]);
+        rows.push([d.time, u, info.name || '', info.className || '', d.label, d.idea, d.topic, d.act, e.kind === 'reeval' ? '' : d.text, d.result, d.follow ? d.follow.mine : '', d.follow ? d.follow.replies : '', d.follow ? d.follow.evid : '', d.q3, d.q4, d.q5, d.src, d.view, d.unit, e._versions || 1, e._open ? '草稿(還沒按存下)' : (e._versions ? '已存下' : ''), e.imp && !e.imp.undo ? '老師匯入' + (e.imp.f ? '(' + e.imp.f + ')' : '') : '學生輸入']);
       });
     });
     return '﻿' + rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
@@ -198,12 +204,12 @@
   /* ---------- 整份匯出 / 匯入(放進平台「完整備份」,換平台或還原時用) ----------
    * exportAll():{ 學號: [紀錄…] }(本機 + 雲端合併,含每一個版本,不整理)
    * importAll(obj):只「補上缺的」(以紀錄編號為準),不會刪除或改動現有紀錄;有連雲端時一併送上雲端(老師還原時,學生的紀錄也回到雲端) */
-  function exportAll() { var out = {}; uids().forEach(function (u) { out[u] = entries(u); }); return out; }
+  function exportAll() { var out = {}; rawUids().forEach(function (u) { var l = rawEntries(u); if (l.length) out[u] = l; }); return out; }
   function importAll(obj) {
     var res = { students: 0, added: 0, skipped: 0 }, c = cloud();
     Object.keys(obj || {}).forEach(function (u) {
       var list = Array.isArray(obj[u]) ? obj[u] : []; if (!list.length) return;
-      var have = {}; entries(u).forEach(function (e) { have[e.id] = 1; });
+      var have = {}; rawEntries(u).forEach(function (e) { have[e.id] = 1; });
       var rec = loadLocal(u), fresh = [];
       list.forEach(function (e) {
         if (!e || typeof e !== 'object' || !e.id || !e.kind || have[e.id]) { res.skipped++; return; }
@@ -218,8 +224,8 @@
   }
 
   global.KBAsra = {
-    KINDS: KINDS, ACT_NAME: ACT_NAME, QS: QS, PHASE: PHASE, ROLE_NAME: ROLE_NAME, CHOICE_NAME: CHOICE_NAME,
-    exportAll: exportAll, importAll: importAll, append: append, newId: rid, entries: entries, entriesCollapsed: entriesCollapsed, uids: uids, derive: derive, describe: describe, pending: pending,
+    SHOW_IMPORT_TAG: SHOW_IMPORT_TAG, KINDS: KINDS, ACT_NAME: ACT_NAME, QS: QS, PHASE: PHASE, ROLE_NAME: ROLE_NAME, CHOICE_NAME: CHOICE_NAME,
+    exportAll: exportAll, importAll: importAll, append: append, newId: rid, entries: entries, rawEntries: rawEntries, rawUids: rawUids, entriesCollapsed: entriesCollapsed, uids: uids, derive: derive, describe: describe, pending: pending,
     seenGet: seenGet, seenSet: seenSet, fmtTime: fmtTime, fmtDate: fmtDate, toCSV: toCSV,
     onChange: function (f) { if (typeof f === 'function') listeners.push(f); },
     _remote: _remote, _sync: function () { var me = curUid(); if (me) sync(me); },

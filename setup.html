@@ -20,6 +20,7 @@
 <script src="kb-xlsx.js"></script>
 <script src="kb-vocab.js"></script>
 <script src="kb-asra.js"></script>
+<script src="kb-asra-import.js"></script>
 <script src="kb-media.js"></script>
 <script src="kb-research-export.js"></script>
 <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Noto Sans TC', 'sans-serif'] } } } }</script>
@@ -636,6 +637,7 @@
     $('#content').innerHTML =
       card('匯出', 'fa-file-export', '<div class="flex flex-wrap gap-2"><button class="btn btn-p" data-act="d-json"><i class="fa-solid fa-file-code"></i>匯出完整備份(JSON)</button><button class="btn btn-g" data-act="d-posts"><i class="fa-solid fa-file-csv"></i>匯出全部貼文(CSV)</button><button class="btn btn-g" data-act="u-export"><i class="fa-solid fa-users"></i>匯出使用者名單(CSV)</button></div><p class="text-xs text-slate-500 mt-2">完整備份包含使用者(含加密後的密碼)、班級、討論區、貼文、回收桶與設定,全班的 ASRA 反思紀錄(含每次修改的版本),以及貼文附的照片與錄音(含照片的大小與位置設定;檔案較多時備份檔會比較大);不含 AI 金鑰、稽核紀錄與學習單資料包。這個檔案有真實姓名,請妥善保管。</p>') +
       card('研究匯出(給 KBDeX)', 'fa-diagram-project', rxCard()) +
+      card('匯入學生 ASRA 回答(Excel)', 'fa-pen-to-square', asraImportCard()) +
       card('備份與還原', 'fa-clock-rotate-left', bl + '<div class="flex flex-wrap gap-2 mt-3"><button class="btn btn-s" data-act="quick-backup"><i class="fa-solid fa-floppy-disk"></i>立即建立備份</button><button class="btn btn-g" data-act="b-file"><i class="fa-solid fa-file-import"></i>從備份檔還原…</button><span class="text-xs text-slate-500 self-center">(也可以選「ASRA 紀錄檔」,只補上 ASRA 紀錄,不動其他資料)</span><input type="file" id="b-file-inp" accept=".json,application/json" style="display:none"></div>') +
       card('回收桶(' + c.trash.length + ')', 'fa-trash-can', tr, c.trash.length ? '<button class="btn btn-d btn-sm" data-act="tr-empty">清空回收桶</button>' : '') +
       '<div class="danger-zone"><div class="flex items-center gap-2 mb-2"><i class="fa-solid fa-triangle-exclamation text-red-600"></i><h2 class="font-bold text-red-700">危險操作</h2></div><p class="text-xs text-red-700/80 mb-3">以下操作都會先「自動備份」,並需要輸入確認文字才能執行。</p><div class="flex flex-wrap gap-2"><button class="btn btn-d" data-act="d-clear"><i class="fa-solid fa-eraser"></i>清空全部貼文與回收桶(' + st.posts + ' 則)</button><button class="btn btn-d" data-act="d-reset"><i class="fa-solid fa-skull-crossbones"></i>完整重置整個平台</button></div></div>';
@@ -707,6 +709,70 @@
       KB.audit.add('data.import', 'asra-entries', r.added + ' entries');
       KBUI.toast('ASRA 紀錄:補上 ' + r.added + ' 筆(' + r.students + ' 位學生)' + (r.skipped ? ',' + r.skipped + ' 筆已經有了' : ''), 'ok');
     });
+  }
+  /* ---------- 匯入學生 ASRA 回答(Excel / CSV)---------- */
+  function asraImportCard() {
+    var bt = (window.KBAsraImport && KBAsraImport.batches) ? KBAsraImport.batches() : [];
+    var hist = bt.length ? '<div class="overflow-x-auto border border-slate-200 rounded-lg mt-3"><table class="tbl"><thead><tr><th>匯入時間</th><th>檔案</th><th>學生</th><th>筆數</th><th>狀態</th><th></th></tr></thead><tbody>' + bt.map(function (b) {
+      return '<tr><td>' + fmt(b.time) + '</td><td>' + esc(b.file || '(未命名)') + '</td><td>' + b.students + '</td><td>' + b.count + '</td><td>' + (b.undone ? '<span class="chip gray">已撤回</span>' : '<span class="chip ok">有效' + (b.alive < b.count ? '(部分已撤回)' : '') + '</span>') + '</td><td>' + (b.undone ? '' : '<button class="btn btn-d btn-sm" data-act="asra-undo" data-id="' + esc(b.id) + '"><i class="fa-solid fa-rotate-left"></i>撤回這批</button>') + '</td></tr>';
+    }).join('') + '</tbody></table></div>' : '<div class="text-xs text-slate-400 mt-3">還沒有匯入過。</div>';
+    return '<p class="text-sm text-slate-600 mb-2">用 Excel 或 CSV 一次放進全班學生的 ASRA 回答。每列一位學生,系統<b>用「編號」找帳號</b>(姓名只拿來核對),Q1~Q6 自動放進學生 ASRA 裡對應的位置。學生登入後在自己的 ASRA 頁看得到,老師的「ASRA 反思歷程」也看得到。</p>' +
+      '<div class="flex flex-wrap gap-2"><button class="btn btn-p" data-act="asra-imp"><i class="fa-solid fa-file-import"></i>匯入學生 ASRA 回答…</button><button class="btn btn-g" data-act="asra-tpl"><i class="fa-solid fa-download"></i>下載範本</button></div>' +
+      '<p class="text-xs text-slate-500 mt-2">紀錄只增不改:重複匯入同一份不會重複,內容改過再匯會新增新版本(舊的保留)。匯錯了可以「撤回這批」(不是刪除,原始紀錄仍留著可查)。如果學號與姓名有出入,該列預設不匯入,確認後再勾選。</p>' + hist;
+  }
+  function todayStr() { var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
+  function asraSheetDialog() {
+    if (!window.KBAsraImport) { KBUI.toast('這個頁面沒有載入 ASRA 匯入模組', 'err'); return; }
+    var parsed = null, rows = null, fileName = '', sel = {};
+    var m = KBUI.modal('<h3><i class="fa-solid fa-pen-to-square" style="color:#16a34a"></i>匯入學生 ASRA 回答(Excel / CSV)</h3><p>每一列一位學生。系統<b>用「編號」找學生帳號</b>(姓名只拿來核對),自動把 Q1~Q6 放進學生 ASRA 對應的位置:Q1、Q2 → 第 1、2 題;Q3+Q4 → 第 3 步反思;Q5+Q6 → 第 4 步計畫(Q3~Q6 放在每位學生的「整體回答」這個想法下)。</p><div class="drop" data-f="drop"><i class="fa-solid fa-cloud-arrow-up text-2xl"></i><div class="font-bold mt-1">拖曳檔案到這裡,或點擊選擇</div><div class="text-xs mt-1">支援 .xlsx、.xls、.csv(UTF-8)</div><input type="file" accept=".csv,.xlsx,.xls" data-f="file" style="display:none"></div><div data-f="body"></div><div class="kbui-row"><button class="kbui-btn kbui-ghost" data-f="close">關閉</button><button class="kbui-btn kbui-primary" data-f="go" disabled>匯入選取的學生</button></div>');
+    m.card.style.maxWidth = '1000px';
+    var c = m.card, f = function (n) { return c.querySelector('[data-f=' + n + ']'); };
+    function students() { return KB.users.list().filter(function (u) { return u.role === 'student'; }); }
+    function counts() { var n = { ok: 0, same: 0, name: 0, block: 0, sel: 0 }; rows.forEach(function (r) { if (r.block) n.block++; else if (r.status === 'same') n.same++; else if (r.status === 'name') n.name++; else n.ok++; if (sel[r.uid]) n.sel++; }); return n; }
+    function syncGo() { var n = counts(); f('go').disabled = !n.sel; f('go').textContent = n.sel ? '匯入選取的 ' + n.sel + ' 位學生' : '匯入選取的學生'; var info = c.querySelector('[data-f=cnt]'); if (info) info.textContent = '已選 ' + n.sel + ' 位'; }
+    function render() {
+      var n = counts(), cols = parsed.cols, qcols = [1, 2, 3, 4, 5, 6].filter(function (q) { return cols.q[q] !== undefined; }).map(function (q) { return 'Q' + q + '←' + KBAsraImport._colName(cols.q[q]) + '欄'; });
+      var found = '編號←「' + esc(parsed.headers[cols.id]) + '」' + (cols.name >= 0 ? '、姓名←「' + esc(parsed.headers[cols.name]) + '」(核對用)' : '、沒有姓名欄(無法核對)') + '、' + qcols.join('、');
+      var body = rows.slice(0, 300).map(function (r) {
+        var rec = r.rec, cls = r.status === 'name' ? ' style="background:#fffbeb"' : (r.block ? ' style="background:#f8fafc;color:#94a3b8"' : '');
+        var chip = r.block ? 'chip bad' : (r.status === 'name' ? 'chip warn' : (r.status === 'same' ? 'chip gray' : (r.status === 'update' ? 'chip warn' : 'chip ok')));
+        var dis = r.block || r.status === 'same' ? ' disabled' : '';
+        var qs = [1, 2, 3, 4, 5, 6].map(function (q) { return '<td class="text-center" title="' + esc((rec.q[q] || '').slice(0, 120)) + '">' + (rec.q[q] ? '<span style="color:#16a34a">●</span>' : '<span style="color:#cbd5e1">○</span>') + '</td>'; }).join('');
+        return '<tr' + cls + '><td><input type="checkbox" data-asel="' + esc(r.uid) + '"' + (sel[r.uid] ? ' checked' : '') + dis + ' aria-label="匯入這位學生"></td><td>' + rec.line + '</td><td class="font-mono">' + esc(rec.id) + '</td><td>' + esc(rec.name) + '</td><td>' + esc(r.platformName) + '</td>' + qs + '<td><span class="' + chip + '">' + esc(r.label) + '</span></td></tr>';
+      }).join('');
+      f('body').innerHTML = '<div class="text-xs my-2" style="color:#4338ca"><i class="fa-solid fa-wand-magic-sparkles"></i> 系統認出的欄位:' + found + '</div>' +
+        (parsed.problems.length ? '<div class="kbui-hint my-2" style="background:#fffbeb;color:#92400e">⚠ ' + parsed.problems.map(esc).join('<br>⚠ ') + '</div>' : '') +
+        '<div class="flex flex-wrap gap-2 my-2 text-xs"><span class="chip ok">可匯入 ' + n.ok + '</span><span class="chip gray">已匯入過 ' + n.same + '</span><span class="chip warn" title="編號與姓名不一致:請先確認編號或姓名,確定沒錯再勾選">需確認 ' + n.name + '</span><span class="chip bad">無法匯入 ' + n.block + '</span><span class="text-slate-500">檔案:' + esc(fileName) + '(共 ' + rows.length + ' 列)</span></div>' +
+        '<div class="flex flex-wrap items-center gap-3 mb-2 text-sm"><label class="m-0">這份回答的填寫日期:</label><input type="date" class="kbui-input" style="width:auto" data-f="date" value="' + todayStr() + '"><span class="text-xs text-slate-500">(ASRA 是歷史紀錄,會用這個日期;預設今天)</span><span class="ml-auto text-xs text-slate-500" data-f="cnt"></span></div>' +
+        '<div style="max-height:300px;overflow:auto;border:1px solid #e2e8f0;border-radius:10px"><table class="tbl"><thead><tr><th>選</th><th>列</th><th>編號</th><th>檔案姓名</th><th>平台姓名</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Q5</th><th>Q6</th><th>結果</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+        (n.name ? '<div class="text-xs mt-2" style="color:#92400e">⚠ 黃底的列:檔案裡的姓名和平台帳號的姓名不同。編號可能對錯人,請先確認(可在「使用者」頁看帳號姓名);確定要用這個編號,才自己勾選。</div>' : '');
+      Array.prototype.forEach.call(c.querySelectorAll('[data-asel]'), function (cb) { cb.onchange = function () { sel[cb.getAttribute('data-asel')] = cb.checked; syncGo(); }; });
+      syncGo();
+    }
+    function take(file) {
+      if (!file) return; f('body').innerHTML = '<div class="kbui-hint my-3">讀取中…</div>'; fileName = file.name;
+      parseFile(file).then(function (mx) {
+        parsed = KBAsraImport.parse(mx);
+        if (!parsed.ok) { f('body').innerHTML = '<div class="kbui-err">' + parsed.problems.map(esc).join('<br>') + '</div>'; rows = null; return; }
+        rows = KBAsraImport.plan(parsed, { students: students() }); sel = {}; rows.forEach(function (r) { if (r.select && !r.block) sel[r.uid] = true; });
+        render();
+      }).catch(function (e) { f('body').innerHTML = '<div class="kbui-err">' + esc(e.message) + '</div>'; });
+    }
+    f('drop').onclick = function () { f('file').click(); };
+    f('file').onchange = function () { take(this.files[0]); };
+    ['dragover', 'dragenter'].forEach(function (ev) { f('drop').addEventListener(ev, function (e) { e.preventDefault(); f('drop').classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { f('drop').addEventListener(ev, function (e) { e.preventDefault(); f('drop').classList.remove('over'); if (ev === 'drop') take(e.dataTransfer.files[0]); }); });
+    f('close').onclick = m.close;
+    f('go').onclick = function () {
+      if (!rows) return; var chosen = rows.filter(function (r) { return sel[r.uid] && !r.block; }), mism = chosen.filter(function (r) { return r.nameMismatch; }), date = (f('date') || {}).value || todayStr();
+      var nEntries = chosen.reduce(function (a, r) { return a + (r.nNew || 0) + (r.nUpd || 0); }, 0);
+      KBUI.confirm({ title: '確認匯入', html: '將為 <b>' + chosen.length + '</b> 位學生新增約 <b>' + nEntries + '</b> 筆 ASRA 回答,填寫日期 <b>' + esc(date) + '</b>。' + (mism.length ? '<br><b style="color:#b45309">其中 ' + mism.length + ' 位的編號與姓名不一致(' + mism.slice(0, 6).map(function (r) { return esc(r.rec.id + ' ' + r.rec.name + '→平台 ' + r.platformName); }).join('、') + (mism.length > 6 ? '…' : '') + '),請確認你要照編號匯入。</b>' : '') + '<br><span class="text-xs">紀錄只增不改;匯錯了可以到「匯入紀錄」按「撤回這批」。</span>', okText: '確認匯入' }).then(function (y) {
+        if (!y) return;
+        var r = KBAsraImport.apply(rows, { selected: sel, fileName: fileName, date: date });
+        m.close(); R.data();
+        KBUI.toast('已匯入 ' + r.students + ' 位學生、' + r.entries + ' 筆 ASRA 回答(批次 ' + r.batch + ')', 'ok');
+      });
+    };
   }
   function restoreFlow(snap, label) {
     var err = null; if (!snap || snap.app !== 'kb-platform') err = '這不是本平台的備份檔';
@@ -922,6 +988,13 @@
     'b-restore': function (b) { var s = KB.backup.get(b.dataset.id); restoreFlow(s, s && s.label); },
     'b-del': function (b) { KB.backup.removeBackup(b.dataset.id); R.data(); },
     'b-file': function () { $('#b-file-inp').click(); },
+    'asra-imp': asraSheetDialog,
+    'asra-tpl': function () { download('ASRA學生回答範本.xlsx', KBXLSX.build([{ name: 'ASRA回答', header: true, widths: [10, 14, 8, 38, 38, 38, 38, 38, 38], textCols: [0, 1, 2], rows: KBAsraImport.templateRows() }]), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); },
+    'asra-undo': function (b) {
+      KBUI.confirm({ title: '撤回這批匯入', html: '要撤回批次 <b>' + esc(b.dataset.id) + '</b> 嗎?這批匯入的 ASRA 回答會從學生與老師的畫面消失。<br><span class="text-xs">不是刪除:原始紀錄仍留著可查,之後可以再匯入更正過的檔案。</span>', okText: '撤回' }).then(function (y) {
+        if (!y) return; var r = KBAsraImport.undo(b.dataset.id); R.data(); KBUI.toast('已撤回 ' + r.students + ' 位學生、' + r.entries + ' 筆', 'ok');
+      });
+    },
     'tr-restore': function (b) {
       var c = KB.content.get(), trash = JSON.parse(JSON.stringify(c.trash)), i = trash.findIndex(function (x) { return x.id === b.dataset.id; }); if (i < 0) return; var it = trash[i];
       var topics = JSON.parse(JSON.stringify(c.topics)), nodes = JSON.parse(JSON.stringify(c.nodes));
