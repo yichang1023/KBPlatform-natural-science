@@ -7,7 +7,8 @@ const crypto = require('crypto');
 const { clientIp, rate, originOk, send, bodyOf } = require('./_guard');
 const { getKey, setSecret, delSecret, account } = require('./_gcp');
 
-const KEY_RE = /^AIza[0-9A-Za-z_\-]{20,80}$/;
+// Google 的金鑰有兩種寫法: 舊的 AIza 開頭、新的 AQ. 開頭(例如 AQ.Ab8RN6…). 這裡只擋「不可能是金鑰」的內容(空白、怪字元; 金鑰會放進標頭, 不能有換行), 是不是真的有效由下面向 Google 驗證
+const KEY_RE = /^[0-9A-Za-z_.\-]{20,200}$/;
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest();
 const same = (a, b) => crypto.timingSafeEqual(sha(a), sha(b));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -31,7 +32,7 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'clear') { await delSecret(); return send(res, 200, { ok: true }); }
     if (action === 'save') {
-      if (typeof key !== 'string' || !KEY_RE.test(key.trim())) return send(res, 400, { error: '這看起來不是 Gemini 金鑰(應該是 AIza 開頭)。' });
+      if (typeof key !== 'string' || !KEY_RE.test(key.trim())) return send(res, 400, { error: '這看起來不是 Gemini 金鑰(不能有空白、中文或奇怪的符號,長度約 20 字以上)。' });
       const k = key.trim();
       const chk = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': k } });
       if (!chk.ok) return send(res, 400, { error: 'Google 說這把金鑰不能用(HTTP ' + chk.status + '),沒有儲存。' });

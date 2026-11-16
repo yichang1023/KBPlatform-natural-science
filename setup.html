@@ -528,12 +528,12 @@
     var cfg = KB.settings.get().ai, key = ''; try { key = localStorage.getItem('kb_ai_key') || ''; } catch (e) {}
     $('#content').innerHTML = card('Gemini 金鑰', 'fa-key',
       '<div class="flex items-center gap-2 mb-3">' + (key ? '<span class="chip ok">已設定</span><span class="font-mono text-sm">…' + esc(key.slice(-4)) + '</span>' : '<span class="chip warn">尚未設定</span>') + '</div>' +
-      '<label class="lbl">貼上 Gemini API Key</label><div class="flex gap-2"><input class="inp flex-1" type="password" id="ai-key" placeholder="AIza…" autocomplete="off"><button class="btn btn-p" data-act="ai-test"><i class="fa-solid fa-plug"></i>測試並儲存</button>' + (key ? '<button class="btn btn-g" data-act="ai-clear">清除</button>' : '') + '</div><div id="ai-res" class="text-xs mt-2"></div>' +
+      '<label class="lbl">貼上 Gemini API Key</label><div class="flex gap-2"><input class="inp flex-1" type="password" id="ai-key" placeholder="貼上金鑰(AIza… 或 AQ.… 都可以)" autocomplete="new-password" data-lpignore="true" data-1p-ignore><button class="btn btn-p" data-act="ai-test"><i class="fa-solid fa-plug"></i>測試並儲存</button>' + (key ? '<button class="btn btn-g" data-act="ai-clear">清除</button>' : '') + '</div><div id="ai-res" class="text-xs mt-2"></div>' +
       '<p class="text-xs text-slate-500 mt-3">這裡使用的就是在首頁輸入的那一把金鑰(同一個瀏覽器共用);想更換也可以直接在上面貼新的。金鑰只存在這台電腦的瀏覽器,不會寫進平台資料,也不會出現在備份檔裡。要讓學生在家也能用 AI,請用下面「雲端金鑰」。</p>') +
       card('雲端金鑰(讓全班在家也能用 AI)', 'fa-cloud',
         '<p class="text-xs text-slate-500 mb-3">學生不需要自己設定金鑰。你把金鑰存到雲端後,學生按 AI 功能時,由伺服器代為呼叫 Gemini,學生的瀏覽器看不到金鑰。需要先在 Vercel 設好「管理密碼」與「Firebase 服務帳戶」(見「AI金鑰雲端設定說明」)。</p>' +
         '<div id="ai-cloud-status" class="text-sm mb-3"></div>' +
-        '<label class="lbl">管理密碼</label><div class="flex flex-wrap gap-2"><input class="inp flex-1" type="password" id="ai-pass" autocomplete="off" placeholder="Vercel 的 AI_ADMIN_PASSCODE"><button class="btn btn-p" data-act="ai-cloud-save"><i class="fa-solid fa-cloud-arrow-up"></i>把上面的金鑰存到雲端</button><button class="btn btn-g" data-act="ai-cloud-clear">清除雲端金鑰</button></div><div id="ai-cloud-res" class="text-xs mt-2"></div>') +
+        '<label class="lbl">管理密碼</label><div class="flex flex-wrap gap-2"><input class="inp flex-1" type="password" id="ai-pass" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="Vercel 的 AI_ADMIN_PASSCODE"><button class="btn btn-p" data-act="ai-cloud-save"><i class="fa-solid fa-cloud-arrow-up"></i>把上面的金鑰存到雲端</button><button class="btn btn-g" data-act="ai-cloud-clear">清除雲端金鑰</button></div><div id="ai-cloud-res" class="text-xs mt-2"></div>') +
       card('模型選擇', 'fa-microchip', '<p class="text-xs text-slate-500 mb-3">下面的清單是用目前這把金鑰向 Google 查詢到的「可用模型」。選好後,老師分析、學生分析與首頁的 AI 功能都會優先使用這個模型;選「自動」則使用版本最新的 flash 模型。</p><div id="ai-model-box"></div>') +
       card('AI 功能', 'fa-robot',
         setRow('啟用 AI 功能', '關閉後,老師分析的 AI 診斷、Ref 的 AI 診斷、學生分析的 AI 導師都會停用。', sw('aiEnabled', cfg.enabled)) +
@@ -1005,8 +1005,9 @@
     },
     'ai-clear': function () { KBUI.confirm({ title: '清除金鑰', html: '清除這台電腦儲存的 Gemini 金鑰?AI 功能會暫時無法使用。', danger: true, okText: '清除' }).then(function (y) { if (!y) return; try { localStorage.removeItem('kb_ai_key'); localStorage.removeItem('kb_ai_models'); localStorage.removeItem('kb_ai_model'); } catch (e) {} aiModels.list = null; KB.audit.add('ai.keyCleared', '', ''); KBUI.toast('已清除', 'ok'); R.ai(); }); },
     'ai-cloud-save': function () {
-      var key = ($('#ai-key') && $('#ai-key').value.trim()) || getKey(), pass = $('#ai-pass') ? $('#ai-pass').value : '';
-      if (!key) { cloudRes('請先貼上金鑰(或先「測試並儲存」)。', true); return; }
+      var typed = ($('#ai-key') && $('#ai-key').value.trim()) || '', saved = getKey(), pass = $('#ai-pass') ? $('#ai-pass').value : '', OKK = /^[0-9A-Za-z_.\-]{20,200}$/;
+      var key = OKK.test(typed) ? typed : OKK.test(saved) ? saved : '';   // 上面欄位填的不像金鑰(例如瀏覽器自動填入了密碼)就改用已存的金鑰
+      if (!key) { cloudRes(typed || saved ? '上面「Gemini 金鑰」卡片裡的內容不是 Gemini 金鑰(金鑰不能有空白、中文或奇怪的符號)。可能是瀏覽器自動填入了別的內容: 請清掉那個欄位,貼上真正的金鑰,按「測試並儲存」,再回來按這顆鈕。' : '請先在上面「Gemini 金鑰」卡片貼上金鑰,按「測試並儲存」。', true); return; }
       if (!pass) { cloudRes('請輸入管理密碼。', true); return; }
       cloudRes('正在儲存到雲端…', false);
       KBAI.admin('save', pass, key).then(function (r) {

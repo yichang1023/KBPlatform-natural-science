@@ -121,7 +121,7 @@
   function localKey() { try { return String(global.localStorage.getItem('kb_ai_key') || '').trim(); } catch (e) { return ''; } }
   var GEM = 'https://generativelanguage.googleapis.com/v1beta/', TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
   function upMsg(st) { return st === 400 ? '這段文字或這個聲音,語音模型不接受。' : (st === 401 || st === 403) ? '語音服務拒絕了這把金鑰(請確認金鑰可以使用語音功能)。' : st === 404 ? '找不到這個語音模型或聲音。' : st === 429 ? '語音服務的使用量暫時用完了,請稍後再試。' : '語音服務暫時無法使用,請稍後再試。'; }
-  function cleanDetail(m) { return String(m == null ? '' : m).replace(/AIza[0-9A-Za-z_\-]{20,}/g, '***').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220); }
+  function cleanDetail(m) { return String(m == null ? '' : m).replace(/(?:AIza|AQ\.)[0-9A-Za-z_.\-]{20,}/g, '***').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220); }
   function failFrom(r) { return r.json().catch(function () { return null; }).then(function (j) { var d = cleanDetail(j && j.error && j.error.message), e = new Error(upMsg(r.status) + (d && r.status !== 429 ? ' (Google 說: ' + d + ')' : '')); e.status = r.status; e.direct = true; throw e; }); }
   function pcmToWav(b64) {   // Google 回的如果是沒有檔頭的 PCM(24kHz、單聲道、16-bit), 補上 WAV 檔頭
     var bin = global.atob(b64), n = bin.length, u8 = new Uint8Array(44 + n), dv = new DataView(u8.buffer), i;

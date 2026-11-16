@@ -27,7 +27,7 @@ function wrapWav(b64) {
   h.writeUInt32LE(24000, 24); h.writeUInt32LE(48000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write('data', 36); h.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([h, pcm]).toString('base64');
 }
-function cleanDetail(m) { return String(m == null ? '' : m).replace(/AIza[0-9A-Za-z_\-]{20,}/g, '***').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220); }
+function cleanDetail(m) { return String(m == null ? '' : m).replace(/(?:AIza|AQ\.)[0-9A-Za-z_.\-]{20,}/g, '***').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220); }
 function upstreamMessage(status) {
   if (status === 400) return '這段文字或這個聲音,語音模型不接受。';
   if (status === 401 || status === 403) return '語音服務拒絕了這把金鑰(請老師確認金鑰可以使用語音功能)。';
