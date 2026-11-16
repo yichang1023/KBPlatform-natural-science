@@ -116,13 +116,45 @@
 
   // 說話方式(speech_metadata.style): 一般人設只送「這則貼文的語氣」(短短一句英文), 保留各人設原本的聲音特色; 只有「仿曉臻/仿 TTSMaker」這類有自己 style 的人設, 才在前面加上它的說話方式
   function styleFor(personaId, toneStyle) { var ps = personaStyle(personaId); return ps ? ps + (toneStyle ? ' Tone: ' + toneStyle : '') : (toneStyle || ''); }
-  function aiState() {   // 老師有沒有開 AI 人聲、伺服器有沒有金鑰(只查一次,5 分鐘內重複使用)
+  // 這台電腦存的「Gemini 金鑰」(設定中心 AI 設定頁第一張卡, 存在瀏覽器 localStorage kb_ai_key): 伺服器沒有金鑰時, 老師自己的瀏覽器改用它直接向 Google 合成.
+  // 只有存了金鑰的那台電腦聽得到; 學生要聽, 還是要在雲端(或 Vercel 環境變數)存金鑰.
+  function localKey() { try { return String(global.localStorage.getItem('kb_ai_key') || '').trim(); } catch (e) { return ''; } }
+  var GEM = 'https://generativelanguage.googleapis.com/v1beta/', TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
+  function upMsg(st) { return st === 400 ? '這段文字或這個聲音,語音模型不接受。' : (st === 401 || st === 403) ? '語音服務拒絕了這把金鑰(請確認金鑰可以使用語音功能)。' : st === 404 ? '找不到這個語音模型或聲音。' : st === 429 ? '語音服務的使用量暫時用完了,請稍後再試。' : '語音服務暫時無法使用,請稍後再試。'; }
+  function cleanDetail(m) { return String(m == null ? '' : m).replace(/AIza[0-9A-Za-z_\-]{20,}/g, '***').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220); }
+  function failFrom(r) { return r.json().catch(function () { return null; }).then(function (j) { var d = cleanDetail(j && j.error && j.error.message), e = new Error(upMsg(r.status) + (d && r.status !== 429 ? ' (Google 說: ' + d + ')' : '')); e.status = r.status; e.direct = true; throw e; }); }
+  function pcmToWav(b64) {   // Google 回的如果是沒有檔頭的 PCM(24kHz、單聲道、16-bit), 補上 WAV 檔頭
+    var bin = global.atob(b64), n = bin.length, u8 = new Uint8Array(44 + n), dv = new DataView(u8.buffer), i;
+    function w(o, s) { for (var k = 0; k < s.length; k++) u8[o + k] = s.charCodeAt(k); }
+    w(0, 'RIFF'); dv.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, 24000, true); dv.setUint32(28, 48000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n, true);
+    for (i = 0; i < n; i++) u8[44 + i] = bin.charCodeAt(i);
+    var out = '', CH = 0x8000; for (i = 0; i < u8.length; i += CH) out += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+    return global.btoa(out);
+  }
+  function directClip(text, voice, style, model, key) {   // 用這台電腦的金鑰直接向 Google 合成(和 api/tts.js 送的內容一樣)
+    var f = H.fetch || global.fetch; if (typeof f !== 'function') return Promise.reject(new Error('這個瀏覽器不能向 Google 要資料'));
+    var st = String(style == null ? '' : style).replace(/[\u0000-\u001f\u007f<>{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600), part = { text: String(text) };
+    if (st) part.speech_metadata = { style: st };
+    var m = TTS_MODELS.indexOf(model) >= 0 ? model : 'gemini-3.8-flash-tts';
+    return f(GEM + 'models/' + m + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts: [part] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { voice: String(voice).slice(0, 120) } } } }) }).then(function (r) {
+      if (!r.ok) return failFrom(r);
+      return r.json().catch(function () { return null; }).then(function (j) {
+        var parts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts || [], a = null;
+        parts.forEach(function (p) { var d = p.inlineData || p.inline_data; if (d && d.data && !a) a = d; });
+        if (!a) { var e = new Error('語音模型沒有回傳聲音,請換一段文字再試。'); e.direct = true; throw e; }
+        var mime = String(a.mimeType || a.mime_type || 'audio/wav');
+        return { audio: /wav|wave/i.test(mime) ? a.data : pcmToWav(a.data), mime: 'audio/wav' };
+      });
+    });
+  }
+  function fallbackOk(e) { return !!localKey() && !(e && e.direct) && (!e || !e.status || e.status === 503 || e.status === 404 || e.status === 0); }   // 伺服器沒金鑰/找不到/連不上, 而且這台電腦有存金鑰
+  function aiState() {   // 老師有沒有開 AI 人聲; 伺服器(雲端)有金鑰, 或這台電腦存了 Gemini 金鑰, 都算可以用(伺服器的結果只查一次, 5 分鐘內重複使用)
     var c = cfg(); if (!(c.ai && c.ai.enabled)) return Promise.resolve(false);
-    if (aiState.v && Date.now() - aiState.t < 300000) return aiState.v;
-    var f = H.fetch || global.fetch; if (typeof f !== 'function') return Promise.resolve(false);
-    aiState.t = Date.now();
-    aiState.v = f('/api/tts').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { return !!(j && j.configured); }, function () { return false; });
-    return aiState.v;
+    if (!(aiState.v && Date.now() - aiState.t < 300000)) {
+      var f = H.fetch || global.fetch; aiState.t = Date.now();
+      aiState.v = typeof f !== 'function' ? Promise.resolve(false) : f('/api/tts').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { return !!(j && j.configured); }, function () { return false; });
+    }
+    return aiState.v.then(function (ok) { aiState.src = ok ? 'cloud' : localKey() ? 'local' : ''; return ok || !!localKey(); });
   }
 
   /* ---------- AI 人聲:合成 + 快取 ---------- */
@@ -146,6 +178,19 @@
   // 回傳 Promise<{ url, cached }>
   // 聲音清單(含男女): 向伺服器要(伺服器再向 Google 讀); 讀到就記住, 失敗可以再試
   var vlist = null, vP = null;
+  function directVoices(key) {   // 用這台電腦的金鑰直接向 Google 讀聲音清單(含男女)
+    var f = H.fetch || global.fetch, out = [];
+    function page(tok, n) {
+      return f(GEM + 'voices?page_size=1000' + (tok ? '&page_token=' + encodeURIComponent(tok) : ''), { headers: { 'x-goog-api-key': key } }).then(function (r) {
+        if (!r.ok) return failFrom(r);
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          (j.voices || []).forEach(function (v) { if (v && (v.id || v.name)) out.push({ id: String(v.id || String(v.name).replace(/^voices\//, '')), name: String(v.display_name || v.displayName || v.id || ''), gender: String(v.gender || '').toLowerCase(), type: String(v.type || ''), description: String(v.description || '').slice(0, 120) }); });
+          var next = j.next_page_token || j.nextPageToken || ''; return next && n < 4 && out.length < 800 ? page(next, n + 1) : out.slice(0, 800);
+        });
+      });
+    }
+    return page('', 0);
+  }
   function voiceList() {
     if (vlist) return Promise.resolve(vlist); if (vP) return vP;
     var f = H.fetch || global.fetch; if (typeof f !== 'function') return Promise.reject(new Error('這個瀏覽器不能向伺服器要資料'));
@@ -154,7 +199,7 @@
         if (!r.ok || !j || !Array.isArray(j.voices)) { var e = new Error((j && j.error && j.error.message) || '讀不到聲音清單'); e.status = r.status; throw e; }
         vlist = j.voices; return vlist;
       });
-    });
+    }).then(null, function (e) { if (!fallbackOk(e)) throw e; return directVoices(localKey()).then(function (l) { vlist = l; return l; }); });
     vP.then(null, function () { vP = null; });
     return vP;
   }
@@ -173,9 +218,14 @@
       return f('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, voice: voice, style: style, model: model || undefined }) }).then(function (r) {
         return r.json().catch(function () { return null; }).then(function (j) {
           if (!r.ok || !j || !j.audio) { var e = new Error((j && j.error && j.error.message) || '語音服務暫時無法使用'); e.status = r.status; throw e; }
-          cachePut(key, { b64: j.audio, mime: j.mime || 'audio/wav' });
-          return { url: b64ToUrl(j.audio, j.mime), cached: false };
+          return j;
         });
+      }).then(null, function (e) {   // 伺服器沒金鑰/找不到/連不上: 這台電腦有存 Gemini 金鑰就改用它(只有這台電腦聽得到)
+        if (!fallbackOk(e)) throw e;
+        return directClip(text, voice, style, model, localKey());
+      }).then(function (j) {
+        cachePut(key, { b64: j.audio, mime: j.mime || 'audio/wav' });
+        return { url: b64ToUrl(j.audio, j.mime), cached: false };
       });
     });
   }
@@ -380,7 +430,8 @@
     rs.onchange = function () { if (reader && reader.state === 'playing') { reader.stop(); start(mode); } };
     showInfo();
     (function () { var p0 = post(); tb.hidden = !String(p0.title).trim() && !TYPE_ZH[p0.type]; play.hidden = !String(p0.content).trim(); var rn = replies().length; playr.hidden = !rn; playr.textContent = '🔊 朗讀全部回應(' + rn + ')'; })();
-    aiState().then(function (ok) {   // 伺服器還沒存 Gemini 金鑰: 說明原因, 鈕先停用
+    aiState().then(function (ok) {   // 伺服器和這台電腦都沒有 Gemini 金鑰: 說明原因, 鈕先停用
+      if (ok && aiState.src === 'local' && !note.textContent) note.textContent = '目前用的是這台電腦存的 Gemini 金鑰, 只有這台電腦聽得到; 要讓學生也能聽, 請在雲端存金鑰。';
       if (ok) return;
       note.textContent = '朗讀功能暫時不能用: 老師還沒有把 Gemini 金鑰存到雲端(設定中心 > AI 設定)。';
       [play, playt, playr].forEach(function (b) { b.disabled = true; });
@@ -390,7 +441,7 @@
 
   global.KBTts = {
     PERSONAS: PERSONAS, TONES: TONES, STYLES: STYLES, EXPR: EXPR, exprText: exprText, analyze: analyze, splitSentences: splitSentences, groupSentences: groupSentences, forSpeech: forSpeech, withPauses: withPauses,
-    mount: mount, stop: stop, personaVoice: personaVoice, personaStyle: personaStyle, aiClip: aiClip, voiceList: voiceList, Reader: Reader, aiState: aiState,
+    mount: mount, stop: stop, personaVoice: personaVoice, personaStyle: personaStyle, aiClip: aiClip, voiceList: voiceList, localKey: localKey, Reader: Reader, aiState: aiState,
     _t: { H: H, mem: mem, setHighlight: setHighlight, textMap: textMap, hash: hash, resetAi: function () { aiState.v = null; vlist = null; vP = null; } }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
