@@ -95,6 +95,7 @@
       ai: { enabled: true, stripNames: true, model: 'auto' },
       media: { enabled: true },   // 發言視窗的「📷 加照片 / 🎙️ 錄音」(設定中心可關閉)
       voice: { enabled: true },   // 發言視窗的「🎤 用說的」語音輸入(測試中;設定中心可關閉,關閉後回到只有打字)
+      tts: { ai: { enabled: false, model: 'gemini-3.8-flash-tts', voices: {} } },   // 貼文朗讀(🔊 給眼睛不好的同學):ai.enabled = 開啟朗讀(AI 人聲(需雲端與伺服器金鑰,見 api/tts.js);voices = 各人設換成自己設計的聲音編號
       requireStudentPwChange: false,   // 目前統一不強制改密碼(此設定已不再生效)
       consent: { enabled: false, version: 1, text: '歡迎使用本平台。本平台用於課程學習與教學研究:你在論壇的發言與操作紀錄會被保存,並可能以匿名方式(姓名會以代號取代)用於教學分析與研究。請妥善保管自己的帳號與密碼,不要借給別人使用。若有疑問請洽老師。按「同意並繼續」表示你已閱讀並同意。' }
     };

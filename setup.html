@@ -22,6 +22,7 @@
 <script src="kb-asra.js"></script>
 <script src="kb-asra-import.js"></script>
 <script src="kb-media.js"></script>
+<script src="kb-tts.js"></script>
 <script src="kb-research-export.js"></script>
 <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Noto Sans TC', 'sans-serif'] } } } }</script>
 <style>
@@ -125,7 +126,7 @@
     { id: 'classes', icon: 'fa-people-group', title: '班級與分組', sub: '建立班級、組別,並把學生分配進去' },
     { id: 'forum', icon: 'fa-comments', title: '論壇設定', sub: '討論區管理與學生權限、發文規則' },
     { id: 'analysis', icon: 'fa-chart-pie', title: '分析設定', sub: 'KB 12 原則與認知能動性的判斷門檻' },
-    { id: 'ai', icon: 'fa-robot', title: 'AI 設定', sub: 'Gemini 金鑰、AI 功能開關與模型' },
+    { id: 'ai', icon: 'fa-robot', title: 'AI 設定', sub: 'Gemini 金鑰、AI 功能開關、模型與貼文朗讀(AI 人聲)' },
     { id: 'data', icon: 'fa-database', title: '資料與備份', sub: '匯出、備份、還原、回收桶與危險操作' },
     { id: 'appearance', icon: 'fa-palette', title: '平台與安全設定', sub: '平台名稱、公告、維護模式、登入安全、顯示方式' },
     { id: 'audit', icon: 'fa-clipboard-list', title: '稽核紀錄', sub: '誰在什麼時間做了什麼' },
@@ -537,7 +538,8 @@
       card('AI 功能', 'fa-robot',
         setRow('啟用 AI 功能', '關閉後,老師分析的 AI 診斷、Ref 的 AI 診斷、學生分析的 AI 導師都會停用。', sw('aiEnabled', cfg.enabled)) +
         setRow('傳給 AI 的內容會去除學生姓名', '固定開啟:姓名、名字與學號一律換成 S01、S02… 代號,AI 回覆後再由你的瀏覽器換回。', '<span class="chip ok">固定開啟</span>') +
-        '');
+        '') +
+      card('貼文朗讀(🔊 給眼睛不好、需要靠聽覺輔助的同學)', 'fa-volume-high', ttsCard(KB.settings.get()));
     renderModelBox();
     refreshCloud();
     if (key && aiModels.list === null && !aiModels.loading) loadModels();
@@ -774,6 +776,61 @@
       });
     };
   }
+  /* ---------- 貼文朗讀設定 ---------- */
+  var TTS_VOICES = 'Zephyr,Puck,Charon,Kore,Fenrir,Leda,Orus,Aoede,Callirrhoe,Autonoe,Enceladus,Iapetus,Umbriel,Algieba,Despina,Erinome,Algenib,Rasalgethi,Laomedeia,Achernar,Alnilam,Schedar,Gacrux,Pulcherrima,Achird,Zubenelgenubi,Vindemiatrix,Sadachbia,Sadaltager,Sulafat'.split(',');
+  // 聲音清單: 不論輸入框現在填了什麼, 都列出全部(第一項「用預設」會清空輸入框); 想自己打也可以
+  var ttsVoices = null, ttsVoicesState = '';   // ttsVoices: 向 Google 讀到的聲音清單(有男女); 還沒讀到時先用上面的 30 個名稱(沒有男女)
+  function ttsGender(g) { g = String(g || '').toLowerCase(); return g === 'female' ? '(女)' : g === 'male' ? '(男)' : g === 'neutral' ? '(中性)' : ''; }
+  function ttsFind(val) { var v = String(val || '').trim().toLowerCase(); if (!v || !ttsVoices) return null; return ttsVoices.filter(function (x) { return String(x.id).toLowerCase() === v; })[0] || ttsVoices.filter(function (x) { return String(x.name).toLowerCase() === v; })[0] || null; }
+  function ttsItems() { return ttsVoices ? ttsVoices.map(function (x) { return { id: x.id, label: (x.name && x.name !== x.id ? x.name + ' · ' + x.id : x.id) + ttsGender(x.gender), tip: x.description || '' }; }) : TTS_VOICES.map(function (n) { return { id: n, label: n, tip: '' }; }); }
+  function ttsMenuHtml(pid, cur) {
+    var st = 'display:block;width:100%;text-align:left;padding:7px 12px;border:0;background:transparent;cursor:pointer;font-size:14px;', f = ttsFind(cur), curId = f ? f.id : cur;
+    var head = ttsVoices ? '' : '<div style="padding:6px 12px;font-size:12px;color:#92400e;background:#fffbeb;border-bottom:1px solid #fde68a">' + (ttsVoicesState === 'loading' ? '正在向 Google 讀取聲音清單(含男女)…' : ttsVoicesState ? '還沒讀到男女: ' + esc(ttsVoicesState) : '男女標示要連上語音伺服器才讀得到') + '</div>';
+    return head + '<button type="button" role="option" data-act="tts-pick" data-id="' + pid + '" data-val="" style="' + st + 'color:#64748b">(用預設聲音)</button>' + ttsItems().map(function (x) {
+      return '<button type="button" role="option" data-act="tts-pick" data-id="' + pid + '" data-val="' + esc(x.id) + '" title="' + esc(x.tip) + '" style="' + st + (x.id === curId && cur ? 'background:#eef2ff;font-weight:700;' : '') + '">' + esc(x.label) + '</button>';
+    }).join('');
+  }
+  function ttsRefreshMenus() {   // 重畫所有清單(讀到男女之後), 保留展開/收起狀態; 並更新輸入框下方的「(女)(男)」
+    Array.prototype.forEach.call(document.querySelectorAll('.tts-combo'), function (w) {
+      var inp = w.querySelector('[data-tts-voice]'), m = w.querySelector('.tts-menu'), hid = m.hidden; m.innerHTML = ttsMenuHtml(inp.getAttribute('data-tts-voice'), inp.value.trim()); m.hidden = hid; ttsGenderTag(w);
+    });
+  }
+  function ttsGenderTag(w) { var inp = w.querySelector('[data-tts-voice]'), g = w.querySelector('.tts-g'); if (!g) return; var f = ttsFind(inp.value) || ttsFind(inp.getAttribute('placeholder').replace(/^預設:/, '')), tag = f ? ttsGender(f.gender) : ''; g.textContent = tag ? (inp.value.trim() ? '' : '預設聲音 ') + (f.name || f.id) + tag : ''; }
+  function ttsLoadVoices() {
+    if (ttsVoices || ttsVoicesState === 'loading' || !window.KBTts || !KBTts.voiceList) return;
+    ttsVoicesState = 'loading'; ttsRefreshMenus();
+    var pr; try { pr = KBTts.voiceList(); } catch (e) { pr = Promise.reject(e); }
+    pr.then(function (l) { ttsVoices = l; ttsVoicesState = ''; ttsRefreshMenus(); }, function (e) { ttsVoicesState = String((e && e.message) || '讀不到').slice(0, 120); ttsRefreshMenus(); });
+  }
+  function ttsMenusClose(except) {
+    Array.prototype.forEach.call(document.querySelectorAll('.tts-combo'), function (w) {
+      if (w === except) return; var m = w.querySelector('.tts-menu'), b = w.querySelector('[data-act="tts-menu"]'); if (m) m.hidden = true; if (b) b.setAttribute('aria-expanded', 'false');
+    });
+  }
+  if (!window.__ttsMenuBound) {
+    window.__ttsMenuBound = true;
+    document.addEventListener('click', function (e) { if (!(e.target.closest && e.target.closest('.tts-combo'))) ttsMenusClose(null); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') ttsMenusClose(null); });
+    document.addEventListener('input', function (e) { var w = e.target.closest && e.target.closest('.tts-combo'); if (w && e.target.hasAttribute('data-tts-voice')) ttsGenderTag(w); });
+  }
+  var ttsPrev = null;   // 目前在試聽的: { id, audio, state: 'busy'|'playing'|'paused' }
+  function ttsBtn(id, state) {   // 改試聽鈕的樣子
+    var b = document.querySelector('[data-act="tts-try"][data-id="' + id + '"]'); if (!b) return;
+    var map = { idle: ['fa-play', '試聽'], busy: ['fa-spinner fa-spin', '合成中'], playing: ['fa-pause', '暫停'], paused: ['fa-play', '繼續'] }, m = map[state] || map.idle;
+    b.innerHTML = '<i class="fa-solid ' + m[0] + '"></i>' + m[1]; b.setAttribute('aria-label', state === 'playing' ? '暫停試聽' : state === 'paused' ? '繼續試聽' : state === 'busy' ? '合成中' : '試聽'); b.setAttribute('data-state', state);
+  }
+  function ttsPrevStop() { var pv = ttsPrev; ttsPrev = null; if (!pv) return; if (pv.audio) { try { pv.audio.pause(); } catch (e) {} } ttsBtn(pv.id, 'idle'); }
+  function ttsCard(c) {
+    setTimeout(ttsLoadVoices, 60);   // 卡片畫出來後, 順便向 Google 讀聲音清單(為了在名稱後面標示男女); 讀不到就先用內建的名稱
+    var t = c.tts || { ai: { enabled: false } }, ai = t.ai || {}, vs = ai.voices || {};
+    var rows = KBTts.PERSONAS.map(function (p) {
+      return '<tr><td class="font-bold">' + esc(p.name) + '<div class="text-xs text-slate-500 font-normal">' + esc(p.hint) + '</div></td><td><div class="tts-combo" style="position:relative;min-width:230px"><input class="kbui-input" style="width:100%;padding-right:34px" data-tts-voice="' + p.id + '" value="' + esc(vs[p.id] || '') + '" placeholder="預設:' + esc(p.def) + '" aria-label="' + esc(p.name) + ' 的聲音名稱或編號"><button type="button" data-act="tts-menu" data-id="' + p.id + '" aria-label="展開聲音清單(' + esc(p.name) + ')" aria-expanded="false" style="position:absolute;right:2px;top:2px;bottom:2px;width:30px;border:0;background:transparent;cursor:pointer;font-size:14px;color:#334155">&#9662;</button><div class="tts-g" style="font-size:12px;color:#475569;min-height:0"></div><div class="tts-menu" role="listbox" aria-label="聲音清單" hidden style="position:absolute;z-index:40;left:0;right:0;top:100%;margin-top:2px;max-height:260px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.18)">' + ttsMenuHtml(p.id, vs[p.id] || '') + '</div></div></td><td class="whitespace-nowrap"><button class="btn btn-g btn-sm" data-act="tts-try" data-id="' + p.id + '"><i class="fa-solid fa-play"></i>試聽</button></td></tr>';
+    }).join('');
+    return setRow('開啟貼文朗讀(AI 人聲,8 個女聲人設)', '開啟後,每則貼文詳情會出現三顆朗讀鈕(朗讀標題、朗讀內容、最下方的朗讀全部回應),學生可以從 8 個擬真女聲挑一個(明亮甜美、柔和溫暖、溫暖沙啞、輕快帶笑、清楚穩重、開心肯定的 Lumi,以及仿曉臻、仿 TTSMaker 兩個依參考音檔模仿的聲音),系統會依貼文類型與內容自動判斷語氣(提問帶好奇、延伸帶笑意、改進清楚有條理、反例沉穩、昇華慢慢說)。需要先在上面的「雲端金鑰」把 Gemini 金鑰存到雲端。<b>隱私提醒:</b>學生的貼文文字會送到 Google 合成語音;免費額度的內容可能被 Google 用來改進產品,建議用付費專案的金鑰,並在研究說明加一句「朗讀功能可能將貼文文字送至 Google 處理」。學生也能在朗讀列手動選「語氣」。貼文裡寫 [笑]、[咳嗽]、[嘆氣]、[停頓]、[長停頓] 這類標記,AI 人聲會做出對應的表情(瀏覽器聲音則略過)。同一段文字同一種聲音只合成一次、存在學生的電腦裡,重聽不再花錢;每日合成次數上限由 Vercel 環境變數 TTS_DAILY_LIMIT 控制(預設 1500 次)。', sw('ttsAiEnabled', !!ai.enabled)) +
+      '<div class="mt-3"><div class="text-sm font-bold mb-1">各人設用的聲音</div><div class="text-xs text-slate-500 mb-2">留白 = 用預設的 Google 現成女聲。想填什麼都可以(不限格式): 按輸入框右邊的 ▾ 會列出常見的現成聲音名稱(不管目前填了什麼都列出全部),也可以自己打字填你在 Google AI Studio 看到的聲音名稱,或「+ New voice」設計好的聲音編號(voice_…)。聽起來不對時,「試聽」會顯示 Google 回覆的原因。「試聽」會合成一小段,需要連到雲端並存好金鑰。</div>' +
+      '<div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="tbl"><thead><tr><th>人設</th><th>聲音名稱或編號</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="flex flex-wrap items-center gap-2 mt-3"><label class="text-sm font-bold m-0">語音模型</label><select class="kbui-input" style="width:auto" id="tts-model"><option value="gemini-3.8-flash-lite-tts"' + (ai.model === 'gemini-3.8-flash-lite-tts' ? ' selected' : '') + '>Flash-Lite(快、便宜,適合朗讀)</option><option value="gemini-3.8-flash-tts"' + (ai.model !== 'gemini-3.8-flash-lite-tts' ? ' selected' : '') + '>Flash(表現力最好、較貴,建議)</option></select><button class="btn btn-p btn-sm" data-act="tts-save"><i class="fa-solid fa-floppy-disk"></i>儲存聲音設定</button><span class="text-xs text-slate-500" id="tts-msg" role="status"></span></div></div>';
+  }
   function restoreFlow(snap, label) {
     var err = null; if (!snap || snap.app !== 'kb-platform') err = '這不是本平台的備份檔';
     if (err) { KBUI.toast(err, 'err'); return; }
@@ -988,6 +1045,50 @@
     'b-restore': function (b) { var s = KB.backup.get(b.dataset.id); restoreFlow(s, s && s.label); },
     'b-del': function (b) { KB.backup.removeBackup(b.dataset.id); R.data(); },
     'b-file': function () { $('#b-file-inp').click(); },
+    'tts-menu': function (b) {   // 展開/收起聲音清單(永遠是完整清單)
+      var w = b.closest('.tts-combo'), m = w.querySelector('.tts-menu'), open = m.hidden;
+      ttsMenusClose(w); m.hidden = !open; b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) { ttsLoadVoices(); var inp0 = w.querySelector('[data-tts-voice]'); m.innerHTML = ttsMenuHtml(inp0.getAttribute('data-tts-voice'), inp0.value.trim()); var f0 = ttsFind(inp0.value), cur = f0 ? f0.id : inp0.value.trim(), sel = m.querySelector('[data-val="' + String(cur).replace(/"/g, '') + '"]'); if (sel && cur) { try { sel.scrollIntoView({ block: 'nearest' }); } catch (e) {} } }
+    },
+    'tts-pick': function (b) {   // 選了清單裡的名稱: 填進輸入框(之後還能再展開重選)
+      var w = b.closest('.tts-combo'), inp = w.querySelector('[data-tts-voice]');
+      inp.value = b.dataset.val || ''; ttsMenusClose(null); inp.focus();
+      w.querySelector('.tts-menu').innerHTML = ttsMenuHtml(inp.getAttribute('data-tts-voice'), inp.value.trim()); w.querySelector('.tts-menu').hidden = true; ttsGenderTag(w);
+      var msg = $('#tts-msg'); if (msg) { msg.className = 'text-xs text-slate-500'; msg.textContent = '已填入「' + (inp.value || '預設聲音') + '」, 按右邊「試聽」聽聽看; 要保留請按「儲存聲音設定」。'; }
+    },
+    'tts-save': function () {
+      var voices = {}; Array.prototype.forEach.call(document.querySelectorAll('[data-tts-voice]'), function (i) { voices[i.getAttribute('data-tts-voice')] = String(i.value || '').trim().slice(0, 120); });   // 想填什麼都可以, 不檢查格式(留白 = 用預設聲音)
+      KB.settings.update({ tts: { ai: { voices: voices, model: ($('#tts-model') || {}).value || 'gemini-3.8-flash-tts' } } }); KBUI.toast('已儲存聲音設定', 'ok');
+    },
+    'tts-try': function (b) {   // 試聽: 第一次按=合成並播放; 播放中按=暫停; 暫停中按=繼續; 播完回到「試聽」; 按別的人設的試聽=換成它
+      var id = b.dataset.id, inp = document.querySelector('[data-tts-voice="' + id + '"]'), msg = $('#tts-msg'), p = KBTts.PERSONAS.filter(function (x) { return x.id === id; })[0];
+      var pv = ttsPrev;
+      if (pv && pv.id === id && pv.state === 'busy') return;   // 還在合成, 先不理
+      if (pv && pv.id === id && pv.audio && pv.state === 'playing') { try { pv.audio.pause(); } catch (e) {} pv.state = 'paused'; ttsBtn(id, 'paused'); msg.className = 'text-xs text-slate-500'; msg.textContent = '已暫停, 再按一次「繼續」接著聽。'; return; }
+      if (pv && pv.id === id && pv.audio && pv.state === 'paused') { pv.state = 'playing'; ttsBtn(id, 'playing'); msg.className = 'text-xs text-emerald-700'; msg.textContent = p.name + ': 播放中'; var rp = pv.audio.play(); if (rp && rp.catch) rp.catch(function (e) { pv.state = 'paused'; ttsBtn(id, 'paused'); msg.className = 'text-xs text-red-600'; msg.textContent = '播放失敗: ' + e.message; }); return; }
+      ttsPrevStop();   // 換一個人設試聽: 前一個停掉
+      var v = (inp && inp.value.trim()) || p.def, t0 = Date.now(), mine = ttsPrev = { id: id, audio: null, state: 'busy' };
+      function why(e) {   // 把常見原因翻成看得懂的話
+        var m = String((e && e.message) || e || ''), st = e && e.status;
+        if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return '連不到語音伺服器。請確認這個頁面的網址是用「啟動朗讀測試.bat」開出來的 http://localhost:8795/... (不是 file:/// 開的檔案,也不是線上版)。';
+        if (st === 404) return '這個網址沒有語音服務(找不到 /api/tts)。請改用「啟動朗讀測試.bat」開出來的 http://localhost:8795/setup.html。';
+        return m + (st ? '(狀態 ' + st + ')' : '');
+      }
+      function fail(text) { if (ttsPrev === mine) ttsPrev = null; ttsBtn(id, 'idle'); msg.className = 'text-xs text-red-600'; msg.textContent = text; }
+      ttsBtn(id, 'busy'); msg.className = 'text-xs text-slate-500'; msg.textContent = '合成中...(第一次要幾秒)';
+      var pr;
+      try { pr = KBTts.aiClip('我覺得聲波功率變大,不一定就代表過濾效果比較好。因為我們用ESP32測了三次,發現功率太大時,數值反而下降。', v, (KBTts.personaStyle ? KBTts.personaStyle(id) : '') || 'warm and patient', ($('#tts-model') || {}).value); }
+      catch (e) { fail('試聽失敗:' + why(e)); return; }
+      pr.then(function (clip) {
+        if (ttsPrev !== mine) return;   // 合成的時候使用者已經按了別的, 不播
+        var a; try { a = new Audio(clip.url); } catch (e) { fail('播放失敗:' + e.message); return; }
+        mine.audio = a; mine.state = 'playing'; ttsBtn(id, 'playing');
+        a.onended = function () { if (ttsPrev === mine) { mine.state = 'idle'; ttsPrev = null; ttsBtn(id, 'idle'); msg.className = 'text-xs text-slate-500'; msg.textContent = p.name + ': 播完了, 可以再按「試聽」。'; } };
+        msg.className = 'text-xs text-emerald-700';
+        msg.textContent = p.name + '(' + v + '):' + (clip.cached ? '播放中(用已存的聲音)' : '播放中(合成花了 ' + Math.round((Date.now() - t0) / 100) / 10 + ' 秒)') + ' — 想暫停按「暫停」';
+        try { var pl = a.play(); if (pl && pl.catch) pl.catch(function (e) { mine.state = 'paused'; ttsBtn(id, 'paused'); msg.className = 'text-xs text-red-600'; msg.textContent = '瀏覽器擋住了自動播放:' + e.message + '(按「繼續」再試)'; }); } catch (e) { fail('播放失敗:' + e.message); }
+      }, function (e) { fail('試聽失敗:' + why(e)); });
+    },
     'asra-imp': asraSheetDialog,
     'asra-tpl': function () { download('ASRA學生回答範本.xlsx', KBXLSX.build([{ name: 'ASRA回答', header: true, widths: [10, 14, 8, 38, 38, 38, 38, 38, 38], textCols: [0, 1, 2], rows: KBAsraImport.templateRows() }]), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); },
     'asra-undo': function (b) {
@@ -1021,7 +1122,7 @@
     guestEnabled: function (v) { KB.settings.update({ guestEnabled: v }); }, crossClassPost: function (v) { KB.settings.update({ crossClassPost: v }); }, studentEditOwn: function (v) { KB.settings.update({ studentEditOwn: v }); },
     forumLocked: function (v) { KB.settings.update({ forumLocked: v }); }, postWindowEnabled: function (v) { KB.settings.update({ postWindow: { enabled: v } }); },
     aiEnabled: function (v) { KB.settings.update({ ai: { enabled: v } }); }, annEnabled: function (v) { KB.settings.update({ announcement: { enabled: v } }); },
-    maintenance: function (v) { KB.settings.update({ maintenance: v }); }, voiceEnabled: function (v) { KB.settings.update({ voice: { enabled: v } }); }, mediaEnabled: function (v) { KB.settings.update({ media: { enabled: v } }); }, consentEnabled: function (v) { KB.settings.update({ consent: { enabled: v } }); }, requireStudentPwChange: function (v) { KB.settings.update({ requireStudentPwChange: v }); }
+    maintenance: function (v) { KB.settings.update({ maintenance: v }); }, voiceEnabled: function (v) { KB.settings.update({ voice: { enabled: v } }); }, ttsAiEnabled: function (v) { KB.settings.update({ tts: { ai: { enabled: v } } }); }, mediaEnabled: function (v) { KB.settings.update({ media: { enabled: v } }); }, consentEnabled: function (v) { KB.settings.update({ consent: { enabled: v } }); }, requireStudentPwChange: function (v) { KB.settings.update({ requireStudentPwChange: v }); }
   };
 
   document.addEventListener('click', function (e) {

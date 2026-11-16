@@ -17,6 +17,7 @@
     <script src="kb-ui.js"></script>
     <script src="kb-voice.js"></script>
     <script src="kb-media.js"></script>
+    <script src="kb-tts.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -230,9 +231,11 @@
                 <button onclick="window.ui.closeModal('modal-detail')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
             <div class="p-4 md:p-6 overflow-y-auto custom-scroll flex-1">
-                <h2 id="detail-title" class="text-lg md:text-2xl font-bold mb-4 text-slate-900 leading-snug"></h2>
+                <div class="flex flex-wrap items-start gap-2 mb-4"><h2 id="detail-title" class="text-lg md:text-2xl font-bold text-slate-900 leading-snug flex-1 min-w-0"></h2><span id="detail-tts-title" class="shrink-0"></span></div>
+                <div id="detail-tts"></div>
                 <div id="detail-content" class="text-sm md:text-lg leading-relaxed whitespace-pre-wrap text-slate-700"></div>
                 <div id="detail-media" style="display:none"></div>
+                <div id="detail-tts-replies" class="mt-4"></div>
             </div>
             <div class="p-3 md:p-4 border-t border-slate-100 bg-slate-50 rounded-b-xl flex justify-end gap-3 shrink-0">
                 <button id="btn-detail-reply" class="px-5 py-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 text-sm font-medium w-full md:w-auto justify-center"><i class="fa-solid fa-reply"></i> 延伸</button>
@@ -907,6 +910,7 @@
             document.getElementById('detail-author').innerText = u.name;
             document.getElementById('detail-date').innerText = new Date(n.date).toLocaleDateString('zh-TW');
             document.getElementById('detail-content').innerText = n.content;
+            try { if (window.KBTts) KBTts.mount(document.getElementById('detail-tts'), { getPost: () => ({ type: n.type, title: n.title || '', content: n.content || '' }), titleHost: document.getElementById('detail-tts-title'), repliesHost: document.getElementById('detail-tts-replies'), getReplies: () => window.state.nodes.filter(x => x.parentId === n.id).sort((a, b) => (a.date || 0) - (b.date || 0)).map(x => ({ type: x.type, title: x.title || '', content: x.content || '' })), contentEl: document.getElementById('detail-content') }); } catch (e) {}   // 朗讀這則貼文(給眼睛不好的同學)
             try { if (window.KBMedia) KBMedia.renderBody(document.getElementById('detail-content'), document.getElementById('detail-media'), n.content || '', n.media || [], {
                 editable: !!KB.can('forum.editOwn', { author: n.author }),   // 作者本人:在這裡就能拖曳/縮放/裁切照片,改完自動存
                 onChange: (list) => { n.media = list; try { KB.content.audit('post.edit', n.id, '調整照片版面'); } catch (e) {} window.dataManager.save(); }
@@ -1699,6 +1703,7 @@
         };
 
         window.ui.closeModal = (id) => {
+            if (id === 'modal-detail') { try { if (window.KBTts) KBTts.stop(); } catch (e) {} }   // 關掉貼文就停止朗讀
             document.getElementById(id).classList.add('hidden');
             if(id === 'modal-node') {
                 try { if (window.KBVoice) KBVoice.reset(); } catch (e) {}
