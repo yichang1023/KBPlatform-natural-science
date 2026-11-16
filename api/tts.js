@@ -28,11 +28,19 @@ function wrapWav(b64) {
   return Buffer.concat([h, pcm]).toString('base64');
 }
 function cleanDetail(m) { return String(m == null ? '' : m).replace(/(?:AIza|AQ\.)[0-9A-Za-z_.\-]{20,}/g, '***').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220); }
-function upstreamMessage(status) {
+// 額度用完(HTTP 429)時, 給學生看得懂的說明. raw = Google 回的原始說明(含「Free Tier」「per day」「Please retry in 16h7m20s」這類字樣); 沒有就用一般說法
+function quotaMessage(raw) {
+  const d = String(raw == null ? '' : raw), free = /free.?tier/i.test(d), perMin = /per.?minute/i.test(d) && !/per.?day/i.test(d);
+  const m = /retry in\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:([\d.]+)s)?/i.exec(d); let wait = '';
+  if (m && (m[1] || m[2] || m[3])) { const h = +m[1] || 0, mi = +m[2] || 0, s = Math.ceil(+m[3] || 0); wait = h ? '約 ' + (h + (mi >= 30 ? 1 : 0)) + ' 小時後' : mi ? '約 ' + (mi + (s > 0 ? 1 : 0)) + ' 分鐘後' : '約 ' + Math.max(1, s) + ' 秒後'; }
+  if (perMin) return '現在同時合成語音的人太多了(Gemini 每分鐘有次數限制),請等' + (wait ? wait.replace(/後$/, '') : '一分鐘') + '再試。聽過的內容仍可重複播放。';
+  return '今天的語音額度用完了' + (free ? '。因為目前使用的是免費版的 Gemini API 金鑰,每天能合成的次數很少' : '(已超過目前 Gemini 方案的語音上限)') + '。' + (wait ? wait + '會恢復; ' : '') + '請明天再試,或請老師在 Google AI Studio 開啟計費(升級付費)。聽過的內容仍可重複播放。';
+}
+function upstreamMessage(status, raw) {
   if (status === 400) return '這段文字或這個聲音,語音模型不接受。';
   if (status === 401 || status === 403) return '語音服務拒絕了這把金鑰(請老師確認金鑰可以使用語音功能)。';
   if (status === 404) return '找不到這個語音模型或聲音。';
-  if (status === 429) return '語音服務的使用量暫時用完了,請稍後再試。';
+  if (status === 429) return quotaMessage(raw);
   return '語音服務暫時無法使用,請稍後再試。';
 }
 
@@ -43,7 +51,7 @@ async function listVoices(key) {
   const out = []; let token = '';
   for (let page = 0; page < 5; page++) {
     const r = await fetch('https://generativelanguage.googleapis.com/v1beta/voices?page_size=1000' + (token ? '&page_token=' + encodeURIComponent(token) : ''), { headers: { 'x-goog-api-key': key } });
-    if (!r.ok) { const ej = await r.json().catch(() => null); const e = new Error(upstreamMessage(r.status) + (r.status !== 429 && ej && ej.error && ej.error.message ? ' (Google 說: ' + cleanDetail(ej.error.message) + ')' : '')); e.status = r.status; throw e; }
+    if (!r.ok) { const ej = await r.json().catch(() => null); const e = new Error(upstreamMessage(r.status, ej && ej.error && ej.error.message) + (r.status !== 429 && ej && ej.error && ej.error.message ? ' (Google 說: ' + cleanDetail(ej.error.message) + ')' : '')); e.status = r.status; throw e; }
     const j = await r.json().catch(() => null) || {};
     (j.voices || []).forEach((v) => { if (v && (v.id || v.name)) out.push({ id: String(v.id || String(v.name).replace(/^voices\//, '')), name: String(v.display_name || v.displayName || v.id || ''), gender: String(v.gender || '').toLowerCase(), type: String(v.type || ''), description: String(v.description || '').slice(0, 120) }); });
     token = j.next_page_token || j.nextPageToken || ''; if (!token || out.length >= 800) break;
@@ -78,7 +86,7 @@ module.exports = async function handler(req, res) {
     const model = b.body.model == null || b.body.model === '' ? defaultModel() : String(b.body.model);
     if (MODELS.indexOf(model) < 0) return send(res, 400, { error: { message: '語音模型不正確' } });
     const style = cleanStyle(b.body.style);
-    if (!dailyTts()) return send(res, 429, { error: { message: '今天的朗讀合成次數已達上限,明天再試(聽過的內容仍可重複播放)。' } });
+    if (!dailyTts()) return send(res, 429, { error: { message: '這個網站今天的朗讀合成次數已達老師設定的上限,請明天再試(聽過的內容仍可重複播放)。' } });
     const k = await getKey();
     if (!k || !k.key) return send(res, 503, { error: { message: '老師還沒有設定 AI 金鑰(雲端),所以還不能用 AI 人聲。' } });
     const part = { text }; if (style) part.speech_metadata = { style };
@@ -86,7 +94,7 @@ module.exports = async function handler(req, res) {
     const up = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify(body) });
     if (!up.ok) {
       const ej = await up.json().catch(() => null), detail = cleanDetail(ej && ej.error && ej.error.message);   // Google 說的原因(例如「找不到這個聲音」), 一併顯示, 方便知道哪裡填錯
-      return send(res, up.status === 429 ? 429 : 502, { error: { message: upstreamMessage(up.status) + (detail && up.status !== 429 ? ' (Google 說: ' + detail + ')' : ''), upstream: up.status } });
+      return send(res, up.status === 429 ? 429 : 502, { error: { message: upstreamMessage(up.status, ej && ej.error && ej.error.message) + (detail && up.status !== 429 ? ' (Google 說: ' + detail + ')' : ''), upstream: up.status } });
     }
     const j = await up.json().catch(() => null);
     const parts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts || [];

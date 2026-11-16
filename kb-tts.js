@@ -120,9 +120,17 @@
   // 只有存了金鑰的那台電腦聽得到; 學生要聽, 還是要在雲端(或 Vercel 環境變數)存金鑰.
   function localKey() { try { return String(global.localStorage.getItem('kb_ai_key') || '').trim(); } catch (e) { return ''; } }
   var GEM = 'https://generativelanguage.googleapis.com/v1beta/', TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
-  function upMsg(st) { return st === 400 ? '這段文字或這個聲音,語音模型不接受。' : (st === 401 || st === 403) ? '語音服務拒絕了這把金鑰(請確認金鑰可以使用語音功能)。' : st === 404 ? '找不到這個語音模型或聲音。' : st === 429 ? '語音服務的使用量暫時用完了,請稍後再試。' : '語音服務暫時無法使用,請稍後再試。'; }
+// 額度用完(HTTP 429)時, 給學生看得懂的說明. raw = Google 回的原始說明(含「Free Tier」「per day」「Please retry in 16h7m20s」這類字樣); 沒有就用一般說法
+  function quotaMessage(raw) {
+    var d = String(raw == null ? '' : raw), free = /free.?tier/i.test(d), perMin = /per.?minute/i.test(d) && !/per.?day/i.test(d);
+    var m = /retry in\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:([\d.]+)s)?/i.exec(d); var wait = '';
+    if (m && (m[1] || m[2] || m[3])) { var h = +m[1] || 0, mi = +m[2] || 0, s = Math.ceil(+m[3] || 0); wait = h ? '約 ' + (h + (mi >= 30 ? 1 : 0)) + ' 小時後' : mi ? '約 ' + (mi + (s > 0 ? 1 : 0)) + ' 分鐘後' : '約 ' + Math.max(1, s) + ' 秒後'; }
+    if (perMin) return '現在同時合成語音的人太多了(Gemini 每分鐘有次數限制),請等' + (wait ? wait.replace(/後$/, '') : '一分鐘') + '再試。聽過的內容仍可重複播放。';
+    return '今天的語音額度用完了' + (free ? '。因為目前使用的是免費版的 Gemini API 金鑰,每天能合成的次數很少' : '(已超過目前 Gemini 方案的語音上限)') + '。' + (wait ? wait + '會恢復; ' : '') + '請明天再試,或請老師在 Google AI Studio 開啟計費(升級付費)。聽過的內容仍可重複播放。';
+  }
+  function upMsg(st, raw) { return st === 400 ? '這段文字或這個聲音,語音模型不接受。' : (st === 401 || st === 403) ? '語音服務拒絕了這把金鑰(請確認金鑰可以使用語音功能)。' : st === 404 ? '找不到這個語音模型或聲音。' : st === 429 ? quotaMessage(raw) : '語音服務暫時無法使用,請稍後再試。'; }
   function cleanDetail(m) { return String(m == null ? '' : m).replace(/(?:AIza|AQ\.)[0-9A-Za-z_.\-]{20,}/g, '***').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220); }
-  function failFrom(r) { return r.json().catch(function () { return null; }).then(function (j) { var d = cleanDetail(j && j.error && j.error.message), e = new Error(upMsg(r.status) + (d && r.status !== 429 ? ' (Google 說: ' + d + ')' : '')); e.status = r.status; e.direct = true; throw e; }); }
+  function failFrom(r) { return r.json().catch(function () { return null; }).then(function (j) { var raw = j && j.error && j.error.message, d = cleanDetail(raw), e = new Error(upMsg(r.status, raw) + (d && r.status !== 429 ? ' (Google 說: ' + d + ')' : '')); e.status = r.status; e.direct = true; throw e; }); }
   function pcmToWav(b64) {   // Google 回的如果是沒有檔頭的 PCM(24kHz、單聲道、16-bit), 補上 WAV 檔頭
     var bin = global.atob(b64), n = bin.length, u8 = new Uint8Array(44 + n), dv = new DataView(u8.buffer), i;
     function w(o, s) { for (var k = 0; k < s.length; k++) u8[o + k] = s.charCodeAt(k); }
@@ -237,7 +245,7 @@
     function set(s) { self.state = s; if (o.onState) o.onState(s); }
     function say(m) { if (o.onNote) o.onNote(m); }
     function done() { set('idle'); if (o.onChunk) o.onChunk(-1); }
-    function fail(err, tok) { if (tok !== self.token) return; clearWait(); say('朗讀失敗: ' + (err && err.message || '請稍後再試')); done(); }
+    function fail(err, tok) { if (tok !== self.token) return; clearWait(); say((err && err.status === 429 ? '' : '朗讀失敗: ') + (err && err.message || '請稍後再試')); done(); }   // 額度用完(429)不是壞掉, 直接顯示說明
     function clipFor(i) {
       if (self.pre[i]) return self.pre[i];
       var c = o.chunks[i]; if (!c) return null;
