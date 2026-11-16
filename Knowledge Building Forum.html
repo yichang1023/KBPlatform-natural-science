@@ -67,6 +67,7 @@
         .category-tag { cursor: pointer; transition: all 0.2s; user-select: none; }
         .category-tag.selected { background-color: #e0e7ff; color: #4338ca; border-color: #818cf8; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        @media (max-width: 767px) { .kb-fab { bottom: calc(5rem + env(safe-area-inset-bottom, 0px)) !important; } .kb-fab button { touch-action: manipulation; } }   /* 手機: 「+」鈕要在底部導覽列(含 iPhone 底部安全區)上方, 且蓋過捲軸層 */
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-full w-full flex flex-col font-sans">
@@ -188,12 +189,12 @@
 
     <!-- Node Composer Modal -->
     <div id="modal-node" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden flex items-end md:items-center justify-center sm:p-4">
-        <div class="bg-white rounded-t-xl sm:rounded-xl shadow-2xl w-full max-w-2xl p-4 sm:p-6 relative max-h-[90vh] overflow-y-auto flex flex-col mb-safe md:mb-0">
-            <div class="flex justify-between items-center mb-4">
+        <div class="bg-white rounded-t-xl sm:rounded-xl shadow-2xl w-full max-w-2xl p-4 sm:p-6 relative overflow-hidden flex flex-col mb-safe md:mb-0" style="max-height:min(90vh,94%)">
+            <div class="flex justify-between items-center mb-4 shrink-0">
                  <h3 class="text-lg md:text-xl font-bold">貢獻想法</h3>
                  <button onclick="window.ui.closeModal('modal-node')" class="text-slate-400 hover:text-slate-600 p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
-            <div class="flex-1 overflow-y-auto custom-scroll pb-2">
+            <div class="flex-1 min-h-0 overflow-y-auto custom-scroll pb-2">
                 <div class="grid grid-cols-5 gap-1 md:gap-2 mb-4"><div id="scaffold-selector" class="contents"></div></div>
                 <div id="scaffold-desc" class="hidden"></div>
                 <div class="mb-3">
@@ -211,8 +212,9 @@
                     </div>
                 </div>
             </div>
-            <div class="mt-4 flex justify-end shrink-0 pt-2 border-t border-slate-100">
-                <button onclick="window.app.submitNode()" class="px-6 py-2.5 bg-slate-900 text-white rounded-lg w-full md:w-auto font-bold">發布</button>
+            <div class="mt-4 flex justify-end gap-2 shrink-0 pt-2 border-t border-slate-100">
+                <button type="button" onclick="window.ui.closeModal('modal-node')" class="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-lg font-bold">關閉</button>
+                <button onclick="window.app.submitNode()" class="px-6 py-2.5 bg-slate-900 text-white rounded-lg flex-1 md:flex-none md:w-auto font-bold">發布</button>
             </div>
         </div>
     </div>
@@ -789,6 +791,7 @@
             const descEl = document.getElementById('scaffold-desc');
             if(descEl) { descEl.innerHTML = ''; descEl.className = 'hidden'; }
             document.getElementById('modal-node').classList.remove('hidden');
+            try { window.ui.fitModal('modal-node'); } catch (e) {}
         };
 
         window.app.openEditNode = (id) => {
@@ -921,6 +924,7 @@
                 setTimeout(() => window.app.openComposer(n.id), 200);
             };
             document.getElementById('modal-detail').classList.remove('hidden');
+            try { window.ui.fitModal('modal-detail'); } catch (e) {}
         };
 
         window.app.generateAIProfile = () => {
@@ -1622,6 +1626,9 @@
             } catch (e) {}
             window.addEventListener('mouseup', window.app.canvas.handleEnd);
             window.addEventListener('touchend', window.app.canvas.handleEnd);
+            ['modal-node', 'modal-detail'].forEach(id => { try { window.ui.dragModal(id); } catch (e) {} });
+            let lastW = window.innerWidth;   // 只有寬度改變(轉向、縮放)才回到原位; 手機彈出鍵盤只會改變高度, 不能把視窗彈回去
+            window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; ['modal-node', 'modal-detail'].forEach(id => { try { window.ui.resetDrag(id); } catch (e) {} }); });
             window.addEventListener('resize', () => {
                 if(window.state.currentView === 'canvas') {
                     window.ui.renderCanvas();
@@ -1702,7 +1709,53 @@
             }).join('');
         };
 
+        // 視窗可以拖動: 按住最上面那一列(標題列)用滑鼠或手指移動; 拖動時背景變淡、不模糊, 方便對照後面的內容. 關閉或縮放視窗時回到原位.
+        window.ui.resetDrag = (id) => {
+            const ov = document.getElementById(id), panel = ov && ov.firstElementChild; if (!panel) return;
+            panel.style.transform = ''; panel.__dx = 0; panel.__dy = 0;
+            ov.style.background = ''; ov.style.backdropFilter = ''; ov.style.webkitBackdropFilter = '';
+        };
+        window.ui.dragModal = (id) => {
+            const ov = document.getElementById(id), panel = ov && ov.firstElementChild, handle = panel && panel.firstElementChild;
+            if (!handle || handle.dataset.drag) return;
+            handle.dataset.drag = '1'; handle.style.cursor = 'move'; handle.style.touchAction = 'none'; handle.style.userSelect = 'none'; handle.style.webkitUserSelect = 'none';
+            handle.title = '按住這一列可以移動視窗';
+            panel.__dx = 0; panel.__dy = 0;
+            let sx = 0, sy = 0, bx = 0, by = 0, r0 = null, on = false;
+            const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+            handle.addEventListener('pointerdown', (e) => {
+                if (e.button != null && e.button > 0) return;
+                if (e.target.closest('button, a, input, textarea, select')) return;
+                on = true; sx = e.clientX; sy = e.clientY; bx = panel.__dx || 0; by = panel.__dy || 0;
+                const r = panel.getBoundingClientRect(); r0 = { l: r.left - bx, t: r.top - by, w: r.width, h: r.height };
+                try { handle.setPointerCapture(e.pointerId); } catch (x) {}
+                e.preventDefault();
+            });
+            handle.addEventListener('pointermove', (e) => {
+                if (!on) return;
+                // 標題列至少要留 80px 寬、完整的高度在畫面內, 才拉得回來
+                const minX = 80 - r0.w - r0.l, maxX = window.innerWidth - 80 - r0.l, minY = -r0.t, maxY = window.innerHeight - 48 - r0.t;
+                panel.__dx = clamp(bx + e.clientX - sx, Math.min(minX, 0), Math.max(maxX, 0));
+                panel.__dy = clamp(by + e.clientY - sy, Math.min(minY, 0), Math.max(maxY, 0));
+                panel.style.transform = 'translate(' + panel.__dx + 'px,' + panel.__dy + 'px)';
+                ov.style.background = 'rgba(0,0,0,.12)'; ov.style.backdropFilter = 'none'; ov.style.webkitBackdropFilter = 'none';
+            });
+            const end = (e) => { if (!on) return; on = false; try { handle.releasePointerCapture(e.pointerId); } catch (x) {} };
+            handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
+            handle.addEventListener('dblclick', () => window.ui.resetDrag(id));   // 連按兩下標題列: 回到原位
+        };
+        // 手機: 彈出鍵盤、縮放或畫面被推動時, 視窗跟著「真正看得到的範圍」, 上方的 X 和下方的按鈕才不會跑到畫面外
+        window.ui.fitModal = (id) => {
+            const ov = document.getElementById(id), vv = window.visualViewport; if (!ov || ov.classList.contains('hidden')) return;
+            const S = ['top', 'left', 'width', 'height', 'right', 'bottom'];
+            if (!vv || (Math.abs(vv.offsetTop) < 1 && Math.abs(vv.offsetLeft) < 1 && Math.abs(vv.scale - 1) < 0.01 && Math.abs(vv.height - window.innerHeight) < 2)) { S.forEach(k => { ov.style[k] = ''; }); return; }
+            ov.style.top = vv.offsetTop + 'px'; ov.style.left = vv.offsetLeft + 'px'; ov.style.width = vv.width + 'px'; ov.style.height = vv.height + 'px'; ov.style.right = 'auto'; ov.style.bottom = 'auto';
+        };
+        window.ui.fitModals = () => { ['modal-node', 'modal-topic', 'modal-detail'].forEach(id => { try { window.ui.fitModal(id); } catch (e) {} }); };
+        try { if (window.visualViewport) { window.visualViewport.addEventListener('resize', window.ui.fitModals); window.visualViewport.addEventListener('scroll', window.ui.fitModals); } } catch (e) {}
         window.ui.closeModal = (id) => {
+            try { window.ui.resetDrag(id); } catch (e) {}
+            try { ['top', 'left', 'width', 'height', 'right', 'bottom'].forEach(k => { document.getElementById(id).style[k] = ''; }); } catch (e) {}
             if (id === 'modal-detail') { try { if (window.KBTts) KBTts.stop(); } catch (e) {} }   // 關掉貼文就停止朗讀
             document.getElementById(id).classList.add('hidden');
             if(id === 'modal-node') {
@@ -1878,7 +1931,7 @@
                 </button>
             </div>
 
-            <div class="absolute bottom-20 right-4 md:bottom-8 md:right-8 z-40" style="${window.app.canPost() ? '' : 'display:none'}">
+            <div class="kb-fab absolute bottom-20 right-4 md:bottom-8 md:right-8 z-[46]" style="${window.app.canPost() ? '' : 'display:none'}">
                  <button onclick="window.app.openComposer(null)" class="bg-indigo-600 text-white rounded-full w-12 h-12 md:w-14 md:h-14 shadow-xl flex items-center justify-center text-xl transition transform hover:scale-105"><i class="fa-solid fa-plus"></i></button>
             </div>
 

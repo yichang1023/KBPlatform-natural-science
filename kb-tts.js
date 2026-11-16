@@ -293,7 +293,11 @@
   function setHighlight(el, text, start, end) {
     var hl = global.CSS && global.CSS.highlights && global.Highlight; if (!hl) return false;
     if (!el) { global.CSS.highlights.delete('kb-tts'); return false; }
-    var map = textMap(el), a = compactIndex(text, start), b = compactIndex(text, end) - 1;
+    return setHighlightC(el, compactIndex(text, start), compactIndex(text, end) - 1);
+  }
+  function setHighlightC(el, a, b) {   // a、b = 第幾個「非空白字」(從 0 算, b 含)
+    var hl = global.CSS && global.CSS.highlights && global.Highlight; if (!hl) return false;
+    var map = el ? textMap(el) : [];
     if (a < 0 || b < a || !map[a] || !map[b]) { global.CSS.highlights.delete('kb-tts'); return false; }
     var r = doc.createRange(); r.setStart(map[a].n, map[a].o); r.setEnd(map[b].n, map[b].o + 1);
     global.CSS.highlights.set('kb-tts', new global.Highlight(r)); return true;
@@ -308,11 +312,14 @@
       '.kbt-btn{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:8px 16px;border-radius:12px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-weight:800;font-size:15px;cursor:pointer}.kbt-btn.alt{background:#fff;color:#4f46e5}.kbt-btn[hidden]{display:none}.kbt-btn:focus-visible,.kbt select:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}' +
       '.kbt select{min-height:44px;padding:6px 10px;border-radius:12px;border:2px solid #c7d2fe;background:#fff;font-size:14px;max-width:100%}.kbt label{display:inline-flex;align-items:center;gap:6px;font-size:14px;min-height:44px;cursor:pointer}' +
       '.kbt-info{font-size:12.5px;color:#4b5563;margin-top:6px;line-height:1.6}.kbt-cap{font-size:15px;color:#1e1b4b;margin-top:6px;min-height:0;font-weight:700;line-height:1.6}.kbt-cap:empty{display:none}.kbt-note{font-size:12.5px;color:#b45309;margin-top:4px}.kbt-note:empty{display:none}' +
-      '::highlight(kb-tts){background-color:#fde68a;color:#111827}';
+      '::highlight(kb-tts){background-color:#fde68a;color:#111827}' +
+      '.kbt-sel{position:fixed;z-index:2000;display:flex;flex-wrap:wrap;gap:8px;align-items:center;max-width:calc(100vw - 16px);padding:8px;border-radius:16px;background:#1e1b4b;box-shadow:0 8px 24px rgba(0,0,0,.35)}.kbt-sel[hidden]{display:none}' +
+      '.kbt-sel .kbt-btn{min-height:44px;border-color:#fff;background:#4f46e5;color:#fff}.kbt-sel .kbt-btn.alt{background:#fff;color:#1e1b4b;border-color:#fff}.kbt-sel .kbt-btn[hidden]{display:none}.kbt-sel-note{flex-basis:100%;font-size:12.5px;color:#fde68a;line-height:1.5}.kbt-sel-note:empty{display:none}';
     (doc.head || doc.documentElement).appendChild(s);
   }
   var cur = null;   // 目前這個畫面上的朗讀列(同時只會有一個在讀)
-  function stop() { if (cur) cur.stop(); clearHighlight(); }
+  var selCleanup = null;   // 「播放選取內容」浮動列的收尾(拿掉浮動列和監聽); 關閉貼文或重新載入貼文時才呼叫
+  function stop(keepSel) { if (cur) cur.stop(); clearHighlight(); if (keepSel !== true && selCleanup) selCleanup(); }
 
   // 切成一段一段的朗讀單位. 三顆按鈕各讀一部分:
   //  part='title': 「類型。標題。」(例如「提問。空氣裡的一粒灰塵。」); part='body': 下方的內文.
@@ -378,11 +385,73 @@
     }
     // 把「這顆鈕要讀的內容」整理成要合成的段落與設定(按下播放和事先準備都用它)
     function plan(m) {
-      var md = m === 'title' ? 'title' : m === 'replies' ? 'replies' : 'body', pst = post(), rl = md === 'replies' ? replies() : [];
+      var md = m === 'title' ? 'title' : m === 'replies' ? 'replies' : m === 'sel' ? 'sel' : 'body', pst = post(), rl = md === 'replies' ? replies() : [];
+      if (md === 'sel') pst = { type: pst.type, title: '', content: sel.text };   // 只讀使用者圈起來的那一段
       var personaId = vs.value.replace(/^ai:/, ''), pr = preset(), tone = pr ? { style: pr.en } : au.checked && md !== 'replies' ? analyze(pst) : { style: '' };
-      var chunks = md === 'replies' ? replyChunks(rl, au.checked && !pr, personaId) : chunksFor(pst, md);
+      var chunks = md === 'replies' ? replyChunks(rl, au.checked && !pr, personaId) : chunksFor(pst, md === 'sel' ? 'body' : md);
       return { mode: md, pst: pst, rl: rl, personaId: personaId, pr: pr, chunks: chunks, voice: personaVoice(personaId), style: styleFor(personaId, tone.style), model: (cfg().ai && cfg().ai.model) || undefined };
     }
+    /* ---- 圈選內文 → 浮動「播放選取內容」列(播放/暫停/停止) ---- */
+    var sel = { text: '', base: 0, range: null, read: null, press: 0, off: true, timer: null, bar: null, onSel: null, onPos: null };   // off: 還沒確定能用 AI 人聲之前先不顯示
+    function selNote(m2) { if (sel.bar) { var n = sel.bar.querySelector('.kbt-sel-note'); if (n) n.textContent = m2 || ''; } }
+    function selRead() {   // 目前選取的範圍(只認落在這則貼文內文裡的); 回傳 { text, base(第幾個非空白字開始), range } 或 null
+      try {
+        var s = doc.getSelection ? doc.getSelection() : null, el = ctx.contentEl;
+        if (!s || !el || s.rangeCount < 1 || s.isCollapsed) return null;
+        var r = s.getRangeAt(0); if (!el.contains(r.commonAncestorContainer)) return null;
+        var t = r.toString().replace(/^\s+|\s+$/g, ''); if (!t) return null;
+        var map = textMap(el), a = -1;
+        for (var i = 0; i < map.length; i++) { if (r.comparePoint(map[i].n, map[i].o) >= 0) { a = i; break; } }
+        if (a < 0) return null;
+        return { text: t.slice(0, 4000), base: a, range: r.cloneRange() };
+      } catch (e) { return null; }
+    }
+    function selActive() { return !!(reader && reader.state !== 'idle' && mode === 'sel' && sel.read && sel.read.text === sel.text && sel.read.base === sel.base); }
+    function selLabels() {
+      var b = sel.bar; if (!b) return; var pb = b.querySelector('[data-s="play"]'), sb = b.querySelector('[data-s="stop"]'), st = selActive() ? reader.state : 'idle';
+      pb.textContent = st === 'playing' ? '⏸ 暫停' : st === 'paused' ? '▶ 繼續' : '🔊 播放選取內容';
+      pb.setAttribute('aria-label', st === 'playing' ? '暫停朗讀選取內容' : st === 'paused' ? '繼續朗讀選取內容' : '播放選取內容');
+      sb.hidden = !(reader && reader.state !== 'idle' && mode === 'sel');
+      selPlace();
+    }
+    function selPlace() {
+      var b = sel.bar; if (!b || b.hidden) return;
+      var vw = global.innerWidth || 360, vh = global.innerHeight || 640, coarse = false;
+      try { coarse = !!(global.matchMedia && global.matchMedia('(pointer: coarse)').matches); } catch (e) {}
+      var rects = null; try { rects = sel.range && sel.range.getClientRects(); } catch (e) {}
+      if (coarse || !rects || !rects.length) {   // 手機: 手指和系統的選取選單會蓋住選取處, 所以固定放在畫面下方中間
+        b.style.left = '50%'; b.style.top = 'auto'; b.style.bottom = 'calc(16px + env(safe-area-inset-bottom, 0px))'; b.style.transform = 'translateX(-50%)'; return;
+      }
+      var last = rects[rects.length - 1], first = rects[0], w = b.offsetWidth || 260, h = b.offsetHeight || 60;
+      var top = last.bottom + 8; if (top + h > vh - 8) top = Math.max(8, first.top - h - 8);
+      b.style.transform = ''; b.style.bottom = 'auto'; b.style.top = Math.round(Math.min(Math.max(top, 8), vh - h - 8)) + 'px'; b.style.left = Math.round(Math.min(Math.max(last.left, 8), Math.max(8, vw - w - 8))) + 'px';
+    }
+    function selBuild() {
+      if (sel.bar) return sel.bar;
+      var b = doc.createElement('div'); b.className = 'kbt-sel'; b.hidden = true; b.setAttribute('role', 'toolbar'); b.setAttribute('aria-label', '朗讀選取的內容');
+      b.innerHTML = '<button type="button" class="kbt-btn" data-s="play">🔊 播放選取內容</button><button type="button" class="kbt-btn alt" data-s="stop" hidden aria-label="停止朗讀選取內容">⏹ 停止</button><div class="kbt-sel-note" role="status"></div>';
+      ['mousedown', 'touchstart', 'pointerdown'].forEach(function (ev) { b.addEventListener(ev, function (e) { sel.press = Date.now(); if (ev === 'mousedown') e.preventDefault(); }, { passive: ev !== 'mousedown' }); });   // 按浮動列時不要讓選取消失
+      b.querySelector('[data-s="play"]').onclick = function () { if (selActive()) { if (reader.state === 'playing') reader.pause(); else reader.resume(); } else start('sel'); };
+      b.querySelector('[data-s="stop"]').onclick = function () { if (reader) reader.stop(); };
+      ['mouseenter', 'focus', 'touchstart'].forEach(function (ev) { b.querySelector('[data-s="play"]').addEventListener(ev, function () { if (sel.text && !selActive()) warm('sel'); }, { passive: true }); });   // 還沒按下去就先合成第一段
+      (doc.body || doc.documentElement).appendChild(b); sel.bar = b; return b;
+    }
+    function selHide() { if (sel.bar) sel.bar.hidden = true; }
+    function selUpdate() {
+      if (sel.off) return;
+      var v = selRead();
+      if (v) { sel.text = v.text; sel.base = v.base; sel.range = v.range; var b = selBuild(); b.hidden = false; selLabels(); selPlace(); return; }
+      if (Date.now() - sel.press < 1500) return;   // 剛按過浮動列(手機點按鈕時選取可能先消失), 先不要收起來
+      if (reader && reader.state !== 'idle' && mode === 'sel') return;   // 正在讀的時候, 選取消失也要留著停止/暫停鈕
+      selHide();
+    }
+    sel.onSel = function () { if (sel.timer) clearTimeout(sel.timer); sel.timer = setTimeout(selUpdate, 200); };   // 手機拖選取把手時會一直觸發, 稍等一下再顯示
+    sel.onPos = function () { selPlace(); };
+    doc.addEventListener('selectionchange', sel.onSel); global.addEventListener('resize', sel.onPos); doc.addEventListener('scroll', sel.onPos, true);
+    selCleanup = function () {
+      doc.removeEventListener('selectionchange', sel.onSel); global.removeEventListener('resize', sel.onPos); doc.removeEventListener('scroll', sel.onPos, true);
+      if (sel.timer) clearTimeout(sel.timer); if (sel.bar && sel.bar.parentNode) sel.bar.parentNode.removeChild(sel.bar); sel.bar = null; sel.off = true; sel.dead = true; selCleanup = null;
+    };
     var warmKey = '';
     function warm(m) {   // 事先合成第一段(和第二段): 使用者按下去時多半已經好了, 幾乎不用等. 同一段只會合成一次, 之後重聽也用存起來的
       try {
@@ -393,30 +462,34 @@
       } catch (e) {}
     }
     function start(m) {
-      mode = m === 'title' ? 'title' : m === 'replies' ? 'replies' : 'body';
-      stop();
+      mode = m === 'title' ? 'title' : m === 'replies' ? 'replies' : m === 'sel' ? 'sel' : 'body';
+      stop(true);
+      if (mode === 'sel') { if (!sel.text) { selNote('請先用手指或滑鼠圈選要聽的文字。'); return; } sel.read = { text: sel.text, base: sel.base }; }
       var pst = post(), rl = mode === 'replies' ? replies() : [];
       if (mode === 'replies' && !rl.length) { note.textContent = '這則貼文還沒有其他人的回應。'; return; }
       if (mode === 'body' && !String(pst.content).trim()) { note.textContent = '這則貼文沒有內文可以朗讀。'; return; }
       if (mode === 'title' && !String(pst.title).trim() && !TYPE_ZH[pst.type]) { note.textContent = '這則貼文沒有標題可以朗讀。'; return; }
       var pl = plan(mode), chunks = pl.chunks, userRate = parseFloat(rs.value) || 1;
       prefs.voice = vs.value; prefs.rate = rs.value; prefs.auto = au.checked; prefs.tone = tn.value; savePrefs(prefs);
-      note.textContent = ''; cap.textContent = '';
+      note.textContent = ''; cap.textContent = ''; selNote('');
+      var rd = sel.read, rmode = mode;
       reader = new Reader({
         chunks: chunks, voice: pl.voice, style: pl.style, model: pl.model, rate: userRate,
         onChunk: function (i, c) {
           if (i < 0) { cap.textContent = ''; clearHighlight(); return; }
-          cap.textContent = (c.reply ? '(回應 ' + c.reply + ')' : '') + c.text; if (c.title || c.noHl) clearHighlight(); else setHighlight(ctx.contentEl, pst.content, c.start, c.end);
+          cap.textContent = (c.reply ? '(回應 ' + c.reply + ')' : '') + c.text; if (rmode === 'sel') setTimeout(selPlace, 0);   // 字幕出現會把內文往下推, 浮動列跟著移
+          if (rmode === 'sel') setHighlightC(ctx.contentEl, rd.base + compactIndex(rd.text, c.start), rd.base + compactIndex(rd.text, c.end) - 1);   // 在內文上標出正在讀的位置(位置 = 圈選的起點 + 這段在圈選文字裡的位置)
+          else if (c.title || c.noHl) clearHighlight(); else setHighlight(ctx.contentEl, pst.content, c.start, c.end);
         },
-        onState: function (s) { setButtons(s); stopB.hidden = s === 'idle'; if (s === 'idle') cap.textContent = ''; },
-        onNote: function (m2) { note.textContent = m2; }
+        onState: function (s) { setButtons(s); stopB.hidden = s === 'idle'; if (s === 'idle') { cap.textContent = ''; if (rmode === 'sel' && !selRead()) selHide(); } selLabels(); },
+        onNote: function (m2) { note.textContent = m2; if (rmode === 'sel') selNote(m2); }
       });
-      cur = reader; reader.play();
+      cur = reader; reader.play(); selLabels();
     }
     function setButtons(s) {   // 目前在讀的那顆按鈕變「暫停/繼續」, 其他兩顆維持原樣
       play.textContent = '🔊 朗讀內容'; play.setAttribute('aria-label', '朗讀內容'); playt.textContent = '🔊 朗讀標題'; playt.setAttribute('aria-label', '朗讀類型與標題');
       playr.textContent = '🔊 朗讀全部回應(' + replies().length + ')'; playr.setAttribute('aria-label', '朗讀其他人的全部回應');
-      if (s === 'playing' || s === 'paused') { var pb = mode === 'title' ? playt : mode === 'replies' ? playr : play; pb.textContent = s === 'playing' ? '⏸ 暫停' : '▶ 繼續'; pb.setAttribute('aria-label', s === 'playing' ? '暫停朗讀' : '繼續朗讀'); }
+      if ((s === 'playing' || s === 'paused') && mode !== 'sel') { var pb = mode === 'title' ? playt : mode === 'replies' ? playr : play; pb.textContent = s === 'playing' ? '⏸ 暫停' : '▶ 繼續'; pb.setAttribute('aria-label', s === 'playing' ? '暫停朗讀' : '繼續朗讀'); }
     }
     function toggle(m) { if (reader && reader.state !== 'idle' && mode === m) { if (reader.state === 'playing') reader.pause(); else reader.resume(); } else start(m); }
     play.onclick = function () { toggle('body'); };
@@ -431,6 +504,7 @@
     showInfo();
     (function () { var p0 = post(); tb.hidden = !String(p0.title).trim() && !TYPE_ZH[p0.type]; play.hidden = !String(p0.content).trim(); var rn = replies().length; playr.hidden = !rn; playr.textContent = '🔊 朗讀全部回應(' + rn + ')'; })();
     aiState().then(function (ok) {   // 伺服器和這台電腦都沒有 Gemini 金鑰: 說明原因, 鈕先停用
+      if (sel.dead) return; sel.off = !ok; if (!ok) selHide(); else selUpdate();   // 能用 AI 人聲, 圈選文字才會出現「播放選取內容」
       if (ok && aiState.src === 'local' && !note.textContent) note.textContent = '目前用的是這台電腦存的 Gemini 金鑰, 只有這台電腦聽得到; 要讓學生也能聽, 請在雲端存金鑰。';
       if (ok) return;
       note.textContent = '朗讀功能暫時不能用: 老師還沒有把 Gemini 金鑰存到雲端(設定中心 > AI 設定)。';
