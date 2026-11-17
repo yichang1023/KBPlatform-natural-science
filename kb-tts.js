@@ -27,13 +27,16 @@
     { id: 'p8', name: '明亮清脆・仿 TTSMaker', def: 'Zephyr', hint: '仿 TTSMaker 的聲音: 音調較高、明亮有活力、抑揚明顯、句尾下降較明顯', design: '一位年輕女性,聲音明亮清脆,音調偏高,抑揚頓挫明顯,標準的台灣國語。',
       style: 'Bright, higher-pitched young Taiwanese Mandarin female voice, lively and expressive. Pace about 5 syllables per second. Short pauses (about 0.4 s) at commas and about 0.7 s after each sentence. Wide pitch variation with a clear falling intonation at the end of each phrase. Natural and fluid, never robotic.' },
     // 說書人: 男聲、沙啞有勁; rich=true 表示「自動語氣」最豐富(每一小段都依情節與情緒變化, 也切得比較短、變化更細)
-    { id: 'p9', name: '天橋下說書人', def: 'Algenib', rich: true, hint: '像在天橋下說書的老藝人: 沙啞有勁、抑揚頓挫; 武俠、浪漫、抒情、懸疑的故事特別有戲, 自動語氣最豐富(每一小段都依情節與情緒變化)', design: '一位中年到年長的男性說書人,聲音沙啞有勁、有磁性,像在台灣天橋下說書的老藝人,抑揚頓挫、戲劇感強,講台灣國語。',
-      style: 'A veteran Taiwanese street storyteller under a pedestrian overpass: gravelly, charismatic, theatrical Taiwanese Mandarin with old-school teahouse flavor. Huge dynamic range: thunderous in fights and heroic vows, a hushed creeping whisper in suspense, slow breathy tenderness in romance, wry and sly for jokes and ironic asides, trembling and sorrowful in grief. Clipped rhythm in action, rolling cadence in grand scenes, dramatic pauses before reveals, a distinct voice for every character. Rich emotion, never flat.' }
+    { id: 'p9', name: '天橋下說書人-大師兄', def: 'Algenib', rich: true, hint: '像在天橋下說書的老藝人: 沙啞有勁、抑揚頓挫; 武俠、浪漫、抒情、懸疑的故事特別有戲, 自動語氣最豐富(每一小段都依情節與情緒變化)', design: '一位中年到年長的男性說書人,聲音沙啞有勁、有磁性,像在台灣天橋下說書的老藝人,抑揚頓挫、戲劇感強,講台灣國語。',
+      style: 'A veteran Taiwanese street storyteller under a pedestrian overpass: gravelly, charismatic, theatrical Taiwanese Mandarin with old-school teahouse flavor. Huge dynamic range: thunderous in fights and heroic vows, a hushed creeping whisper in suspense, slow breathy tenderness in romance, wry and sly for jokes and ironic asides, trembling and sorrowful in grief. Clipped rhythm in action, rolling cadence in grand scenes, dramatic pauses before reveals, a distinct voice for every character. Rich emotion, never flat.' },
+    // 女聲說書人: 和大師兄同一套「說書」(開場收場、逐段情緒), 聲音換成成熟有氣勢的女聲
+    { id: 'p10', name: '天橋下說書人-大師姊', def: 'Kore', rich: true, hint: '像在天橋下說書的大師姊: 成熟有氣勢、煙嗓帶魅力、俐落帶點機靈; 武俠、浪漫、抒情、懸疑的故事特別有戲, 自動語氣最豐富(每一小段都依情節與情緒變化)', design: '一位成熟的女性說書人,聲音帶一點煙嗓、有氣勢也有魅力,像在台灣天橋下說書的大師姊,抑揚頓挫、戲劇感強,俐落又帶點機靈,講台灣國語。',
+      style: 'A charismatic Taiwanese female street storyteller under a pedestrian overpass: smoky, commanding yet alluring, theatrical Taiwanese Mandarin with old-school teahouse flavor. Huge dynamic range: crisp in fights and heroic vows, a hushed creeping whisper in suspense, slow breathy tenderness in romance, sly and teasing for jokes and ironic asides, trembling and sorrowful in grief. Clipped rhythm in action, rolling cadence in grand scenes, dramatic pauses before reveals, a distinct voice for every character. Rich emotion, never flat.' }
   ];
   // 瀏覽器聲音版的人設: 用「語速、音高」把各個人設區分開(瀏覽器聲音沒有語氣描述可以送); prefer = 優先挑名字符合的聲音; male = 說書人優先用男聲
   var BR = {
     p1: { rate: 1.02, pitch: 1.1 }, p2: { rate: 0.97, pitch: 1.0 }, p3: { rate: 0.93, pitch: 0.9 }, p4: { rate: 1.06, pitch: 1.12 }, p5: { rate: 0.98, pitch: 0.96 }, p6: { rate: 1.03, pitch: 1.07 },
-    p7: { rate: 1.0, pitch: 0.95, prefer: /hsiao-?chen|曉臻/i }, p8: { rate: 1.05, pitch: 1.13, prefer: /hsiao-?yu|曉雨|han-?han|涵涵/i }, p9: { rate: 0.96, pitch: 0.82, male: true }
+    p7: { rate: 1.0, pitch: 0.95, prefer: /hsiao-?chen|曉臻/i }, p8: { rate: 1.05, pitch: 1.13, prefer: /hsiao-?yu|曉雨|han-?han|涵涵/i }, p9: { rate: 0.96, pitch: 0.82, male: true }, p10: { rate: 0.97, pitch: 0.95 }
   };
   var TYPE_ZH = { question: '提問', extend: '延伸', improve: '改進', counter: '反例', riseabove: '昇華' };
   var H = {};   // 測試用:可換掉 fetch / 音訊
@@ -232,7 +235,7 @@
     function score(v) { var n = String(v.name || ''), l = String(v.lang || ''); return (/zh[-_]TW|zh[-_]Hant/i.test(l) ? 100 : 0) + (/natural|online/i.test(n) ? 30 : 0) + (v.localService ? 0 : 1); }
     return tw.slice().sort(function (a, b) { return score(b) - score(a); });
   }
-  var BR_SLOT = { p2: 0, p5: 0, p7: 0, p3: 1, p1: 1, p6: 1, p4: 2, p8: 2, p9: 0 };
+  var BR_SLOT = { p2: 0, p5: 0, p7: 0, p3: 1, p1: 1, p6: 1, p4: 2, p8: 2, p9: 0, p10: 1 };
   function brParams(pid) {   // { voice, rate, pitch }: 挑哪個瀏覽器聲音, 以及這個人設的基本語速與音高
     var b = BR[pid] || BR.p2, all = twVoices(), male = all.filter(function (v) { return MALE_RE.test(v.name || ''); }), fem = all.filter(function (v) { return !MALE_RE.test(v.name || ''); });
     var pool = b.male ? (male.length ? male : fem) : (fem.length ? fem : all), v = null;
@@ -606,7 +609,7 @@
     function post() { var p = ctx.getPost() || {}; return { type: p.type, title: p.title || '', content: p.content || '' }; }
     function replies() { try { var l = ctx.getReplies && ctx.getReplies(); return Array.isArray(l) ? l.filter(function (r) { return r && (String(r.content || '').trim() || String(r.title || '').trim()); }) : []; } catch (e) { return []; } }
     function showInfo() {
-      flL.hidden = vs.value !== 'ai:p9';
+      flL.hidden = !(PERSONAS.filter(function (x) { return x.id === vs.value.replace(/^ai:/, ''); })[0] || {}).rich;
       var t = analyze(post()), pr = preset(), pdef = PERSONAS.filter(function (x) { return x.id === vs.value.replace(/^ai:/, ''); })[0] || {};
       info.textContent = (pr ? '語氣(手動選擇): ' + pr.zh : au.checked ? '語氣(依這則貼文自動判斷): ' + t.label + (pdef.rich ? '; 說書人會每一小段依情節與情緒再變化' : '; 每一小段也會依自己的情緒、對話再微調') : '語氣: 自然、清楚(已關閉自動語氣)') + (eng.value === 'browser' ? ' ‧ 瀏覽器語音: 用語速、音高和停頓模擬語氣' : '');
       info.title = pr ? '' : au.checked ? t.reasons.join(', ') : '';
