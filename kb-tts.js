@@ -254,8 +254,8 @@
   }
   // 把一個小段拆成「分句」(逗號分開), 每個分句各自設語速/音高/停頓; c = { text, dr, dp, rich, par }
   function browserUnits(c, baseRate) {
-    var sents = splitSentences(exprBrowser(forSpeech(c.speak || c.text))), out = [], k = c.rich ? 2 : 1;
-    if (!sents.length) sents = [{ text: exprBrowser(forSpeech(c.text)) }];
+    var sents = splitSentences(exprBrowser(pronounce(forSpeech(c.speak || c.text)))), out = [], k = c.rich ? 2 : 1;
+    if (!sents.length) sents = [{ text: exprBrowser(pronounce(forSpeech(c.text))) }];
     sents.forEach(function (sn, si) {
       var parts = String(sn.text).match(/[^,;:\u3001\uFF0C\uFF1B\uFF1A]+[,;:\u3001\uFF0C\uFF1B\uFF1A]*/g) || [sn.text], q = /[?\uFF1F]\s*[\u300D\u300F\u201D"]?$/.test(sn.text), ex = /[!\uFF01]\s*[\u300D\u300F\u201D"]?$/.test(sn.text), trail = /\u2026\s*[\u300D\u300F\u201D"]?$/.test(sn.text);
       parts.forEach(function (p, j) {
@@ -271,6 +271,113 @@
       });
     });
     return out;
+  }
+
+  /* ---------- 發音修正: 一字多音、阿拉伯數字 ----------
+   * AI 語音和瀏覽器語音都分不清一字多音(例如「降龍十八掌」的「降」要念ㄒㄧㄤˊ, 卻被念成ㄐㄧㄤˋ)。
+   * 做法: 朗讀前把「容易念錯的詞」換成「念法相同、不會念錯的字」(降龍→翔龍), 只換送去念的文字, 畫面上顯示的原文不變。
+   * 格式「原詞>替代字」; 優先序: 老師在設定中心填的發音修正表 > 內建對照表 > 數字念法. 內建表依台灣教育部讀音, 可再補充。 */
+  var PRON_TXT = [
+    // 武俠: 招式、人名
+    '降龍>翔龍 降魔>翔魔 降妖>翔妖 降服>翔服 降伏>翔伏 投降>投翔 受降>受翔 歸降>歸翔 招降>招翔 勸降>勸翔 迎降>迎翔',
+    '令狐>靈狐 任我行>人我行 任盈盈>人盈盈 任大小姐>人大小姐 任教主>人教主 單雄信>善雄信 單于>蟬于 尉遲>鬱遲 長孫>掌孫 曾國藩>增國藩 曾祖>增祖 曾孫>增孫 查良鏞>扎良鏞',
+    '英雄傳>英雄撰 外傳>外撰 正傳>正撰 前傳>前撰 本傳>本撰 別傳>別撰 傳記>撰記 自傳>自撰 評傳>評撰 列傳>列撰 水滸傳>水滸撰',
+    // 行(ㄏㄤˊ)
+    '行業>航業 行情>航情 行家>航家 內行>內航 外行>外航 銀行>銀航 排行>排航 行列>航列 各行各業>各航各業 行當>航當',
+    // 長(ㄓㄤˇ)
+    '長大>掌大 成長>成掌 生長>生掌 滋長>滋掌 增長>增掌 長輩>掌輩 長者>掌者 長子>掌子 長女>掌女 長兄>掌兄 長姊>掌姊 長姐>掌姐 長老>掌老 長進>掌進 年長>年掌',
+    '校長>校掌 班長>班掌 組長>組掌 隊長>隊掌 船長>船掌 村長>村掌 市長>市掌 縣長>縣掌 部長>部掌 院長>院掌 社長>社掌 會長>會掌 首長>首掌 族長>族掌 家長>家掌 師長>師掌 長官>掌官',
+    '艦長>艦掌 機長>機掌 廠長>廠掌 局長>局掌 處長>處掌 科長>科掌 課長>課掌 館長>館掌 所長>所掌 站長>站掌 董事長>董事掌 總長>總掌 議長>議掌 酋長>酋掌',
+    // 了(ㄌㄧㄠˇ)
+    '了解>瞭解 了結>瞭結 不得了>不得瞭 了不起>瞭不起 了卻>瞭卻 了然>瞭然 了得>瞭得',
+    // 樂(ㄩㄝˋ)
+    '音樂>音悅 樂器>悅器 樂曲>悅曲 樂團>悅團 樂章>悅章 國樂>國悅 聲樂>聲悅 樂隊>悅隊 樂譜>悅譜 樂師>悅師 樂府>悅府 管弦樂>管弦悅 交響樂>交響悅 配樂>配悅 古樂>古悅 樂壇>悅壇 樂迷>悅迷 樂風>悅風 樂手>悅手 民樂>民悅',
+    // 重(ㄔㄨㄥˊ)
+    '重新>崇新 重複>崇複 重逢>崇逢 重來>崇來 重疊>崇疊 重建>崇建 重演>崇演 重返>崇返 重現>崇現 重生>崇生 重溫>崇溫 重寫>崇寫 重做>崇做 重回>崇回 重聚>崇聚 重遊>崇遊 重蹈覆轍>崇蹈覆轍 重整>崇整 重組>崇組 重修>崇修 重振>崇振 重燃>崇燃 重拾>崇拾 重唱>崇唱 重播>崇播 重審>崇審 重考>崇考 重開>崇開 重啟>崇啟',
+    // 還(ㄏㄨㄢˊ)
+    '歸還>歸環 償還>償環 還錢>環錢 還債>環債 還原>環原 還給>環給 還手>環手 還擊>環擊 還俗>環俗 還魂>環魂 還鄉>環鄉 還禮>環禮 還款>環款 還書>環書 退還>退環 奉還>奉環 交還>交環 返還>返環 還願>環願 還清>環清 還陽>環陽 以牙還牙>以牙環牙 以眼還眼>以眼環眼',
+    // 背(ㄅㄟ)
+    '背包>揹包 背負>揹負 背起>揹起 背著>揹著 背囊>揹囊 背簍>揹簍 背黑鍋>揹黑鍋 背債>揹債 背劍>揹劍 背刀>揹刀 背弓>揹弓',
+    // 著(ㄓㄨˋ)、數(ㄕㄨˇ)
+    '著名>注名 著作>注作 顯著>顯注 卓著>卓注 著稱>注稱 著述>注述 數一數>鼠一鼠 數數看>鼠數看 數不清>鼠不清 數不勝數>鼠不勝鼠 屈指可數>屈指可鼠 數得清>鼠得清 數一數二>鼠一鼠二 數落>鼠落 數來數去>鼠來鼠去 數九寒天>鼠九寒天',
+    // 假(ㄐㄧㄚˋ)、空(ㄎㄨㄥˋ)、差(ㄔㄞ)、處(ㄔㄨˋ)
+    '放假>放架 請假>請架 休假>休架 暑假>暑架 寒假>寒架 病假>病架 度假>度架 假日>架日 假期>架期 假單>架單 年假>年架 事假>事架 婚假>婚架 產假>產架 補假>補架 連假>連架 告假>告架',
+    '空閒>控閒 空白>控白 空缺>控缺 空隙>控隙 有空>有控 沒空>沒控 抽空>抽控 空檔>控檔 空地>控地 空位>控位 空房>控房 空格>控格 空餘>控餘 空暇>控暇 空額>控額',
+    '出差>出拆 差事>拆事 差遣>拆遣 差役>拆役 差使>拆使 公差>公拆 朝氣>招氣',
+    '到處>到觸 好處>好觸 壞處>壞觸 益處>益觸 用處>用觸 處處>觸觸 住處>住觸 去處>去觸 長處>長觸 短處>短觸 難處>難觸 苦處>苦觸 痛處>痛觸 妙處>妙觸 深處>深觸 高處>高觸 低處>低觸 遠處>遠觸 近處>近觸 暗處>暗觸 何處>何觸 某處>某觸 別處>別觸 各處>各觸 四處>四觸 出處>出觸',
+    // 載、藏、乘、解、盛、卷、參
+    '記載>記宰 刊載>刊宰 轉載>轉宰 登載>登宰 連載>連宰 千載難逢>千宰難逢 千載>千宰',
+    '寶藏>寶葬 西藏>西葬 藏經>葬經 藏文>葬文 藏傳>葬傳 藏族>葬族 大藏經>大葬經 道藏>道葬',
+    '大乘>大剩 小乘>小剩 上乘>上剩 佛乘>佛剩 千乘>千剩 萬乘>萬剩 押解>押借 解送>借送 起解>起借',
+    '盛飯>成飯 盛湯>成湯 盛菜>成菜 盛水>成水 盛酒>成酒 盛滿>成滿 盛粥>成粥',
+    '考卷>考倦 試卷>試倦 卷宗>倦宗 書卷>書倦 畫卷>畫倦 卷軸>倦軸 長卷>長倦 上卷>上倦 下卷>下倦 手卷>手倦 答卷>答倦 案卷>案倦 卷帙>倦帙',
+    '人參>人深 丹參>丹深 黨參>黨深 海參>海深',
+    // 好(ㄏㄠˋ)、惡(ㄨˋ)、調(ㄉㄧㄠˋ)、分(ㄈㄣˋ)
+    '好學>耗學 好奇>耗奇 好客>耗客 好色>耗色 好勝>耗勝 愛好>愛耗 嗜好>嗜耗 好強>耗強 好戰>耗戰 好勇鬥狠>耗勇鬥狠 好高騖遠>耗高騖遠 好大喜功>耗大喜功 好為人師>耗為人師 好吃懶做>耗吃懶做 好逸惡勞>耗逸惡勞 好事者>耗事者 好管閒事>耗管閒事',
+    '厭惡>厭誤 憎惡>憎誤 可惡>可誤 好惡>耗誤 深惡痛絕>深誤痛絕 嫉惡如仇>嫉誤如仇 惡心>噁心',
+    '調查>掉查 調動>掉動 強調>強掉 聲調>聲掉 語調>語掉 曲調>曲掉 腔調>腔掉 調度>掉度 調派>掉派 調換>掉換 調職>掉職 調任>掉任 調兵>掉兵 調遣>掉遣 調虎離山>掉虎離山 調走>掉走 調集>掉集 調閱>掉閱 格調>格掉 論調>論掉 低調>低掉 高調>高掉 基調>基掉 色調>色掉 音調>音掉 步調>步掉 調頭>掉頭',
+    '身分>身奮 部分>部奮 成分>成奮 緣分>緣奮 本分>本奮 過分>過奮 安分>安奮 福分>福奮 天分>天奮 名分>名奮 養分>養奮 水分>水奮 充分>充奮 鹽分>鹽奮 糖分>糖奮',
+    // 屏、咽、累、露
+    '屏息>餅息 屏氣>餅氣 屏住>餅住 屏除>餅除 哽咽>哽夜 嗚咽>嗚夜 吞咽>吞燕 咽下>燕下 咽氣>燕氣',
+    '累積>壘積 累計>壘計 連累>連壘 累贅>壘贅 積累>積壘 牽累>牽壘 拖累>拖壘 累犯>壘犯 累月>壘月 累世>壘世 累卵>壘卵',
+    '露出>漏出 暴露>暴漏 露面>漏面 露臉>漏臉 露餡>漏餡 露馬腳>漏馬腳 露一手>漏一手 露骨>漏骨 露富>漏富 露怯>漏怯 露相>漏相',
+    // 當(ㄉㄤˋ)、將(ㄐㄧㄤˋ)、率(ㄕㄨㄞˋ / ㄌㄩˋ)、給(ㄐㄧˇ)、說(ㄕㄨㄟˋ)
+    '當天>檔天 當作>檔作 當成>檔成 適當>適檔 恰當>恰檔 妥當>妥檔 穩當>穩檔 上當>上檔 當真>檔真 當舖>檔舖 當鋪>檔鋪 典當>典檔',
+    '大將>大匠 老將>老匠 名將>名匠 上將>上匠 將領>匠領 將士>匠士 武將>武匠 猛將>猛匠 良將>良匠 兵將>兵匠 敗將>敗匠 戰將>戰匠 悍將>悍匠 將帥>匠帥 將相>匠相 將門>匠門',
+    '率領>帥領 草率>草帥 輕率>輕帥 直率>直帥 坦率>坦帥 率先>帥先 統率>統帥 表率>表帥 率兵>帥兵 率眾>帥眾 率隊>帥隊',
+    '效率>效律 比率>比律 機率>機律 概率>概律 頻率>頻律 利率>利律 速率>速律 匯率>匯律 稅率>稅律 成功率>成功律 失敗率>失敗律 死亡率>死亡律 出生率>出生律 命中率>眾律',
+    '供給>供己 補給>補己 給予>己予 自給>自己 配給>配己 遊說>遊稅 說客>稅客',
+    // 種(ㄓㄨㄥˋ)、中(ㄓㄨㄥˋ)
+    '種田>眾田 種花>眾花 種樹>眾樹 種菜>眾菜 種下>眾下 種植>眾植 播種>播眾 栽種>栽眾 種地>眾地 種麥>眾麥 種瓜>眾瓜 種豆>眾豆 種稻>眾稻 種草>眾草 耕種>耕眾',
+    '命中>命眾 擊中>擊眾 射中>射眾 猜中>猜眾 刺中>刺眾 砍中>砍眾 劈中>劈眾 擲中>擲眾 砸中>砸眾 踢中>踢眾',
+    '中箭>眾箭 中毒>眾毒 中彈>眾彈 中獎>眾獎 中計>眾計 中邪>眾邪 中暑>眾暑 中風>眾風 中招>眾招 中掌>眾掌 中劍>眾劍 中刀>眾刀 中針>眾針 中蠱>眾蠱 中標>眾標 中意>眾意 中暗算>眾暗算 中埋伏>眾埋伏 中圈套>眾圈套 中頭獎>眾頭獎 中樂透>眾樂透 中拳>眾拳 中槍>眾槍'
+  ].join(' ');
+  var pronTab = null;
+  function pronBuiltin() {   // 內建對照表: 長的詞排前面(先換長詞, 例如「命中率」要比「命中」先換)
+    if (pronTab) return pronTab;
+    pronTab = PRON_TXT.split(/\s+/).map(function (x) { var i = x.indexOf('>'); return i > 0 ? [x.slice(0, i), x.slice(i + 1)] : null; }).filter(Boolean).sort(function (a, b) { return b[0].length - a[0].length; });
+    return pronTab;
+  }
+  function pronUser() {   // 老師在設定中心填的發音修正表: 每行「原詞=念法」(也接受 > 或 →), 最多 200 行
+    var raw = ''; try { raw = String((cfg() || {}).pron || ''); } catch (e) {}
+    return raw.split(/\r?\n/).slice(0, 200).map(function (ln) { var m = /^\s*([^=>\uFF1D\u2192\s][^=>\uFF1D\u2192]{0,19}?)\s*(?:=|>|\uFF1D|\u2192)\s*(\S.{0,39}?)\s*$/.exec(ln); return m ? [m[1], m[2]] : null; }).filter(Boolean).sort(function (a, b) { return b[0].length - a[0].length; });
+  }
+  var ZD = '零一二三四五六七八九';
+  function digitsZh(x) { return String(x).replace(/\d/g, function (d) { return ZD.charAt(+d); }); }
+  function grpZh(g) {   // 1~9999 → 中文數字
+    var d = [Math.floor(g / 1000) % 10, Math.floor(g / 100) % 10, Math.floor(g / 10) % 10, g % 10], U = ['千', '百', '十', ''], s = '', z = false, k;
+    for (k = 0; k < 4; k++) { if (d[k] === 0) { if (s && k < 3) z = true; } else { if (z) { s += '零'; z = false; } s += ZD.charAt(d[k]) + U[k]; } }
+    return s;
+  }
+  function cardinalZh(n) {   // 0 ~ 99999999 → 十八、一百一十、一千零一、一萬二千…
+    if (n === 0) return '零';
+    var parts = [], B = ['', '萬', '億'], res = '', i;
+    while (n > 0) { parts.push(n % 10000); n = Math.floor(n / 10000); }
+    for (i = parts.length - 1; i >= 0; i--) { var g = parts[i]; if (g === 0) continue; if (res && (parts[i + 1] === 0 || g < 1000)) res += '零'; res += grpZh(g) + B[i]; }
+    return res.replace(/^一十/, '十');
+  }
+  // 阿拉伯數字念成中文: 18→十八、2歲→兩歲、3.14→三點一四、50%→百分之五十; 年份(2024年)、電話/編號(5 位以上、0 開頭)逐字念; 和英文字母相連的(ESP32、3D、v1.2)不動
+  function numbersZh(t) {
+    t = String(t == null ? '' : t).replace(/(\d{1,3})((?:,\d{3})+)(?!\d)/g, function (m, a, b) { return a + b.replace(/,/g, ''); });
+    return t.replace(/(^|[^A-Za-z0-9._\-\/:#@])(\d+(?:\.\d+)?)(%?)(?![A-Za-z0-9:]|\.\d)(?=(.?))/g, function (m, pre, num, pct, nx) {
+      if (num.indexOf('.') >= 0) { var a = num.split('.'); return pre + (/^0\d/.test(a[0]) ? digitsZh(a[0]) : cardinalZh(+a[0])) + '點' + digitsZh(a[1]) + (pct ? '' : ''); }
+      var len = num.length, v = parseInt(num, 10), z;
+      if (pct) return pre + '百分之' + (len >= 9 ? digitsZh(num) : cardinalZh(v));
+      if (/^0\d/.test(num) || len >= 9) return pre + digitsZh(num);
+      if (len === 4 && /^(19|20)\d\d$/.test(num) && /^[\u5E74\-\/.]/.test(nx)) return pre + digitsZh(num);
+      if (len >= 5 && v % 1000 !== 0 && !/[\u5143\u4EBA\u500B\u516C\u65A4\u514B\u6B21\u540D\u5F35\u689D\u96BB\u4EF6\u7B46\u9801\u5B57\u842C\u5206\u79D2\u7C73\u5EA6\u584A]/.test(nx)) return pre + digitsZh(num);
+      z = cardinalZh(v);
+      if (v === 2 && /[\u500B\u4F4D\u6B21\u96BB\u689D\u5F35\u4EF6\u4EBA\u5929\u540D\u9593\u8F1B\u672C\u9846\u7247\u9053\u652F\u5834\u5957\u7A2E\u96D9\u5C0D\u7D44\u6B72]/.test(nx)) z = '\u5169';
+      return pre + z;
+    });
+  }
+  function pronounce(t) {   // 朗讀用的文字: 套用老師的修正表 → 內建對照表 → 數字念法(畫面上的原文不變)
+    t = String(t == null ? '' : t);
+    var user = pronUser(), keep = [], i, j, tab = pronBuiltin();
+    for (i = 0; i < user.length; i++) if (t.indexOf(user[i][0]) >= 0) { keep.push(user[i][1]); t = t.split(user[i][0]).join('' + String.fromCharCode(0xE100 + keep.length - 1) + ''); }
+    for (j = 0; j < tab.length; j++) if (t.indexOf(tab[j][0]) >= 0) t = t.split(tab[j][0]).join(tab[j][1]);
+    t = numbersZh(t);
+    return keep.length ? t.replace(/([-])/g, function (m, c) { return keep[c.charCodeAt(0) - 0xE100]; }) : t;
   }
   // AI 人聲的逐字稿:在轉折詞前加 <short pause>(Gemini 的英文標籤,中文逐字稿也用英文標籤)
   function withPauses(t) { return t.replace(/([^\s\u3002!?,;\u3001\uFF0C\uFF01\uFF1F\uFF1B])(但是|可是|不過|然而)/g, '$1<short pause>$2').replace(/([,\u3001\uFF0C])(但是|可是|不過|然而)/g, '$1<short pause>$2'); }
@@ -415,7 +522,7 @@
     function clipFor(i) {
       if (self.pre[i]) return self.pre[i];
       var c = o.chunks[i]; if (!c) return null;
-      var script = laughTags(exprText(forSpeech(c.speak || c.text))); if (c.rich) script = richPauses(script, i > 0);
+      var script = laughTags(exprText(pronounce(forSpeech(c.speak || c.text)))); if (c.rich) script = richPauses(script, i > 0);
       return (self.pre[i] = aiClip(withPauses(script), o.voice, c.style || o.style, o.model));
     }
     var AHEAD = 3;   // 播這一段時, 同時先把後面 3 段準備好(不然每一段都要等合成, 聲音就會斷斷續續)
@@ -697,7 +804,7 @@
         if (eng.value === 'browser') return;
         var pl = plan(m); if (!pl.chunks.length || (pl.mode === 'replies' && !pl.rl.length)) return;
         var k = pl.mode + '|' + pl.voice + '|' + pl.style + '|' + pl.chunks[0].text; if (k === warmKey) return; warmKey = k;
-        pl.chunks.slice(0, 2).forEach(function (c) { var sc2 = laughTags(exprText(forSpeech(c.speak || c.text))); if (c.rich) sc2 = richPauses(sc2, false); var pr2 = aiClip(withPauses(sc2), pl.voice, c.style || pl.style, pl.model); if (pr2 && pr2.catch) pr2.catch(function () {}); });
+        pl.chunks.slice(0, 2).forEach(function (c) { var sc2 = laughTags(exprText(pronounce(forSpeech(c.speak || c.text)))); if (c.rich) sc2 = richPauses(sc2, false); var pr2 = aiClip(withPauses(sc2), pl.voice, c.style || pl.style, pl.model); if (pr2 && pr2.catch) pr2.catch(function () {}); });
       } catch (e) {}
     }
     function srcOf(pl) { return function (c) { if (pl.mode === 'sel') return sel.read ? sel.read.text : ''; if (pl.mode === 'body') return pl.pst.content; if (pl.mode === 'replies' && c.reply) return (pl.rl[c.reply - 1] || {}).content || ''; return ''; }; }
@@ -797,7 +904,7 @@
 
   global.KBTts = {
     PERSONAS: PERSONAS, TONES: TONES, STYLES: STYLES, EXPR: EXPR, exprText: exprText, analyze: analyze, splitSentences: splitSentences, groupSentences: groupSentences, forSpeech: forSpeech, withPauses: withPauses,
-    mount: mount, stop: stop, genreOf: genreOf, emotionOf: emotionOf, toneForChunk: toneForChunk, browserUnits: browserUnits, brParams: brParams, twVoices: twVoices, exprBrowser: exprBrowser, chunksFor: chunksFor, replyChunks: replyChunks, resumeAt: resumeAt, personaVoice: personaVoice, personaStyle: personaStyle, aiClip: aiClip, voiceList: voiceList, localKey: localKey, Reader: Reader, aiState: aiState,
+    mount: mount, stop: stop, pronounce: pronounce, numbersZh: numbersZh, cardinalZh: cardinalZh, genreOf: genreOf, emotionOf: emotionOf, toneForChunk: toneForChunk, browserUnits: browserUnits, brParams: brParams, twVoices: twVoices, exprBrowser: exprBrowser, chunksFor: chunksFor, replyChunks: replyChunks, resumeAt: resumeAt, personaVoice: personaVoice, personaStyle: personaStyle, aiClip: aiClip, voiceList: voiceList, localKey: localKey, Reader: Reader, aiState: aiState,
     _t: { H: H, mem: mem, setHighlight: setHighlight, textMap: textMap, hash: hash, resetAi: function () { aiState.v = null; vlist = null; vP = null; } }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
