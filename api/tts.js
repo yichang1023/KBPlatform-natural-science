@@ -18,7 +18,7 @@ function dailyTts() {
   return day.n <= cap;
 }
 function defaultModel() { const m = String(process.env.TTS_MODEL || ''); return MODELS.indexOf(m) >= 0 ? m : MODELS[0]; }
-function cleanStyle(s) { return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f<>{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600); }
+function cleanStyle(s) { return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f<>{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800); }
 
 // Gemini 3.8 的一次性請求會回傳完整 WAV;如果拿到的是沒有檔頭的 PCM(24kHz、單聲道、16-bit),在這裡補上 WAV 檔頭
 function wrapWav(b64) {
