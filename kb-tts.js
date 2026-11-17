@@ -380,6 +380,10 @@
     return keep.length ? t.replace(/([-])/g, function (m, c) { return keep[c.charCodeAt(0) - 0xE100]; }) : t;
   }
   // AI 人聲的逐字稿:在轉折詞前加 <short pause>(Gemini 的英文標籤,中文逐字稿也用英文標籤)
+  function aiScript(c) {   // 送給 AI 人聲的逐字稿(念法修正、表情標籤、說書人的停頓、轉折前停頓); 合成、預先準備、算聲音長度都用它, 才會對得上同一個快取
+    var sc = laughTags(exprText(pronounce(forSpeech(c.speak || c.text)))); if (c.rich) sc = richPauses(sc, !c.first);
+    return withPauses(sc);
+  }
   function withPauses(t) { return t.replace(/([^\s\u3002!?,;\u3001\uFF0C\uFF01\uFF1F\uFF1B])(但是|可是|不過|然而)/g, '$1<short pause>$2').replace(/([,\u3001\uFF0C])(但是|可是|不過|然而)/g, '$1<short pause>$2'); }
 
   // 說話方式(speech_metadata.style): 一般人設只送「這則貼文的語氣」(短短一句英文), 保留各人設原本的聲音特色; 只有「仿曉臻/仿 TTSMaker」這類有自己 style 的人設, 才在前面加上它的說話方式
@@ -479,9 +483,15 @@
     vP.then(null, function () { vP = null; });
     return vP;
   }
+  // 每一段聲音檔的長度(秒): 由 WAV 檔大小直接算(24kHz、單聲道、16-bit: 每秒 48000 位元組); 合成完或從存起來的取出時就知道, 用來顯示「分:秒」和進度
+  var durMem = {}, durVer = 0;
+  function secOfWav(b64) { var n = String(b64 || '').length; if (n < 200) return 0; return Math.max(0, (n * 0.75 - 44) / 48000); }
+  function secOfClip(b64) { return H.secOf ? H.secOf(b64) : secOfWav(b64); }
+  function noteDur(key, sec) { if (sec > 0 && durMem[key] !== sec) { durMem[key] = sec; durVer++; } }
+  function clipKey(text, voice, style, model) { return 'v1|' + (model || '') + '|' + voice + '|' + style + '|' + hash(text); }
   var inflight = {};
   function aiClip(text, voice, style, model) {
-    var key = 'v1|' + (model || '') + '|' + voice + '|' + style + '|' + hash(text);
+    var key = clipKey(text, voice, style, model);
     if (inflight[key]) return inflight[key];
     var pr = aiClip1(key, text, voice, style, model); inflight[key] = pr;
     var clear = function () { delete inflight[key]; }; pr.then(clear, clear);
@@ -489,7 +499,7 @@
   }
   function aiClip1(key, text, voice, style, model) {
     return cacheGet(key).then(function (hit) {
-      if (hit && hit.b64) return { url: b64ToUrl(hit.b64, hit.mime), cached: true };
+      if (hit && hit.b64) { var s0 = secOfClip(hit.b64); noteDur(key, s0); return { url: b64ToUrl(hit.b64, hit.mime), cached: true, sec: s0 }; }
       var f = H.fetch || global.fetch;
       return f('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, voice: voice, style: style, model: model || undefined }) }).then(function (r) {
         return r.json().catch(function () { return null; }).then(function (j) {
@@ -501,7 +511,8 @@
         return directClip(text, voice, style, model, localKey());
       }).then(function (j) {
         cachePut(key, { b64: j.audio, mime: j.mime || 'audio/wav' });
-        return { url: b64ToUrl(j.audio, j.mime), cached: false };
+        var s1 = secOfClip(j.audio); noteDur(key, s1);
+        return { url: b64ToUrl(j.audio, j.mime), cached: false, sec: s1 };
       });
     });
   }
@@ -509,7 +520,7 @@
   /* ---------- 朗讀控制: 一段一段讀, 可暫停/繼續/停止 ----------
    * opts = { chunks:[{ text, start, end }], voice(聲音名), style, rate, model, onChunk(i,chunk), onState(state), onNote(msg) } */
   function Reader(o) {
-    var self = this; this.o = o; this.i = o.from || 0; this.state = 'idle'; this.token = 0; this.audio = null; this.pre = {}; this.engine = o.engine === 'browser' ? 'browser' : 'ai'; this.gapT = null;
+    var self = this; this.o = o; this.i = o.from || 0; this.state = 'idle'; this.token = 0; this.audio = null; this.pre = {}; this.engine = o.engine === 'browser' ? 'browser' : 'ai'; this.gapT = null; this.seekFrac = o.fromFrac || 0; this.chunkT0 = 0; this.pausedAt = 0;
     function set(s) { self.state = s; if (o.onState) o.onState(s); }
     function say(m) { if (o.onNote) o.onNote(m); }
     function done() { set('idle'); if (o.onChunk) o.onChunk(-1); }
@@ -522,8 +533,7 @@
     function clipFor(i) {
       if (self.pre[i]) return self.pre[i];
       var c = o.chunks[i]; if (!c) return null;
-      var script = laughTags(exprText(pronounce(forSpeech(c.speak || c.text)))); if (c.rich) script = richPauses(script, i > 0);
-      return (self.pre[i] = aiClip(withPauses(script), o.voice, c.style || o.style, o.model));
+      return (self.pre[i] = aiClip(aiScript(c), o.voice, c.style || o.style, o.model));
     }
     var AHEAD = 3;   // 播這一段時, 同時先把後面 3 段準備好(不然每一段都要等合成, 聲音就會斷斷續續)
     var waitT = null;
@@ -536,6 +546,7 @@
         clearWait();
         if (tok !== self.token || self.state !== 'playing') return;
         var a = H.Audio ? new H.Audio(clip.url) : new global.Audio(clip.url); self.audio = a;
+        if (self.seekFrac > 0) { var sf = self.seekFrac; self.seekFrac = 0; var setT = function () { if (a.duration > 0 && isFinite(a.duration)) { try { a.currentTime = Math.min(a.duration - 0.05, sf * a.duration); } catch (e) {} } }; a.onloadedmetadata = setT; setT(); }   // 拖到這一段中間: 從這段聲音的那個位置開始播
         try { a.playbackRate = Math.max(0.5, Math.min(2, o.rate || 1)); } catch (e) {}
         a.onended = function () { if (tok === self.token && self.state === 'playing') { self.i++; run(tok); } };
         a.onerror = function () { fail(new Error('聲音檔播放失敗'), tok); };
@@ -568,12 +579,13 @@
       if (tok !== self.token || self.state !== 'playing') return;
       if (self.i >= o.chunks.length) return done();
       var c = o.chunks[self.i]; if (o.onChunk) o.onChunk(self.i, c);
+      self.audio = null; self.chunkT0 = Date.now(); self.pausedAt = 0;
       if (self.engine === 'browser') speakBrowser(c, tok); else speakAi(c, tok);
     }
     function cancelBrowser() { var s = synth(); if (s && s.cancel) { try { s.cancel(); } catch (e) {} } }
     this.play = function () { if (self.state === 'playing') return; self.token++; self.i = self.state === 'paused' ? self.i : (o.from || 0); set('playing'); run(self.token); };
     this.pause = function () {
-      if (self.state !== 'playing') return; set('paused'); self.token++; clearWait(); clearGap();
+      if (self.state !== 'playing') return; self.pausedAt = Date.now(); set('paused'); self.token++; clearWait(); clearGap();
       if (self.audio) { try { self.audio.pause(); } catch (e) {} }
       if (self.engine === 'browser') cancelBrowser();
     };
@@ -593,6 +605,12 @@
       var f = 0, a = self.audio;
       if (self.engine === 'ai' && a && a.duration > 0 && isFinite(a.duration)) f = Math.max(0, Math.min(1, (a.currentTime || 0) / a.duration));
       return { i: self.i, frac: f, engine: self.engine };
+    };
+    this.elapsed = function () {   // 這一段已經念了幾秒(真實秒數, 已含速度)
+      var r = Math.max(0.5, Math.min(2, o.rate || 1));
+      if (self.engine === 'ai') { var a = self.audio; return a && a.currentTime ? a.currentTime / r : 0; }
+      var now = self.state === 'playing' ? Date.now() : (self.pausedAt || self.chunkT0 || Date.now());
+      return Math.max(0, (now - (self.chunkT0 || now)) / 1000);
     };
     this.setRate = function (r) { o.rate = r; if (self.audio) { try { self.audio.playbackRate = Math.max(0.5, Math.min(2, r)); } catch (e) {} } };   // 改速度: 不用重頭, 馬上套用到正在播的和後面的
   }
@@ -624,6 +642,10 @@
     var s = doc.createElement('style'); s.id = 'kbt-style';
     s.textContent = '.kbt{margin:0 0 14px;padding:10px 12px;border:1.5px solid #e0e7ff;background:#f5f7ff;border-radius:14px}.kbt-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}' +
       '.kbt-btn{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:8px 16px;border-radius:12px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-weight:800;font-size:15px;cursor:pointer}.kbt-btn.alt{background:#fff;color:#4f46e5}.kbt-btn[hidden]{display:none}.kbt-btn:focus-visible,.kbt select:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}' +
+      '.kbt-prog{display:flex;align-items:center;gap:8px;margin-top:10px}.kbt-prog[hidden]{display:none}.kbt-prog input[type=range]{flex:1;min-width:60px;height:34px;accent-color:#4f46e5;cursor:pointer}.kbt-t{font-variant-numeric:tabular-nums;font-size:13px;color:#312e81;min-width:42px;text-align:center;font-weight:700}' +
+      '.kbt-mini{min-height:38px;padding:4px 10px;border-radius:10px;border:2px solid #c7d2fe;background:#fff;color:#4f46e5;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap}.kbt-mini:focus-visible,.kbt-prog input:focus-visible,.kbt-tl summary:focus-visible,.kbt-tl [data-ti]:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}' +
+      '.kbt-tl{margin-top:6px;font-size:13px}.kbt-tl[hidden]{display:none}.kbt-tl summary{cursor:pointer;color:#4338ca;font-weight:700;min-height:34px;display:flex;align-items:center}.kbt-tl [data-k=tlist]{max-height:220px;overflow:auto;border:1px solid #e0e7ff;border-radius:10px;background:#fff;padding:4px}' +
+      '.kbt-tl [data-ti]{display:flex;gap:8px;width:100%;text-align:left;padding:6px 8px;border:0;border-radius:8px;background:transparent;cursor:pointer;font-size:13px;color:#1e1b4b}.kbt-tl [data-ti].on{background:#e0e7ff;font-weight:700}.kbt-tl [data-ti] .t{color:#4f46e5;min-width:42px;font-variant-numeric:tabular-nums;font-weight:700}' +
       '.kbt label[hidden]{display:none}.kbt select{min-height:44px;padding:6px 10px;border-radius:12px;border:2px solid #c7d2fe;background:#fff;font-size:14px;max-width:100%}.kbt label{display:inline-flex;align-items:center;gap:6px;font-size:14px;min-height:44px;cursor:pointer}' +
       '.kbt-info{font-size:12.5px;color:#4b5563;margin-top:6px;line-height:1.6}.kbt-cap{font-size:15px;color:#1e1b4b;margin-top:6px;min-height:0;font-weight:700;line-height:1.6}.kbt-cap:empty{display:none}.kbt-note{font-size:12.5px;color:#b45309;margin-top:4px}.kbt-note:empty{display:none}' +
       '::highlight(kb-tts){background-color:#fde68a;color:#111827}' +
@@ -631,6 +653,14 @@
       '.kbt-sel .kbt-btn{min-height:44px;border-color:#fff;background:#4f46e5;color:#fff}.kbt-sel .kbt-btn.alt{background:#fff;color:#1e1b4b;border-color:#fff}.kbt-sel .kbt-btn[hidden]{display:none}.kbt-sel-note{flex-basis:100%;font-size:12.5px;color:#fde68a;line-height:1.5}.kbt-sel-note:empty{display:none}';
     (doc.head || doc.documentElement).appendChild(s);
   }
+  function fmtT(sec) { sec = Math.max(0, Math.round(sec || 0)); var m = Math.floor(sec / 60), r = sec % 60; return m + ':' + (r < 10 ? '0' : '') + r; }
+  function effLen(t) {   // 「念起來有多長」的字數: 中文字算 1、英文字母 0.45、數字 0.6, 標點與空白不算
+    var n = 0, x = String(t == null ? '' : t).replace(/<[^>]*>/g, ''), i, ch;
+    for (i = 0; i < x.length; i++) { ch = x.charAt(i); if (/[A-Za-z]/.test(ch)) n += 0.45; else if (/\d/.test(ch)) n += 0.6; else if (/[\s,.;:!?\u3001-\u3003\uFF0C\uFF01\uFF1F\uFF1B\uFF1A\u300C-\u300F\u201C\u201D'"()\u2026\-]/.test(ch)) continue; else n += 1; }
+    return n;
+  }
+  function cpsLoad() { try { return JSON.parse(global.localStorage.getItem('kb_tts_cps') || '{}') || {}; } catch (e) { return {}; } }
+  function cpsNote(key, v) { try { var o = cpsLoad(); o[key] = o[key] ? Math.round((o[key] * 0.7 + v * 0.3) * 100) / 100 : Math.round(v * 100) / 100; global.localStorage.setItem('kb_tts_cps', JSON.stringify(o)); } catch (e) {} }
   var cur = null;   // 目前這個畫面上的朗讀列(同時只會有一個在讀)
   var aiCool = 0;   // 最近一次 AI 人聲出問題(額度用完等)的時間: 30 分鐘內開新的貼文, 先用瀏覽器聲音, 不再一直撞牆
   var selCleanup = null;   // 「播放選取內容」浮動列的收尾(拿掉浮動列和監聽); 關閉貼文或重新載入貼文時才呼叫
@@ -700,13 +730,15 @@
     var prefs = loadPrefs(), reader = null, mode = 'body', curPlan = null, aiOk = false, engAuto = false;   // engAuto: 語音來源是自動切換的(不是使用者自己選的), 不存成偏好
     host.innerHTML = '<div class="kbt" role="group" aria-label="朗讀這則貼文"><div class="kbt-row"><button type="button" class="kbt-btn" data-k="play" aria-label="朗讀內容">🔊 朗讀內容</button><button type="button" class="kbt-btn alt" data-k="stop" hidden aria-label="停止朗讀">⏹ 停止</button>' +
       '<select data-k="engine" aria-label="語音來源"><option value="ai">AI 人聲(較自然)</option><option value="browser">瀏覽器語音(免費、不耗額度)</option></select><select data-k="voice" aria-label="選擇聲音">' + PERSONAS.map(function (p) { return '<option value="ai:' + p.id + '">' + esc(p.name) + '</option>'; }).join('') + '</select><select data-k="rate" aria-label="朗讀速度"><option value="0.8">慢一點</option><option value="0.9">稍慢(預設)</option><option value="1">正常</option><option value="1.15">稍快</option><option value="1.3">快</option></select>' +
-      '<select data-k="tone" aria-label="語氣"><option value="auto">語氣:自動判斷</option>' + STYLES.map(function (x) { return '<option value="' + x.id + '">' + esc(x.zh) + '</option>'; }).join('') + '</select><label><input type="checkbox" data-k="auto" checked> 自動語氣</label><label data-k="flourL" hidden><input type="checkbox" data-k="flour" checked> 說書開場與收場</label></div><div class="kbt-info" data-k="info"></div><div class="kbt-cap" data-k="cap" aria-live="polite"></div><div class="kbt-note" data-k="note" role="status"></div></div>';
+      '<select data-k="tone" aria-label="語氣"><option value="auto">語氣:自動判斷</option>' + STYLES.map(function (x) { return '<option value="' + x.id + '">' + esc(x.zh) + '</option>'; }).join('') + '</select><label><input type="checkbox" data-k="auto" checked> 自動語氣</label><label data-k="flourL" hidden><input type="checkbox" data-k="flour" checked> 說書開場與收場</label></div>' +
+      '<div class="kbt-prog" data-k="prog" role="group" aria-label="朗讀進度"><button type="button" class="kbt-mini" data-k="back" aria-label="倒退 10 秒">&#9194; 10</button><span class="kbt-t" data-k="tcur" aria-hidden="true">0:00</span><input type="range" data-k="seek" min="0" max="1" value="0" step="1" aria-label="朗讀進度,可拖曳到想聽的地方"><span class="kbt-t" data-k="ttot" aria-hidden="true">0:00</span><button type="button" class="kbt-mini" data-k="fwd" aria-label="快轉 10 秒">10 &#9193;</button></div>' +
+      '<details class="kbt-tl" data-k="tl"><summary>時間表(每一句在幾分幾秒; 點一句就從那裡開始念)</summary><div data-k="tlist"></div></details><div class="kbt-info" data-k="info"></div><div class="kbt-cap" data-k="cap" aria-live="polite"></div><div class="kbt-note" data-k="note" role="status"></div></div>';
     var $ = function (k) { return host.querySelector('[data-k="' + k + '"]'); };
     var tb = doc.createElement('button'); tb.type = 'button'; tb.className = 'kbt-btn kbt-title'; tb.setAttribute('data-k', 'playt'); tb.setAttribute('aria-label', '朗讀類型與標題'); tb.textContent = '🔊 朗讀標題';
     var rb = doc.createElement('button'); rb.type = 'button'; rb.className = 'kbt-btn kbt-replies'; rb.setAttribute('data-k', 'playr'); rb.setAttribute('aria-label', '朗讀其他人的全部回應'); rb.textContent = '🔊 朗讀全部回應(0)';
     if (ctx.repliesHost) { ctx.repliesHost.style.display = ''; ctx.repliesHost.appendChild(rb); } else host.querySelector('.kbt-row').appendChild(rb);
     if (ctx.titleHost) { ctx.titleHost.style.display = ''; ctx.titleHost.appendChild(tb); } else { var rowEl = host.querySelector('.kbt-row'); rowEl.insertBefore(tb, rowEl.firstChild); }
-    var play = $('play'), playt = tb, playr = rb, stopB = $('stop'), eng = $('engine'), vs = $('voice'), rs = $('rate'), au = $('auto'), fl = $('flour'), flL = $('flourL'), tn = $('tone'), info = $('info'), cap = $('cap'), note = $('note');
+    var play = $('play'), playt = tb, playr = rb, stopB = $('stop'), eng = $('engine'), vs = $('voice'), rs = $('rate'), au = $('auto'), fl = $('flour'), flL = $('flourL'), tn = $('tone'), prog = $('prog'), seek = $('seek'), tcur = $('tcur'), ttot = $('ttot'), backB = $('back'), fwdB = $('fwd'), tlBox = $('tl'), tlist = $('tlist'), info = $('info'), cap = $('cap'), note = $('note');
     rs.value = prefs.rate || '0.9'; if (prefs.tone && tn.querySelector('option[value="' + prefs.tone + '"]')) tn.value = prefs.tone;
     au.checked = prefs.auto !== false; fl.checked = prefs.flour !== false;
     eng.value = prefs.engine === 'browser' || Date.now() - aiCool < 1800000 ? 'browser' : 'ai';
@@ -734,6 +766,7 @@
         var fo = md === 'body' && rich && fl.checked ? flourishChunks(genre, pst.content.length) : null;   // 說書人: 故事前面加開場、後面加收場
         if (fo) { [fo.open, fo.close].forEach(function (c) { c.rich = true; c.dr = 0; c.dp = 0; c.style = styleFor(personaId, fitStyle(uniq([genre.en, 'a showman\'s flourish, theatrical and inviting']), 260)); }); chunks = [fo.open].concat(chunks, [fo.close]); }
       } else if (rich) chunks.forEach(function (c) { c.rich = true; });
+      if (chunks.length) chunks[0].first = true;
       return { mode: md, pst: pst, rl: rl, personaId: personaId, pr: pr, chunks: chunks, voice: personaVoice(personaId), style: styleFor(personaId, tone.style), model: (cfg().ai && cfg().ai.model) || undefined, engine: isBr ? 'browser' : 'ai', br: isBr ? brParams(personaId) : null };
     }
     /* ---- 圈選內文 → 浮動「播放選取內容」列(播放/暫停/停止) ---- */
@@ -795,8 +828,103 @@
     doc.addEventListener('selectionchange', sel.onSel); global.addEventListener('resize', sel.onPos); doc.addEventListener('scroll', sel.onPos, true);
     selCleanup = function () {
       doc.removeEventListener('selectionchange', sel.onSel); global.removeEventListener('resize', sel.onPos); doc.removeEventListener('scroll', sel.onPos, true);
+      if (tickT) { clearInterval(tickT); tickT = null; }
       if (sel.timer) clearTimeout(sel.timer); if (sel.bar && sel.bar.parentNode) sel.bar.parentNode.removeChild(sel.bar); sel.bar = null; sel.off = true; sel.dead = true; selCleanup = null;
     };
+    /* ---- 進度: 時間軸(每一句在第幾秒)、拖曳、快轉倒退、時間表 ----
+     * AI 人聲: 合成好的聲音檔長度是準的(由檔案大小算), 還沒合成的段落用「每秒念幾個字」估(念過會記住, 越來越準); 瀏覽器語音只能估.
+     * 所以時間前面有「約」表示還有估的部分; 整則都合成過就是準的. */
+    var tl = null, startPos = null, dragging = false, inStart = false, tickT = null, durSeen = 0, calSeen = {};
+    function secOfChunk(c, pl) { return pl.engine === 'ai' ? (durMem[clipKey(aiScript(c), pl.voice, c.style || pl.style, pl.model)] || 0) : 0; }
+    function gapEst(c) { var t = String(c.text || ''), commas = (t.match(/[,\u3001\uFF0C]/g) || []).length, ends = (t.match(/[\u3002!?\uFF01\uFF1F]/g) || []).length; return commas * 0.15 + (ends || 1) * 0.42 + (c.par ? 0.38 : 0); }
+    function cpsKey(pl) { return pl.engine === 'browser' ? 'b' : 'a:' + pl.voice; }
+    function chunkSec(c, pl) {
+      var rate = parseFloat(rs.value) || 1, sc = secOfChunk(c, pl);
+      if (sc > 0) { var n0 = effLen(pronounce(forSpeech(c.text))), k0 = cpsKey(pl) + '|' + sc; if (n0 > 3 && !calSeen[k0]) { calSeen[k0] = 1; cpsNote(cpsKey(pl), n0 / sc); } return sc / rate; }   // 量到的長度; 順便記下這個聲音每秒念幾個字
+      var n = effLen(pronounce(forSpeech(c.text))), cps = cpsLoad()[cpsKey(pl)] || (pl.engine === 'browser' ? 4.0 : 4.4);
+      if (pl.engine === 'browser') return n / (cps * rate * ((pl.br && pl.br.rate) || 1)) + gapEst(c) / rate;
+      return n / (cps * rate);
+    }
+    function tlBuild(pl, m) {   // 結構(每一句的位置與字數)只建一次; 時間另外算
+      var src = srcOf(pl), ents = [];
+      pl.chunks.forEach(function (c, ci) {
+        var raw = src(c), list = [];
+        if (raw && !c.title && c.end > c.start) splitSentences(raw.slice(c.start, c.end)).forEach(function (q) { list.push({ text: q.text, off: c.start + q.start }); });
+        if (!list.length) list.push({ text: c.text, off: c.start || 0 });
+        list.forEach(function (e) { e.ci = ci; e.reply = c.reply || 0; e.w = Math.max(1, effLen(e.text)); ents.push(e); });
+      });
+      tl = ents.length ? { pl: pl, mode: m, ents: ents, total: 0, exact: false } : null;
+      tlCompute(); tlRender();
+    }
+    function tlCompute() {
+      if (!tl) return;
+      var pl = tl.pl, t = 0, exact = pl.engine === 'ai', by = {};
+      tl.ents.forEach(function (e) { (by[e.ci] = by[e.ci] || []).push(e); });
+      pl.chunks.forEach(function (c, ci) {
+        var d = chunkSec(c, pl), list = by[ci] || [], tw = 0, acc = t;
+        if (exact && !secOfChunk(c, pl)) exact = false;
+        list.forEach(function (e) { tw += e.w; });
+        list.forEach(function (e) { e.t0 = acc; acc += d * (e.w / (tw || 1)); e.t1 = acc; });
+        c._t0 = t; c._d = d; t += d;
+      });
+      tl.total = t; tl.exact = exact;
+    }
+    function tlRender() {
+      if (!tl) { tlBox.hidden = true; seek.max = 1; ttot.textContent = '0:00'; tlist.innerHTML = ''; return; }
+      tlBox.hidden = false; seek.max = Math.max(1, Math.ceil(tl.total));
+      tlist.innerHTML = tl.ents.slice(0, 300).map(function (e, i) { return '<button type="button" data-ti="' + i + '"><span class="t">' + fmtT(e.t0) + '</span><span>' + esc(String(e.text).replace(/\s+/g, ' ').slice(0, 28)) + '</span></button>'; }).join('');
+      tlLabels();
+    }
+    function tlLabels() {   // 時間重算後只更新數字, 不重畫整個清單
+      if (!tl) return;
+      seek.max = Math.max(1, Math.ceil(tl.total)); ttot.textContent = (tl.exact ? '' : '約') + fmtT(tl.total);
+      Array.prototype.forEach.call(tlist.querySelectorAll('[data-ti]'), function (b) { var e = tl.ents[+b.getAttribute('data-ti')]; if (e) b.firstChild.textContent = fmtT(e.t0); });
+    }
+    function entryOf(c) {   // 正在讀的這一段對應到哪一句(時間軸上的位置)
+      var ci = tl.pl.chunks.indexOf(c), i, e = null;
+      if (ci >= 0) { for (i = 0; i < tl.ents.length; i++) if (tl.ents[i].ci === ci) return tl.ents[i]; }
+      for (i = 0; i < tl.ents.length; i++) { var x = tl.ents[i]; if (x.reply === (c.reply || 0) && x.off <= (c.start || 0)) e = x; }
+      return e;
+    }
+    function curT() {
+      if (!tl) return 0;
+      if (reader && reader.state !== 'idle' && curPlan === tl.pl) { var c = reader.o.chunks[reader.i]; if (!c) return tl.total; var e = entryOf(c), cc = tl.pl.chunks.indexOf(c) >= 0 ? c : null, extra = reader.seekFrac > 0 && cc && cc._d ? reader.seekFrac * cc._d : 0; return Math.min(tl.total, (e ? e.t0 : 0) + extra + reader.elapsed()); }   // extra: 拖到這一段中間、聲音還沒開始播(例如暫停中)時, 先算上要跳過的部分
+      return startPos && startPos.mode === tl.mode ? startPos.t : 0;
+    }
+    function markList(t) {
+      if (!tl) return; var cur2 = -1, i; for (i = 0; i < tl.ents.length; i++) if (tl.ents[i].t0 <= t + 0.001) cur2 = i;
+      Array.prototype.forEach.call(tlist.querySelectorAll('[data-ti]'), function (b) { b.classList.toggle('on', +b.getAttribute('data-ti') === cur2); });
+    }
+    function tlTick() {
+      if (!tl) return;
+      if (durVer !== durSeen) { durSeen = durVer; tlCompute(); tlLabels(); }
+      var t = dragging ? Number(seek.value) : curT();
+      if (!dragging) seek.value = String(Math.round(t));
+      tcur.textContent = fmtT(t); markList(t);
+      seek.setAttribute('aria-valuetext', '目前 ' + fmtT(t) + ',全長' + (tl.exact ? '' : '約') + fmtT(tl.total));
+    }
+    function tlRefresh() {   // 設定改了(聲音、速度、語氣、語音來源…): 沒在讀的時候, 重算「朗讀內容」的時間軸
+      if (reader && reader.state !== 'idle') { tlCompute(); tlLabels(); return; }
+      if (play.hidden) { tl = null; tlRender(); return; }
+      var pl = plan('body'); tlBuild(pl, 'body');
+      if (startPos && startPos.mode === 'body' && tl) { var e = tl.ents.filter(function (x) { return x.reply === startPos.pos.reply && x.off <= startPos.pos.off; }).pop() || tl.ents[0]; startPos.ent = e; startPos.t = e.t0; }
+      tlTick();
+    }
+    function seekTo(sec, ent) {   // 拖到某個時間(或某一句): 在讀的時候馬上從那裡讀; 還沒讀(或讀完了)就先記住, 按「朗讀內容」從那裡開始
+      if (!tl || !tl.ents.length) return;
+      sec = Math.max(0, Math.min(tl.total, sec));
+      var e = ent || null; if (!e) tl.ents.forEach(function (x) { if (x.t0 <= sec + 0.001) e = x; }); if (!e) e = tl.ents[0];
+      if (reader && reader.state !== 'idle' && curPlan === tl.pl) start(mode, { ent: e, paused: reader.state === 'paused', keepSel: true });
+      else startPos = { mode: tl.mode, pos: { reply: e.reply, off: e.off }, ent: e, t: e.t0 };
+      tlTick();
+    }
+    seek.oninput = function () { dragging = true; tcur.textContent = fmtT(Number(seek.value)); markList(Number(seek.value)); };
+    seek.onchange = function () { dragging = false; seekTo(Number(seek.value)); };
+    ['pointerdown', 'touchstart', 'mousedown'].forEach(function (ev) { seek.addEventListener(ev, function () { dragging = true; }, { passive: true }); });
+    ['pointerup', 'touchend', 'mouseup', 'blur'].forEach(function (ev) { seek.addEventListener(ev, function () { setTimeout(function () { dragging = false; }, 60); }, { passive: true }); });
+    backB.onclick = function () { seekTo(curT() - 10); };
+    fwdB.onclick = function () { seekTo(curT() + 10); };
+    tlist.onclick = function (ev) { var b = ev.target && ev.target.closest ? ev.target.closest('[data-ti]') : null; if (!b || !tl) return; var e = tl.ents[+b.getAttribute('data-ti')]; if (e) start(tl.mode, { ent: e, keepSel: true }); };   // 點時間表的一句: 直接從那裡開始念
     var warmKey = '';
     function warm(m) {   // 事先合成第一段(和第二段): 使用者按下去時多半已經好了, 幾乎不用等. 同一段只會合成一次, 之後重聽也用存起來的
       try {
@@ -804,7 +932,7 @@
         if (eng.value === 'browser') return;
         var pl = plan(m); if (!pl.chunks.length || (pl.mode === 'replies' && !pl.rl.length)) return;
         var k = pl.mode + '|' + pl.voice + '|' + pl.style + '|' + pl.chunks[0].text; if (k === warmKey) return; warmKey = k;
-        pl.chunks.slice(0, 2).forEach(function (c) { var sc2 = laughTags(exprText(pronounce(forSpeech(c.speak || c.text)))); if (c.rich) sc2 = richPauses(sc2, false); var pr2 = aiClip(withPauses(sc2), pl.voice, c.style || pl.style, pl.model); if (pr2 && pr2.catch) pr2.catch(function () {}); });
+        pl.chunks.slice(0, 2).forEach(function (c) { var pr2 = aiClip(aiScript(c), pl.voice, c.style || pl.style, pl.model); if (pr2 && pr2.catch) pr2.catch(function () {}); });
       } catch (e) {}
     }
     function srcOf(pl) { return function (c) { if (pl.mode === 'sel') return sel.read ? sel.read.text : ''; if (pl.mode === 'body') return pl.pst.content; if (pl.mode === 'replies' && c.reply) return (pl.rl[c.reply - 1] || {}).content || ''; return ''; }; }
@@ -836,27 +964,35 @@
     function start(m, opt) {
       opt = opt || {};
       mode = m === 'title' ? 'title' : m === 'replies' ? 'replies' : m === 'sel' ? 'sel' : 'body';
-      stop(true);
+      inStart = true; stop(true); inStart = false;
       if (mode === 'sel') { if (!opt.keepSel) { if (!sel.text) { selNote('請先用手指或滑鼠圈選要聽的文字。'); return; } sel.read = { text: sel.text, base: sel.base }; } if (!sel.read) return; }
       var pst = post(), rl = mode === 'replies' ? replies() : [];
       if (mode === 'replies' && !rl.length) { note.textContent = '這則貼文還沒有其他人的回應。'; return; }
       if (mode === 'body' && !String(pst.content).trim()) { note.textContent = '這則貼文沒有內文可以朗讀。'; return; }
       if (mode === 'title' && !String(pst.title).trim() && !TYPE_ZH[pst.type]) { note.textContent = '這則貼文沒有標題可以朗讀。'; return; }
-      var pl = plan(mode, true), chunks = pl.chunks, from = 0, userRate = parseFloat(rs.value) || 1;
-      if (opt.pos) { var rr = resumeAt(chunks, opt.pos, srcOf(pl)); chunks = rr.chunks; from = rr.from; }
-      curPlan = pl;
+      var pl = plan(mode, true), chunks = pl.chunks, from = 0, frac = 0, userRate = parseFloat(rs.value) || 1;
+      if (opt.ent) {   // 拖到時間軸上的某一句: 從那一句開始。這一段的聲音已經合成好 → 整段拿來播並跳到那個位置; 還沒合成 → 只合成那一句之後的, 比較省
+        var en = opt.ent, ci = Math.max(0, Math.min(en.ci, chunks.length - 1)), c3 = chunks[ci], old = tl && tl.pl.chunks[en.ci];
+        from = ci;
+        if (c3 && !c3.title && en.off > (c3.start || 0)) {
+          var sc3 = secOfChunk(c3, pl);
+          if (sc3 > 0 && old && old._d > 0) frac = Math.max(0, Math.min(0.97, (en.t0 - old._t0) / old._d));
+          else { var rr2 = resumeAt(chunks, { reply: en.reply, off: en.off }, srcOf(pl)); chunks = rr2.chunks; from = rr2.from; }
+        }
+      } else if (opt.pos) { var rr = resumeAt(chunks, opt.pos, srcOf(pl)); chunks = rr.chunks; from = rr.from; }
+      curPlan = pl; startPos = null; tlBuild(pl, mode);
       prefs.voice = vs.value; prefs.rate = rs.value; prefs.auto = au.checked; prefs.tone = tn.value; if (!engAuto) prefs.engine = eng.value; savePrefs(prefs);
       note.textContent = opt.note || ''; cap.textContent = ''; selNote(opt.note || '');
       var rd = sel.read, rmode = mode;
       reader = new Reader({
-        chunks: chunks, from: from, engine: pl.engine, br: pl.br, voice: pl.voice, style: pl.style, model: pl.model, rate: userRate, onAiFail: aiFail,
+        chunks: chunks, from: from, fromFrac: frac, engine: pl.engine, br: pl.br, voice: pl.voice, style: pl.style, model: pl.model, rate: userRate, onAiFail: aiFail,
         onChunk: function (i, c) {
           if (i < 0) { cap.textContent = ''; clearHighlight(); return; }
           cap.textContent = (c.reply ? '(回應 ' + c.reply + ')' : '') + c.text; if (rmode === 'sel') setTimeout(selPlace, 0);   // 字幕出現會把內文往下推, 浮動列跟著移
           if (rmode === 'sel') setHighlightC(ctx.contentEl, rd.base + compactIndex(rd.text, c.start), rd.base + compactIndex(rd.text, c.end) - 1);   // 在內文上標出正在讀的位置(位置 = 圈選的起點 + 這段在圈選文字裡的位置)
           else if (c.title || c.noHl) clearHighlight(); else setHighlight(ctx.contentEl, pst.content, c.start, c.end);
         },
-        onState: function (s) { setButtons(s); stopB.hidden = s === 'idle'; if (s === 'idle') { cap.textContent = ''; if (rmode === 'sel' && !selRead()) selHide(); } selLabels(); },
+        onState: function (s) { setButtons(s); stopB.hidden = s === 'idle'; if (s === 'idle') { cap.textContent = ''; if (rmode === 'sel' && !selRead()) selHide(); if (!inStart) { startPos = null; tlRefresh(); } } selLabels(); },
         onNote: function (m2) { note.textContent = m2; if (rmode === 'sel') selNote(m2); }
       });
       cur = reader;
@@ -868,7 +1004,7 @@
       playr.textContent = '🔊 朗讀全部回應(' + replies().length + ')'; playr.setAttribute('aria-label', '朗讀其他人的全部回應');
       if ((s === 'playing' || s === 'paused') && mode !== 'sel') { var pb = mode === 'title' ? playt : mode === 'replies' ? playr : play; pb.textContent = s === 'playing' ? '⏸ 暫停' : '▶ 繼續'; pb.setAttribute('aria-label', s === 'playing' ? '暫停朗讀' : '繼續朗讀'); }
     }
-    function toggle(m) { if (reader && reader.state !== 'idle' && mode === m) { if (reader.state === 'playing') reader.pause(); else reader.resume(); } else start(m); }
+    function toggle(m) { if (reader && reader.state !== 'idle' && mode === m) { if (reader.state === 'playing') reader.pause(); else reader.resume(); } else start(m, startPos && startPos.mode === m && startPos.ent ? { ent: startPos.ent } : undefined); }
     play.onclick = function () { toggle('body'); };
     playt.onclick = function () { toggle('title'); };
     playr.onclick = function () { toggle('replies'); };
@@ -876,12 +1012,13 @@
       ['mouseenter', 'focus', 'touchstart'].forEach(function (ev) { x[0].addEventListener(ev, function () { if (!x[0].disabled) warm(x[1]); }, { passive: true }); });
     });
     stopB.onclick = function () { if (reader) reader.stop(); };
-    [vs, au, tn].forEach(function (e) { e.onchange = function () { showInfo(); retune(); }; });
-    fl.onchange = function () { prefs.flour = fl.checked; savePrefs(prefs); retune(); };   // 讀到一半換聲音/語氣: 從現在讀到的地方接著讀
-    eng.onchange = function () { engAuto = false; prefs.engine = eng.value; savePrefs(prefs); showInfo(); retune(); };
-    rs.onchange = function () { prefs.rate = rs.value; savePrefs(prefs); if (reader && reader.state !== 'idle') reader.setRate(parseFloat(rs.value) || 1); };   // 改速度馬上生效, 不用重頭
+    [vs, au, tn].forEach(function (e) { e.onchange = function () { showInfo(); if (!retune()) tlRefresh(); }; });
+    fl.onchange = function () { prefs.flour = fl.checked; savePrefs(prefs); if (!retune()) tlRefresh(); };   // 讀到一半換聲音/語氣: 從現在讀到的地方接著讀
+    eng.onchange = function () { engAuto = false; prefs.engine = eng.value; savePrefs(prefs); showInfo(); if (!retune()) tlRefresh(); };
+    rs.onchange = function () { prefs.rate = rs.value; savePrefs(prefs); if (reader && reader.state !== 'idle') reader.setRate(parseFloat(rs.value) || 1); tlCompute(); tlLabels(); tlTick(); };   // 改速度馬上生效, 不用重頭
     showInfo();
     (function () { var p0 = post(); tb.hidden = !String(p0.title).trim() && !TYPE_ZH[p0.type]; play.hidden = !String(p0.content).trim(); var rn = replies().length; playr.hidden = !rn; playr.textContent = '🔊 朗讀全部回應(' + rn + ')'; })();
+    prog.hidden = play.hidden; tlRefresh(); tickT = setInterval(tlTick, 300);
     aiState().then(function (ok) {   // 沒有 Gemini 金鑰: AI 人聲不能選, 改用瀏覽器語音; 兩個都不行才停用
       aiOk = ok; var brOk = !!synth();
       if (sel.dead) return;
@@ -890,14 +1027,14 @@
       if (!brOk && eng.value === 'browser') eng.value = 'ai';
       if (!ok) {
         aiOpt.disabled = true;
-        if (brOk) { engAuto = true; eng.value = 'browser'; if (!note.textContent) note.textContent = 'AI 人聲目前不能用(老師還沒有把 Gemini 金鑰存到雲端), 先用瀏覽器語音朗讀。'; showInfo(); return; }
+        if (brOk) { engAuto = true; eng.value = 'browser'; if (!note.textContent) note.textContent = 'AI 人聲目前不能用(老師還沒有把 Gemini 金鑰存到雲端), 先用瀏覽器語音朗讀。'; showInfo(); tlRefresh(); return; }
         note.textContent = '朗讀功能暫時不能用: 老師還沒有把 Gemini 金鑰存到雲端(設定中心 > AI 設定), 這個瀏覽器也沒有可用的語音。';
         [play, playt, playr].forEach(function (b) { b.disabled = true; });
         return;
       }
       if (aiState.src === 'local' && !note.textContent) note.textContent = '目前用的是這台電腦存的 Gemini 金鑰, 只有這台電腦聽得到; 要讓學生也能聽, 請在雲端存金鑰。';
       if (eng.value === 'browser' && Date.now() - aiCool < 1800000 && !note.textContent) { engAuto = true; note.textContent = '剛才 AI 語音額度用完了, 先用瀏覽器語音; 想換回 AI 人聲, 可以在「語音來源」選擇。'; }
-      showInfo();
+      showInfo(); tlRefresh();
     });
     return { stop: stop, state: function () { return reader ? reader.state : 'idle'; }, destroy: function () { stop(); host.innerHTML = ''; if (ctx.titleHost) ctx.titleHost.innerHTML = ''; if (ctx.repliesHost) ctx.repliesHost.innerHTML = ''; } };
   }
@@ -905,6 +1042,6 @@
   global.KBTts = {
     PERSONAS: PERSONAS, TONES: TONES, STYLES: STYLES, EXPR: EXPR, exprText: exprText, analyze: analyze, splitSentences: splitSentences, groupSentences: groupSentences, forSpeech: forSpeech, withPauses: withPauses,
     mount: mount, stop: stop, pronounce: pronounce, numbersZh: numbersZh, cardinalZh: cardinalZh, genreOf: genreOf, emotionOf: emotionOf, toneForChunk: toneForChunk, browserUnits: browserUnits, brParams: brParams, twVoices: twVoices, exprBrowser: exprBrowser, chunksFor: chunksFor, replyChunks: replyChunks, resumeAt: resumeAt, personaVoice: personaVoice, personaStyle: personaStyle, aiClip: aiClip, voiceList: voiceList, localKey: localKey, Reader: Reader, aiState: aiState,
-    _t: { H: H, mem: mem, setHighlight: setHighlight, textMap: textMap, hash: hash, resetAi: function () { aiState.v = null; vlist = null; vP = null; } }
+    _t: { durMem: durMem, fmtT: fmtT, effLen: effLen, aiScript: aiScript, H: H, mem: mem, setHighlight: setHighlight, textMap: textMap, hash: hash, resetAi: function () { aiState.v = null; vlist = null; vP = null; } }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
