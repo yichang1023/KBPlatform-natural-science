@@ -27,11 +27,11 @@
     { id: 'p8', name: '明亮清脆・仿 TTSMaker', def: 'Zephyr', hint: '仿 TTSMaker 的聲音: 音調較高、明亮有活力、抑揚明顯、句尾下降較明顯', design: '一位年輕女性,聲音明亮清脆,音調偏高,抑揚頓挫明顯,標準的台灣國語。',
       style: 'Bright, higher-pitched young Taiwanese Mandarin female voice, lively and expressive. Pace about 5 syllables per second. Short pauses (about 0.4 s) at commas and about 0.7 s after each sentence. Wide pitch variation with a clear falling intonation at the end of each phrase. Natural and fluid, never robotic.' },
     // 說書人: 男聲、沙啞有勁; rich=true 表示「自動語氣」最豐富(每一小段都依情節與情緒變化, 也切得比較短、變化更細)
-    { id: 'p9', name: '天橋下說書人-大師兄', def: 'Algenib', rich: true, hint: '像在天橋下說書的老藝人: 沙啞有勁、抑揚頓挫; 武俠、浪漫、抒情、懸疑的故事特別有戲, 自動語氣最豐富(每一小段都依情節與情緒變化)', design: '一位中年到年長的男性說書人,聲音沙啞有勁、有磁性,像在台灣天橋下說書的老藝人,抑揚頓挫、戲劇感強,講台灣國語。',
-      style: 'A veteran Taiwanese street storyteller under a pedestrian overpass: gravelly, charismatic, theatrical Taiwanese Mandarin with old-school teahouse flavor. Huge dynamic range: thunderous in fights and heroic vows, a hushed creeping whisper in suspense, slow breathy tenderness in romance, wry and sly for jokes and ironic asides, trembling and sorrowful in grief. Clipped rhythm in action, rolling cadence in grand scenes, dramatic pauses before reveals, a distinct voice for every character. Rich emotion, never flat.' },
+    { id: 'p9', name: '天橋下說書人-大師兄', def: 'Algenib', rich: true, lean: ['anger', 'action', 'pride', 'resolve', 'solemn', 'urgent'], hint: '像在天橋下說書的大師兄: 沙啞有勁、豪邁、抑揚頓挫; 武俠、歷史戰爭的打鬥與英雄場面特別有氣勢; 自動語氣最豐富(每一小段依情節與情緒變化、愈打愈緊、高潮後收放自如), 會替不同角色換聲線, 故事前後有說書開場與收場', design: '一位中年到年長的男性說書人,聲音沙啞有勁、有磁性,像在台灣天橋下說書的老藝人,抑揚頓挫、戲劇感強,講台灣國語。',
+      style: 'A veteran Taiwanese street storyteller under an overpass, the big brother of the trade: gravelly, charismatic, theatrical Taiwanese Mandarin, old teahouse flavor. Immersive master: listeners see, hear and feel the scene. Never one loudness: thunderous in fights and vows, slow like flowing water in grief, hushed whispers in dread, silence as a weapon, stress on key lines. Build suspense, escalate, then release; pause before reveals; a distinct voice per character; wry for jokes. Leave a lingering afterglow. Rich emotion, never flat.' },
     // 女聲說書人: 和大師兄同一套「說書」(開場收場、逐段情緒), 聲音換成成熟有氣勢的女聲
-    { id: 'p10', name: '天橋下說書人-大師姊', def: 'Kore', rich: true, hint: '像在天橋下說書的大師姊: 成熟有氣勢、煙嗓帶魅力、俐落帶點機靈; 武俠、浪漫、抒情、懸疑的故事特別有戲, 自動語氣最豐富(每一小段都依情節與情緒變化)', design: '一位成熟的女性說書人,聲音帶一點煙嗓、有氣勢也有魅力,像在台灣天橋下說書的大師姊,抑揚頓挫、戲劇感強,俐落又帶點機靈,講台灣國語。',
-      style: 'A charismatic Taiwanese female street storyteller under a pedestrian overpass: smoky, commanding yet alluring, theatrical Taiwanese Mandarin with old-school teahouse flavor. Huge dynamic range: crisp in fights and heroic vows, a hushed creeping whisper in suspense, slow breathy tenderness in romance, sly and teasing for jokes and ironic asides, trembling and sorrowful in grief. Clipped rhythm in action, rolling cadence in grand scenes, dramatic pauses before reveals, a distinct voice for every character. Rich emotion, never flat.' }
+    { id: 'p10', name: '天橋下說書人-大師姊', def: 'Kore', rich: true, lean: ['tender', 'longing', 'sad', 'mystery', 'shy', 'fear'], hint: '像在天橋下說書的大師姊: 成熟有氣勢、煙嗓帶魅力、俐落帶點機靈; 愛情、懸疑、抒情的細膩情感與內心世界特別動人; 自動語氣最豐富(每一小段依情節與情緒變化、懸念步步加深), 會替不同角色換聲線, 故事前後有說書開場與收場', design: '一位成熟的女性說書人,聲音帶一點煙嗓、有氣勢也有魅力,像在台灣天橋下說書的大師姊,抑揚頓挫、戲劇感強,俐落又帶點機靈,講台灣國語。',
+      style: 'A charismatic Taiwanese female street storyteller under an overpass, the senior sister: smoky, commanding yet alluring, theatrical Taiwanese Mandarin. Immersive master: inner worlds, a glance, a hesitation, the unspoken word. Never one loudness: crisp in fights, slow like flowing water in grief, hushed whispers in dread, silence as a weapon, stress on key lines. Build suspense, escalate, then release; pause before reveals; a distinct voice per character; sly for jokes. Leave a lingering afterglow. Rich emotion, never flat.' }
   ];
   // 瀏覽器聲音版的人設: 用「語速、音高」把各個人設區分開(瀏覽器聲音沒有語氣描述可以送); prefer = 優先挑名字符合的聲音; male = 說書人優先用男聲
   var BR = {
@@ -128,15 +128,18 @@
   /* ---------- 小說情節的語氣: 先判斷整篇是什麼類型(武俠、浪漫、抒情、懸疑…), 再每一小段依情緒微調 ---------- */
   // 每個詞表是「這類故事常出現的字詞」; 命中不同的詞越多, 越像這個類型(門檻避免一般文章被誤判)
   var GENRES = {
-    wuxia: { zh: '武俠', min: 2, en: 'wuxia storyteller delivery: heroic rolling cadence, ringing emphasis on every martial move', open: '各位看倌, 且聽我說一段江湖恩怨。', close: '欲知後事如何, 且聽下回分解。', re: /劍|刀光|刀鋒|江湖|內力|掌門|武林|輕功|少俠|大俠|俠客|拔劍|出鞘|門派|高手|招式|真氣|暗器|拳風|比武|決戰|過招|師父|少林|武當|丐幫|魔教|客棧|蒙面|鏢局|點穴|劍氣|殺氣|不敗|殺手|刺客|一掌|掌風|恩怨|俠義|劍法|刀法|酒|俠|幫主|絕招|奇功|傳人|掌門人/g },
-    romance: { zh: '浪漫', min: 2, en: 'intimate romantic storytelling, breathy and lingering, every word caressed', open: '各位看倌, 今天這一段, 說的是一個情字。', close: '情之一字, 且聽下回分解。', re: /愛情|愛上|喜歡你|心跳|親吻|吻|擁抱|思念|溫柔|臉紅|牽手|約定|永遠|告白|眼眸|心動|凝視|懷裡|依偎|想你|深情|情話|戀人|戀愛|初戀|相愛|臉頰|耳邊|低語|愛意|相思|心上人|佳人/g },
-    suspense: { zh: '懸疑', min: 2, en: 'creeping suspense, hushed and slow, dread building under every pause', open: '各位看倌, 可要豎起耳朵, 這一段, 有點嚇人。', close: '真相如何, 且聽下回分解。', re: /突然|黑暗|腳步聲|陰影|屏住呼吸|秘密|不對勁|冷汗|門縫|神秘|詭異|恐怖|血跡|失蹤|線索|兇手|背後|寒意|毛骨悚然|門外|無聲|鬼|深夜|漆黑|嘎吱|窸窣/g },
-    fantasy: { zh: '奇幻', min: 2, en: 'wondrous fantasy adventure, vivid and animated, awe in the big moments', open: '話說在那遙遠的地方, 有一段奇妙的故事。', close: '後來如何, 且聽下回分解。', re: /魔法|龍|勇者|冒險|精靈|魔王|咒語|王國|公主|騎士|巫師|神殿|寶劍|傳說|法術|仙|妖|飛天|神獸|結界/g },
+    wuxia: { zh: '武俠', min: 2, en: 'wuxia epic: bold, sweeping and heroic, clear in every move and its cause, the spirit behind each blow', open: '各位看倌, 且聽我說一段江湖恩怨。', close: '欲知後事如何, 且聽下回分解。', re: /劍|刀光|刀鋒|江湖|內力|掌門|武林|輕功|少俠|大俠|俠客|拔劍|出鞘|門派|高手|招式|真氣|暗器|拳風|比武|決戰|過招|師父|少林|武當|丐幫|魔教|客棧|蒙面|鏢局|點穴|劍氣|殺氣|不敗|殺手|刺客|一掌|掌風|恩怨|俠義|劍法|刀法|酒|俠|幫主|絕招|奇功|傳人|掌門人|降龍|蛤蟆功|絕學/g },
+    romance: { zh: '浪漫', min: 2, en: 'tender and understated romance: feeling lives in the glance, the hesitation, the unsaid word, intimate and breathy', open: '各位看倌, 今天這一段, 說的是一個情字。', close: '情之一字, 且聽下回分解。', re: /愛情|愛上|喜歡你|心跳|親吻|吻|擁抱|思念|溫柔|臉紅|牽手|約定|永遠|告白|眼眸|心動|凝視|懷裡|依偎|想你|深情|情話|戀人|戀愛|初戀|相愛|臉頰|耳邊|低語|愛意|相思|心上人|佳人|言不由衷/g },
+    detective: { zh: '推理', min: 2, en: 'detective mystery: peeling back layers step by step, controlled information, a misleading hint, then a small detail overturns everything', open: '各位看倌, 這一樁案子, 可得仔細聽。', close: '真相究竟如何, 且聽下回分解。', re: /線索|推理|嫌犯|兇手|案發|現場|證據|不在場|動機|破綻|真相|偵探|死者|兇器|凶手|密室|指紋|供詞|案件|疑點|誤導/g },
+    suspense: { zh: '懸疑', min: 2, en: 'creeping suspense, hushed and slow, dread building under every pause', open: '各位看倌, 可要豎起耳朵, 這一段, 有點嚇人。', close: '後事如何, 且聽下回分解。', re: /突然|黑暗|腳步聲|陰影|屏住呼吸|秘密|不對勁|冷汗|門縫|神秘|詭異|血跡|失蹤|背後|寒意|毛骨悚然|門外|無聲|深夜|漆黑|嘎吱|窸窣/g },
+    horror: { zh: '恐怖', min: 2, en: 'horror: dread through silence, footsteps and shadows, long hushed pauses, never shouting, fear grows in the listener imagination', open: '各位看倌, 夜深人靜, 這一段, 膽小的人別聽。', close: '那是什麼, 且聽下回分解。', re: /恐怖|鬼|幽靈|屍體|血腥|陰森|慘叫|詛咒|亡魂|墳|棺材|怨靈|惡靈|陰魂|冤魂|鬼影|詭祕|驚悚/g },
+    war: { zh: '歷史戰爭', min: 2, en: 'historical war epic: vast battlefield grandeur, commanding and resonant, the weight of every decision and every soldier fate', open: '各位看倌, 且聽我說一段金戈鐵馬的往事。', close: '天下大勢, 且聽下回分解。', re: /戰場|千軍萬馬|將軍|軍隊|士兵|兵馬|城池|號角|軍令|出征|統帥|戰鼓|攻城|守城|王朝|皇帝|大軍|陣營|烽火|旌旗|疆場|將帥|謀略|戰略/g },
+    scifi: { zh: '科幻玄幻', min: 2, en: 'sci-fi and fantasy wonder: awe at a vast believable unknown, rules, limits and sacrifice, wonder in every reveal', open: '各位看倌, 這一段, 要請你放開想像。', close: '未知的盡頭, 且聽下回分解。', re: /星艦|太空|外星|機器人|人工智慧|量子|時空|穿越|星球|宇宙|基因|科技|飛船|平行世界|魔法|龍|勇者|冒險|精靈|魔王|咒語|王國|公主|騎士|巫師|神殿|寶劍|法術|仙|妖|飛天|神獸|結界/g },
     comedy: { zh: '搞笑', min: 2, en: 'playful comic storytelling, sly timing, mock-serious asides and delighted laughter', open: '各位看倌, 這一段可有趣了, 先說好, 不准笑。', close: '笑完了沒有? 且聽下回分解。', re: /哈哈|搞笑|笑死|糗|滑稽|烏龍|尷尬|噗|好笑|耍寶|嘻嘻|呆呆|逗|整人|出糗|鬧笑話/g },
     lyrical: { zh: '抒情', min: 3, en: 'lyrical and poetic, slow flowing breath, wistful sighs at line ends', open: '夜深了, 各位看倌, 聽我慢慢說來。', close: '餘韻悠悠, 且聽下回分解。', re: /微風|月光|月色|雲|夢|詩|淚|秋|落葉|靜靜|遠方|回憶|記憶|歲月|黃昏|孤獨|嘆息|流淌|輕輕|晚霞|星空|漫步|故鄉|思緒|悠悠|寂靜|惆悵|飄|霧|細雨/g },
     story: { zh: '說故事', min: 3, en: 'warm old-fashioned storytelling, natural pauses, drawing the listener in', open: '各位看倌, 且聽我說來。', close: '且聽下回分解。', re: /從前|很久以前|有一天|故事|傳說|後來|於是|從此|過了很久|話說/g }
   };
-  var GENRE_ORDER = ['wuxia', 'romance', 'suspense', 'fantasy', 'comedy', 'lyrical', 'story'];
+  var GENRE_ORDER = ['wuxia', 'romance', 'detective', 'horror', 'suspense', 'war', 'scifi', 'comedy', 'lyrical', 'story'];
   function distinctHits(re, t) { var m = String(t || '').match(re) || [], seen = {}, d = 0; m.forEach(function (x) { if (!seen[x]) { seen[x] = 1; d++; } }); return d; }
   function genreOf(text) {   // 回傳 { key, zh, en, hits, open, close } 或 null
     var t = String(text || ''), best = null;
@@ -169,11 +172,11 @@
   var LV_K = [0.6, 1, 1.5];
   function bangs(t) { return (String(t || '').match(/[!\uFF01]/g) || []).length; }
   function emoOut(k, lvl) { var e = EMOS[k], f = LV_K[lvl - 1]; return { key: k, zh: e.zh, level: lvl, en: e.lv[lvl - 1], dr: Math.round(e.dr * f * 1000) / 1000, dp: Math.round(e.dp * f * 1000) / 1000, dv: Math.round((e.dv || 0) * f * 1000) / 1000 }; }
-  function emotionOf(text) {   // 回傳 { key, zh, level(1~3), en, dr, dp, dv } 或 null
+  function emotionOf(text, lean) {   // lean: 這個人設偏重的情緒(強度加一點); 回傳 { key, zh, level(1~3), en, dr, dp, dv } 或 null
     var t = String(text || ''), best = null, sc = 0;
     EMO_ORDER.forEach(function (k) { var e = EMOS[k], d = distinctHits(e.re, t); if (d >= (e.min || 1) && d > sc) { sc = d; best = k; } });
     if (best) {
-      var strength = sc + (bangs(t) >= 2 ? 1 : bangs(t) === 1 ? 0.5 : 0) + (INTENS.test(t) ? 1 : 0) + ((t.match(EMOS[best].re) || []).length >= sc + 2 ? 1 : 0);
+      var strength = sc + (bangs(t) >= 2 ? 1 : bangs(t) === 1 ? 0.5 : 0) + (INTENS.test(t) ? 1 : 0) + ((t.match(EMOS[best].re) || []).length >= sc + 2 ? 1 : 0) + (lean && lean.indexOf(best) >= 0 ? 0.6 : 0);
       return emoOut(best, strength >= 3 ? 3 : strength >= 1.5 ? 2 : 1);
     }
     if (/[?\uFF1F][!\uFF01]|[!\uFF01][?\uFF1F]/.test(t)) return emoOut('surprise', 2);
@@ -190,16 +193,76 @@
     if (avg >= 36) return { key: 'flow', zh: '長句一氣呵成', en: 'long flowing phrases carried on one breath' };
     return null;
   }
-  // 這一小段的語氣: 情緒(分級)+ 對話(「」裡的話要有角色感)+ 節奏 + 故事類型 + 整則貼文的基本語氣; rich(說書人)描述更長、起伏更大
-  function toneForChunk(text, genre, baseEn, rich) {
-    var emo = emotionOf(text), rh = rhythmOf(text), en = [], zh = [], dr = 0, dp = 0, dv = 0, dia = /[\u300C\u300E\u201C"]/.test(String(text || '')), k = rich ? 1.6 : 1;
+  // 說書的戲劇手法(每一項都是「聲音上做得到」的): 倒數式的短句、拉長音的招式喊聲、擬聲字、突然的一震、真相揭曉、角色聲線
+  var HIGH = { anger: 1, action: 1, urgent: 1, resolve: 1, pride: 1, surprise: 1, excited: 1, fear: 1 };
+  var SPEAKERS = [
+    [/老婦|婆婆|老太|老奶奶|老嫗/, 'an elderly woman voice, warm and cracked with age'],
+    [/老者|老人|老頭|老爺爺|老翁|師父|掌門|長老|宗師|老和尚|老道/, 'an elderly man voice, gravelly and weathered'],
+    [/少女|姑娘|小姐|女子|婦人|夫人|公主|丫鬟|女俠|女孩/, 'a young woman voice, clear and light'],
+    [/少年|少俠|公子|書生|小子|青年|小夥子|男孩/, 'a young man voice, bright and impulsive'],
+    [/大漢|壯漢|惡徒|山賊|莽漢|強盜|惡霸|賊人/, 'a deep rough burly voice'],
+    [/孩子|小孩|孩童|小女孩|小男孩|娃娃/, 'a child voice, high and innocent'],
+    [/皇帝|將軍|元帥|主公|大王|國王|統帥/, 'a commanding authoritative voice']
+  ];
+  function speakerOf(text) { for (var i = 0; i < SPEAKERS.length; i++) if (SPEAKERS[i][0].test(text)) return SPEAKERS[i][1]; return ''; }
+  function devicesOf(text, rich) {   // 回傳 { en[], zh[], dr, dp, dv }
+    var t = String(text || ''), en = [], zh = [], dr = 0, dp = 0, dv = 0;
+    if (/(?:[^\s\u3002!?\uFF01\uFF1F]{1,4}[!\uFF01]\s*){3,}/.test(t)) { en.push('a rapid accelerating countdown, each line tighter and louder'); zh.push('倒數式加速'); dr += 0.07; dp += 0.02; }
+    if (/[\u300C\u300E][^\u300D\u300F]*?[\u4E00-\u9FFF]\u2014\u2014[\u4E00-\u9FFF]/.test(t)) { en.push('stretch each syllable of the battle cry, ringing and powerful'); zh.push('拉長音的喊聲'); dr -= 0.05; dp += 0.03; }
+    if (/轟|砰|嘩啦|咕嚕|呼嘯|嗖|啪|咚|鏘|嘶|隆隆|喀嚓|咕\u2026/.test(t)) { en.push('sound-effect words hit with punch and impact'); zh.push('擬聲字有力'); dr += 0.02; }
+    if (/^\s*(?:突然|忽然|就在這時|說時遲)/.test(t)) { en.push('a sudden jolt, sharp and startled'); zh.push('突然一震'); dr += 0.04; dp += 0.03; }
+    if (/原來|竟然是|真相|其實|沒想到/.test(t)) { en.push('a dramatic reveal, voice lowered and slowed'); zh.push('真相揭曉'); dr -= 0.05; dp -= 0.03; dv -= 0.05; }
+    return { en: en, zh: zh, dr: dr, dp: dp, dv: dv };
+  }
+
+  // 說書的「手藝」(只給說書人): 把關鍵句說出份量、沉住氣的重、慢動作、特寫與遠景(鏡頭感)、把懸念吊著、天氣與氛圍活在聲音裡、吊聽眾胃口
+  // 每一段最多挑 3 項(依序), 一項約 20~40 字; 位置排在情緒與基本手法之後、類型與基本語氣之前, 所以字數不夠時先被修掉的是類型與基本語氣
+  var CRAFT = [
+    ['keyline', '力道關鍵句', 'land the key line with weight, a beat of silence before it', 0.0, -0.02, 0, function (t) { return /絕不|一定要|賭上|一生|永遠|從今以後|此生|不惜|寧可|唯一|最後一|只剩下|這一掌|這一劍|這一戰/.test(t) || keyShort(t); }],
+    ['slowmo', '慢動作', 'slow motion, every word weighty', -0.07, -0.01, 0, function (t) { return /緩緩|慢慢地|剎那|一瞬間|時間彷彿|時間凝結|慢鏡頭|凝固/.test(t); }],
+    ['cliff', '懸念吊著', 'hold the suspense hanging at the end', -0.04, 0.0, -0.03, function (t) { return /(?:\u2014\u2014|\u2026\u2026|\u2026)\s*[\u300D\u300F\u201D"]?\s*$/.test(t); }],
+    ['quiet', '沉住氣', 'restrained, quiet but heavy', -0.04, -0.02, -0.06, function (t, emo) { return !!emo && emo.level >= 2 && /^(?:tender|sad|longing|cold|fear|mystery|solemn)$/.test(emo.key) && !/[!\uFF01]/.test(t); }],
+    ['close', '特寫', 'close-up detail, intimate and low', -0.03, -0.02, -0.08, function (t) { return /只見他|只見她|眼神|眼眸|指尖|喉間|額頭|冷汗|嘴角|瞳孔|掌心|睫毛|呼吸/.test(t); }],
+    ['wide', '遠景', 'wide expansive view, open and broad', 0.0, 0.0, 0, function (t) { return /絕頂|山巔|千里|蒼穹|遠方|天際|大地|萬里|城牆|曠野|海面|群山|江湖/.test(t); }],
+    ['mood', '氛圍', 'let the weather and mood live in the voice', -0.02, 0.0, -0.03, function (t) { return /狂風|呼嘯|寒風|暴雨|雷聲|血腥|霧氣|月色|夜色|硝煙|烈日|飄雪|細雨|風雪|殘陽/.test(t); }],
+    ['tease', '吊胃口', 'a teasing beat that makes listeners wonder', 0.0, 0.02, 0, function (t) { return /(?:[^\u300C\u300E\u201C"]*)[?\uFF1F]\s*$/.test(t) && !/[\u300C\u300E\u201C"]/.test(t); }]
+  ];
+  function keyShort(t) {   // 一長句後面接一句很短的(「郭靖竟然沒有退!」)通常就是關鍵句
+    var ss = splitSentences(String(t || '')), i; for (i = 1; i < ss.length; i++) if (effLen(ss[i].text) <= 9 && effLen(ss[i - 1].text) >= 16) return true;
+    return false;
+  }
+  function craftOf(text, emo) {   // 回傳 { en[], zh[], dr, dp, dv } 或 null
+    var t = String(text || ''), en = [], zh = [], dr = 0, dp = 0, dv = 0, i, c;
+    for (i = 0; i < CRAFT.length && en.length < 3; i++) { c = CRAFT[i]; if (c[6](t, emo)) { en.push(c[2]); zh.push(c[1]); dr += c[3]; dp += c[4]; dv += c[5]; } }
+    return en.length ? { en: en, zh: zh, dr: dr, dp: dp, dv: dv } : null;
+  }
+  // 關鍵句前面停一拍: 一長句後面接一句很短的, 在短句前加 <short pause>(只有說書人)
+  function keyLinePause(t) {
+    var ss = splitSentences(String(t || '')); if (ss.length < 2) return t;
+    var out = '', i; for (i = 0; i < ss.length; i++) { out += (i > 0 && effLen(ss[i].text) <= 9 && effLen(ss[i - 1].text) >= 16 && !/^<short pause>/.test(ss[i].text) ? '<short pause>' : '') + ss[i].text; }
+    return out.length >= t.length * 0.5 ? out : t;
+  }
+  // ctx = { first, last, prev(上一段的語氣結果), streak(連續幾段高能量) }; lean = 人設偏重的情緒
+  function toneForChunk(text, genre, baseEn, rich, ctx, lean) {
+    ctx = ctx || {};
+    var emo = emotionOf(text, lean), rh = rhythmOf(text), dv0 = devicesOf(text, rich), en = [], zh = [], dr = 0, dp = 0, dv = 0, dia = /[\u300C\u300E\u201C"]/.test(String(text || '')), k = rich ? 1.6 : 1;
+    if (emo && HIGH[emo.key] && ctx.streak >= 1 && emo.key !== 'excited' && EMOS[emo.key]) emo = emoOut(emo.key, Math.min(3, emo.level + 1));   // 愈打愈緊: 連續高能量的段落, 一段比一段更強
     if (emo) { en.push(emo.en); zh.push(emo.zh + (emo.level >= 3 ? '(強烈)' : emo.level === 2 ? '' : '(淡淡的)')); dr += emo.dr * k; dp += emo.dp * k; dv += emo.dv * k; }
-    if (dia) { en.push(rich ? 'voice the quoted lines in character, clearly different from the narration' : 'a bit more animated in quoted lines'); zh.push('對話有角色感'); dp += 0.02 * k; }
+    dv0.en.forEach(function (x, i) { en.push(x); zh.push(dv0.zh[i]); });
+    dr += dv0.dr * k; dp += dv0.dp * k; dv += dv0.dv * k;
+    if (dia) { var who = rich ? speakerOf(text) : ''; en.push(rich ? (who ? 'speak the quoted lines in ' + who + ', clearly different from the narration' : 'voice the quoted lines in character, clearly different from the narration') : 'a bit more animated in quoted lines'); zh.push(who ? '對話換聲線' : '對話有角色感'); dp += 0.02 * k; }
     if (rh) { en.push(rh.en); zh.push(rh.zh); dr += rh.key === 'staccato' ? 0.04 : -0.02; }
-    var changed = !!(emo || dia || rh);
+    var calmAfter = !emo && ctx.prev && ctx.prev.level >= 3 && HIGH[ctx.prev.emotion];
+    if (calmAfter) { en.push('ease off after the climax, quieter and slower, let the moment settle'); zh.push('高潮後收斂'); dr -= 0.06 * k; dv -= 0.08; }   // 張弛有度: 不能整篇都一個音量
+    if (rich && ctx.first && !emo) { en.push('paint the opening scene like a film, a wide establishing shot, atmosphere first'); zh.push('場景鋪陳'); }
+    if (rich && ctx.last) { en.push('a lingering afterglow, slowing and fading, leaving one lasting image'); zh.push('餘韻'); dr -= 0.05; dv -= 0.05; }
+    var craft = rich ? craftOf(text, emo) : null;
+    var changed = !!(emo || dia || rh || dv0.en.length || calmAfter || (rich && (ctx.first || ctx.last)) || (rich && ctx.n > 1 && !ctx.last) || craft);
+    if (rich && ctx.n > 1 && !ctx.last) { en.push(ctx.first ? 'flowing narration, not concluding' : 'continuous narration, flowing on without concluding'); zh.push('接著講'); }   // 不是結尾: 語調不要每一段都往下掉
+    if (craft) { craft.en.forEach(function (x, i) { en.push(x); zh.push(craft.zh[i]); }); dr += craft.dr * k; dp += craft.dp * k; dv += craft.dv * k; }
     if (genre) en.push(genre.en);
     if (baseEn) String(baseEn).split(', ').forEach(function (x) { en.push(x); });
-    return { style: fitStyle(uniq(en), rich ? 260 : 130), label: zh.join('、'), dr: Math.round(dr * 1000) / 1000, dp: Math.round(dp * 1000) / 1000, dv: Math.round(dv * 1000) / 1000, emotion: emo ? emo.key : '', level: emo ? emo.level : 0, dialogue: dia, rhythm: rh ? rh.key : '', changed: changed };
+    return { style: fitStyle(uniq(en), rich ? 250 : 130), label: zh.join('、'), dr: Math.round(dr * 1000) / 1000, dp: Math.round(dp * 1000) / 1000, dv: Math.round(dv * 1000) / 1000, emotion: emo ? emo.key : '', level: emo ? emo.level : 0, dialogue: dia, rhythm: rh ? rh.key : '', changed: changed };
   }
   // 切段時: 情緒換了、或對話與旁白交替, 就另起一段(每一段的語氣才能乾淨俐落, 不會一段裡混兩種情緒)
   function emoShift(fs, nx) {
@@ -211,7 +274,7 @@
   // 笑聲、咳嗽: 轉成 Gemini 的表情標籤(<laugh>、<cough>), 比照字面念「哈哈」更像真的笑
   function laughTags(t) { return String(t == null ? '' : t).replace(/(?:哈哈+|嘻嘻+|呵呵+|嘿嘿+)/g, '<laugh> ').replace(/咳咳+/g, '<cough> '); }
   // 說書人的戲劇停頓: 刪節號、破折號後停一拍; 旁白轉到對話(「」)前停一拍
-  function richPauses(t, notFirst) { t = String(t == null ? '' : t); if (notFirst && /^[\u300C\u300E]/.test(t)) t = '<short pause>' + t; return t.replace(/(\u2026\u2026|\u2014\u2014)(?!<)/g, '$1<short pause>').replace(/([\u3002!?\uFF01\uFF1F])([\u300C\u300E])/g, '$1<short pause>$2'); }
+  function richPauses(t, notFirst) { t = String(t == null ? '' : t); if (notFirst && /^[\u300C\u300E]/.test(t)) t = '<short pause>' + t; else if (notFirst && /^(?:突然|忽然|就在這時|說時遲|原來)/.test(t)) t = '<short pause>' + t; t = t.replace(/([\u3002!?\uFF01\uFF1F])(突然|忽然|就在這時|說時遲|原來)/g, '$1<short pause>$2'); return t.replace(/(\u2026\u2026|\u2014\u2014)(?!<)/g, '$1<short pause>').replace(/([\u3002!?\uFF01\uFF1F])([\u300C\u300E])/g, '$1<short pause>$2'); }
   // 說書人的開場與收場(只在「朗讀內容」且內容像故事時加; 朗讀列有開關)
   function flourishChunks(genre, srcLen) {
     if (!genre || !genre.open) return null;
@@ -381,13 +444,19 @@
   }
   // AI 人聲的逐字稿:在轉折詞前加 <short pause>(Gemini 的英文標籤,中文逐字稿也用英文標籤)
   function aiScript(c) {   // 送給 AI 人聲的逐字稿(念法修正、表情標籤、說書人的停頓、轉折前停頓); 合成、預先準備、算聲音長度都用它, 才會對得上同一個快取
-    var sc = laughTags(exprText(pronounce(forSpeech(c.speak || c.text)))); if (c.rich) sc = richPauses(sc, !c.first);
+    var sc = laughTags(exprText(pronounce(forSpeech(c.speak || c.text)))); if (c.rich) sc = richPauses(keyLinePause(sc), !c.first);
     return withPauses(sc);
   }
   function withPauses(t) { return t.replace(/([^\s\u3002!?,;\u3001\uFF0C\uFF01\uFF1F\uFF1B])(但是|可是|不過|然而)/g, '$1<short pause>$2').replace(/([,\u3001\uFF0C])(但是|可是|不過|然而)/g, '$1<short pause>$2'); }
 
   // 說話方式(speech_metadata.style): 一般人設只送「這則貼文的語氣」(短短一句英文), 保留各人設原本的聲音特色; 只有「仿曉臻/仿 TTSMaker」這類有自己 style 的人設, 才在前面加上它的說話方式
-  function styleFor(personaId, toneStyle) { var ps = personaStyle(personaId); return ps ? ps + (toneStyle ? ' Tone: ' + toneStyle : '') : (toneStyle || ''); }
+  function clipStyle(str, max) { str = String(str || ''); if (str.length <= max) return str; var cut = str.slice(0, max), i = cut.lastIndexOf(', '); return (i > max * 0.5 ? cut.slice(0, i) : cut).replace(/[,\s]+$/, ''); }
+  function styleFor(personaId, toneStyle) {
+    var ps = personaStyle(personaId); if (!ps) return toneStyle || '';
+    if (!toneStyle) return ps;
+    var room = 800 - ps.length - 7;   // 送給 Gemini 的語氣描述最多 800 字: 人設的說話方式佔掉的以外, 才是這一段的語氣
+    return room >= 30 ? ps + ' Tone: ' + clipStyle(toneStyle, room) : ps;
+  }
   // 這台電腦存的「Gemini 金鑰」(設定中心 AI 設定頁第一張卡, 存在瀏覽器 localStorage kb_ai_key): 伺服器沒有金鑰時, 老師自己的瀏覽器改用它直接向 Google 合成.
   // 只有存了金鑰的那台電腦聽得到; 學生要聽, 還是要在雲端(或 Vercel 環境變數)存金鑰.
   function localKey() { try { return String(global.localStorage.getItem('kb_ai_key') || '').trim(); } catch (e) { return ''; } }
@@ -484,6 +553,88 @@
     return vP;
   }
   // 每一段聲音檔的長度(秒): 由 WAV 檔大小直接算(24kHz、單聲道、16-bit: 每秒 48000 位元組); 合成完或從存起來的取出時就知道, 用來顯示「分:秒」和進度
+
+  /* ---------- 段與段的銜接 ----------
+   * 每一段都是各自合成的聲音檔, 直接接起來常有問題: 前後有長短不一的靜音(接縫忽快忽慢)、尾巴被切得很硬或有爆音、兩段音量不一樣、每段結尾都像「講完了」。
+   * 做法: (1) 每段聲音檔去掉多餘的頭尾靜音、音量調成一致、加上極短的淡入淡出(合成後只做一次, 存起來);
+   *       (2) 段與段之間的停頓由我們決定: 看前一段結尾的標點與有沒有換段, 句號、驚嘆號、段落、說書人各有不同的長度;
+   *       (3) 該換氣的地方(換段、前一段很長)補一聲輕輕的吸氣聲(可在朗讀列關閉);
+   *       (4) 送給 AI 的語氣描述會註明「這一段不是結尾、接著還有」, 結尾的語調才不會每段都往下掉。 */
+  var stats = { breath: 0, processed: 0 };
+  function wavParse(b64) {   // → { sr, pcm: Int16Array } 或 null(不是 16-bit 單聲道 PCM WAV 就不處理)
+    try {
+      var bin = global.atob(String(b64 || '')), n = bin.length; if (n < 64) return null;
+      var u8 = new Uint8Array(n), i; for (i = 0; i < n; i++) u8[i] = bin.charCodeAt(i);
+      var dv = new DataView(u8.buffer);
+      if (bin.substr(0, 4) !== 'RIFF' || bin.substr(8, 4) !== 'WAVE') return null;
+      var pos = 12, sr = 0, bits = 0, ch = 0, fmt = 0, off = -1, len = 0;
+      while (pos + 8 <= n) {
+        var id = bin.substr(pos, 4), sz = dv.getUint32(pos + 4, true);
+        if (id === 'fmt ') { fmt = dv.getUint16(pos + 8, true); ch = dv.getUint16(pos + 10, true); sr = dv.getUint32(pos + 12, true); bits = dv.getUint16(pos + 22, true); }
+        else if (id === 'data') { off = pos + 8; len = Math.min(sz, n - off); break; }
+        pos += 8 + sz + (sz % 2);
+      }
+      if (off < 0 || fmt !== 1 || ch !== 1 || bits !== 16 || !sr) return null;
+      var cnt = len >> 1, pcm = new Int16Array(cnt); for (i = 0; i < cnt; i++) pcm[i] = dv.getInt16(off + i * 2, true);
+      return { sr: sr, pcm: pcm };
+    } catch (e) { return null; }
+  }
+  function wavBuild(pcm, sr) {
+    var n = pcm.length, u8 = new Uint8Array(44 + n * 2), dv = new DataView(u8.buffer), i;
+    function w(o, t) { for (var k = 0; k < t.length; k++) u8[o + k] = t.charCodeAt(k); }
+    w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+    for (i = 0; i < n; i++) dv.setInt16(44 + i * 2, pcm[i], true);
+    var out = '', CH = 0x8000; for (i = 0; i < u8.length; i += CH) out += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+    return global.btoa(out);
+  }
+  function trimNormalize(pcm, sr) {   // 去頭尾靜音(頭留 30 毫秒、尾留 60 毫秒)、音量只修正太小或太大的極端值(目標的 ±6 dB 內不動, 保留耳語與吶喊的對比)、淡入 8 毫秒、淡出 30 毫秒
+    var n = pcm.length, win = Math.max(1, Math.round(sr * 0.01)), thr = 0.012 * 32768, first = -1, last = -1, w, i, j;
+    for (w = 0; w * win < n; w++) { var s0 = w * win, e0 = Math.min(n, s0 + win), acc = 0; for (j = s0; j < e0; j++) acc += pcm[j] * pcm[j]; if (Math.sqrt(acc / (e0 - s0)) > thr) { if (first < 0) first = w; last = w; } }
+    if (first < 0) return pcm;   // 整段都很安靜: 不動
+    var a = Math.max(0, first * win - Math.round(sr * 0.03)), b = Math.min(n, (last + 1) * win + Math.round(sr * 0.06));
+    if (b - a < sr * 0.2) return pcm;
+    var out = new Int16Array(b - a), sum = 0, cnt = 0, v;
+    for (i = a; i < b; i++) { v = pcm[i]; if (Math.abs(v) > thr * 0.5) { sum += v * v; cnt++; } }
+    var rms = cnt ? Math.sqrt(sum / cnt) : 0, g = rms <= 0 ? 1 : rms < 0.05 * 32768 ? Math.min(2.5, (0.05 * 32768) / rms) : rms > 0.2 * 32768 ? Math.max(0.4, (0.2 * 32768) / rms) : 1, fi = Math.round(sr * 0.008), fo = Math.round(sr * 0.03), m = out.length;
+    for (i = 0; i < m; i++) {
+      v = pcm[a + i] * g; if (i < fi) v *= 0.5 - 0.5 * Math.cos(Math.PI * i / fi); if (i >= m - fo) v *= 0.5 - 0.5 * Math.cos(Math.PI * (m - 1 - i) / fo);
+      out[i] = Math.max(-31800, Math.min(31800, Math.round(v)));
+    }
+    return out;
+  }
+  function processWav(b64) { try { var wv = wavParse(b64); if (!wv) return b64; stats.processed++; return wavBuild(trimNormalize(wv.pcm, wv.sr), wv.sr); } catch (e) { return b64; } }
+  // 輕輕的吸氣聲: 柔和的氣流雜音(固定的亂數種子, 每次一樣), 慢慢變大再收掉, 音量很小(約 -27 dBFS)
+  function breathPcm(ms, sr) {
+    var n = Math.max(1, Math.round(sr * ms / 1000)), out = new Int16Array(n), seed = 12345, lp = 0, slow = 0, i;
+    for (i = 0; i < n; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff; var x = (seed / 0x3fffffff) - 1;
+      lp += 0.32 * (x - lp); slow += 0.02 * (lp - slow);
+      var t = i / n, env = t < 0.6 ? Math.pow(t / 0.6, 1.6) : Math.pow((1 - t) / 0.4, 1.3);
+      out[i] = Math.round((lp - slow) * env * 0.05 * 32768 * 2.2);
+    }
+    return out;
+  }
+  function withBreathWav(b64, ms) {   // 在這段聲音前面接上吸氣聲(再留 25 毫秒的空檔)
+    try {
+      var wv = wavParse(b64); if (!wv) return b64;
+      var br = breathPcm(ms, wv.sr), gap = Math.round(wv.sr * 0.025), out = new Int16Array(br.length + gap + wv.pcm.length);
+      out.set(br, 0); out.set(wv.pcm, br.length + gap); stats.breath++;
+      return wavBuild(out, wv.sr);
+    } catch (e) { return b64; }
+  }
+  // 段與段之間要停多久(毫秒): 依前一段結尾的標點; 換段、對話與旁白交替、說書人較長; breath = 要不要補吸氣聲(毫秒, 0 = 不補)
+  function joinGapMs(prev, next, rich) {
+    if (!prev || !next) return { gap: 0, breath: 0 };
+    var t = String(prev.text || '').replace(/[\s\u300D\u300F\u201D"')\uFF09]+$/, ''), end = t.slice(-1), g = 150;
+    if (/\u2026$/.test(t) || /\u2014$/.test(t)) g = 300; else if (/[\u3002.]/.test(end)) g = 170; else if (/[!?\uFF01\uFF1F]/.test(end)) g = 200; else if (/[,;\uFF0C\uFF1B\u3001]/.test(end)) g = 120;
+    var DIA = /[\u300C\u300E\u201C"]/;
+    if (DIA.test(String(prev.text || '')) !== DIA.test(String(next.text || ''))) g += 60;
+    if (prev.par) g += 200;
+    if (rich) g = Math.round(g * 1.25);
+    var len = effLen(prev.text), br = 0;
+    if (prev.par || len >= 50 || (rich && len >= 30)) br = prev.par ? 220 : 170;
+    return { gap: g, breath: br };
+  }
   var durMem = {}, durVer = 0;
   function secOfWav(b64) { var n = String(b64 || '').length; if (n < 200) return 0; return Math.max(0, (n * 0.75 - 44) / 48000); }
   function secOfClip(b64) { return H.secOf ? H.secOf(b64) : secOfWav(b64); }
@@ -499,7 +650,10 @@
   }
   function aiClip1(key, text, voice, style, model) {
     return cacheGet(key).then(function (hit) {
-      if (hit && hit.b64) { var s0 = secOfClip(hit.b64); noteDur(key, s0); return { url: b64ToUrl(hit.b64, hit.mime), cached: true, sec: s0 }; }
+      if (hit && hit.b64) {
+        var hb = hit.b64; if (!hit.p) { hb = processWav(hit.b64); cachePut(key, { b64: hb, mime: hit.mime || 'audio/wav', p: 1 }); }   // 舊的存檔也補做一次修整
+        var s0 = secOfClip(hb); noteDur(key, s0); return { url: b64ToUrl(hb, hit.mime), cached: true, sec: s0, b64: hb };
+      }
       var f = H.fetch || global.fetch;
       return f('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, voice: voice, style: style, model: model || undefined }) }).then(function (r) {
         return r.json().catch(function () { return null; }).then(function (j) {
@@ -510,9 +664,10 @@
         if (!fallbackOk(e)) throw e;
         return directClip(text, voice, style, model, localKey());
       }).then(function (j) {
-        cachePut(key, { b64: j.audio, mime: j.mime || 'audio/wav' });
-        var s1 = secOfClip(j.audio); noteDur(key, s1);
-        return { url: b64ToUrl(j.audio, j.mime), cached: false, sec: s1 };
+        var pb = processWav(j.audio);   // 去頭尾靜音、音量一致、淡入淡出(只做一次, 存起來的就是修整過的)
+        cachePut(key, { b64: pb, mime: j.mime || 'audio/wav', p: 1 });
+        var s1 = secOfClip(pb); noteDur(key, s1);
+        return { url: b64ToUrl(pb, j.mime), cached: false, sec: s1, b64: pb };
       });
     });
   }
@@ -535,6 +690,16 @@
       var c = o.chunks[i]; if (!c) return null;
       return (self.pre[i] = aiClip(aiScript(c), o.voice, c.style || o.style, o.model));
     }
+    // 這一段播完了: 依標點與段落停一下(必要時補吸氣聲), 再接下一段; 停頓期間可以暫停/停止
+    function advance(tok) {
+      var prev = o.chunks[self.i], nxt = o.chunks[self.i + 1]; self.i++;
+      if (!nxt) return run(tok);
+      var jg = joinGapMs(prev, nxt, !!prev.rich), rate = Math.max(0.5, Math.min(2, o.rate || 1)), sc = H.aiGap == null ? 1 : H.aiGap;
+      self.breathMs = o.breath !== false && jg.breath ? jg.breath : 0;
+      var ms = Math.round(jg.gap * sc / rate);
+      if (ms <= 0) return run(tok);
+      clearGap(); self.gapT = setTimeout(function () { self.gapT = null; run(tok); }, ms);
+    }
     var AHEAD = 3;   // 播這一段時, 同時先把後面 3 段準備好(不然每一段都要等合成, 聲音就會斷斷續續)
     var waitT = null;
     function clearWait() { if (waitT) { clearTimeout(waitT); waitT = null; } if (self.waiting) { self.waiting = false; say(''); } }
@@ -545,10 +710,13 @@
       now.then(function (clip) {
         clearWait();
         if (tok !== self.token || self.state !== 'playing') return;
-        var a = H.Audio ? new H.Audio(clip.url) : new global.Audio(clip.url); self.audio = a;
+        var url = clip.url;
+        if (self.breathMs && clip.b64) { try { url = b64ToUrl(withBreathWav(clip.b64, self.breathMs), 'audio/wav'); } catch (e) {} }   // 換氣的地方: 先一聲輕輕的吸氣, 再接這段
+        self.breathMs = 0;
+        var a = H.Audio ? new H.Audio(url) : new global.Audio(url); self.audio = a;
         if (self.seekFrac > 0) { var sf = self.seekFrac; self.seekFrac = 0; var setT = function () { if (a.duration > 0 && isFinite(a.duration)) { try { a.currentTime = Math.min(a.duration - 0.05, sf * a.duration); } catch (e) {} } }; a.onloadedmetadata = setT; setT(); }   // 拖到這一段中間: 從這段聲音的那個位置開始播
         try { a.playbackRate = Math.max(0.5, Math.min(2, o.rate || 1)); } catch (e) {}
-        a.onended = function () { if (tok === self.token && self.state === 'playing') { self.i++; run(tok); } };
+        a.onended = function () { if (tok === self.token && self.state === 'playing') advance(tok); };
         a.onerror = function () { fail(new Error('聲音檔播放失敗'), tok); };
         var p = a.play(); if (p && p.catch) p.catch(function (e) { if (tok === self.token && !(e && e.name === 'AbortError')) fail(e, tok); });
       }, function (err) { fail(err, tok); });
@@ -591,7 +759,7 @@
     };
     this.resume = function () {
       if (self.state !== 'paused') return; set('playing'); var tok = ++self.token;
-      if (self.engine === 'ai' && self.audio && !self.audio.ended && self.audio.currentTime > 0) { var a = self.audio; a.onended = function () { if (tok === self.token && self.state === 'playing') { self.i++; run(tok); } }; var p = a.play(); if (p && p.catch) p.catch(function () { run(tok); }); }
+      if (self.engine === 'ai' && self.audio && !self.audio.ended && self.audio.currentTime > 0) { var a = self.audio; a.onended = function () { if (tok === self.token && self.state === 'playing') advance(tok); }; var p = a.play(); if (p && p.catch) p.catch(function () { run(tok); }); }
       else run(tok);   // 瀏覽器聲音: 從這一句開頭再念(句子都不長)
     };
     this.stop = function () {
@@ -686,7 +854,7 @@
       if (opt.sentence) fs.push(rest.shift());
       else while (rest.length && (!fs.length || len + rest[0].text.length <= lim)) { if (opt.emo && fs.length && len >= (opt.rich ? 18 : 36) && emoShift(fs, rest[0])) break; var x = rest.shift(); fs.push(x); len += x.text.length; }
       var ck = { text: fs.map(function (q) { return q.text; }).join('').slice(0, 600), start: fs[0].start, end: fs[fs.length - 1].end, n: fs.length };
-      if (opt.sentence) ck.par = rest.length > 0 && /\n/.test(src.slice(fs[fs.length - 1].end, rest[0].start));   // 這句後面是換行(段落)
+      ck.par = rest.length > 0 && /\n/.test(src.slice(fs[fs.length - 1].end, rest[0].start));   // 這一段後面是換行(換段): 瀏覽器語音多停一下, AI 人聲多停一下並補吸氣聲
       out.push(ck);
     }
     return out;
@@ -730,7 +898,7 @@
     var prefs = loadPrefs(), reader = null, mode = 'body', curPlan = null, aiOk = false, engAuto = false;   // engAuto: 語音來源是自動切換的(不是使用者自己選的), 不存成偏好
     host.innerHTML = '<div class="kbt" role="group" aria-label="朗讀這則貼文"><div class="kbt-row"><button type="button" class="kbt-btn" data-k="play" aria-label="朗讀內容">🔊 朗讀內容</button><button type="button" class="kbt-btn alt" data-k="stop" hidden aria-label="停止朗讀">⏹ 停止</button>' +
       '<select data-k="engine" aria-label="語音來源"><option value="ai">AI 人聲(較自然)</option><option value="browser">瀏覽器語音(免費、不耗額度)</option></select><select data-k="voice" aria-label="選擇聲音">' + PERSONAS.map(function (p) { return '<option value="ai:' + p.id + '">' + esc(p.name) + '</option>'; }).join('') + '</select><select data-k="rate" aria-label="朗讀速度"><option value="0.8">慢一點</option><option value="0.9">稍慢(預設)</option><option value="1">正常</option><option value="1.15">稍快</option><option value="1.3">快</option></select>' +
-      '<select data-k="tone" aria-label="語氣"><option value="auto">語氣:自動判斷</option>' + STYLES.map(function (x) { return '<option value="' + x.id + '">' + esc(x.zh) + '</option>'; }).join('') + '</select><label><input type="checkbox" data-k="auto" checked> 自動語氣</label><label data-k="flourL" hidden><input type="checkbox" data-k="flour" checked> 說書開場與收場</label></div>' +
+      '<select data-k="tone" aria-label="語氣"><option value="auto">語氣:自動判斷</option>' + STYLES.map(function (x) { return '<option value="' + x.id + '">' + esc(x.zh) + '</option>'; }).join('') + '</select><label><input type="checkbox" data-k="auto" checked> 自動語氣</label><label data-k="flourL" hidden><input type="checkbox" data-k="flour" checked> 說書開場與收場</label><label data-k="breathL" title="段與段之間的換氣: 輕輕的一聲吸氣, 聽起來像真人在說話"><input type="checkbox" data-k="breath" checked> 自然換氣</label></div>' +
       '<div class="kbt-prog" data-k="prog" role="group" aria-label="朗讀進度"><button type="button" class="kbt-mini" data-k="back" aria-label="倒退 10 秒">&#9194; 10</button><span class="kbt-t" data-k="tcur" aria-hidden="true">0:00</span><input type="range" data-k="seek" min="0" max="1" value="0" step="1" aria-label="朗讀進度,可拖曳到想聽的地方"><span class="kbt-t" data-k="ttot" aria-hidden="true">0:00</span><button type="button" class="kbt-mini" data-k="fwd" aria-label="快轉 10 秒">10 &#9193;</button></div>' +
       '<details class="kbt-tl" data-k="tl"><summary>時間表(每一句在幾分幾秒; 點一句就從那裡開始念)</summary><div data-k="tlist"></div></details><div class="kbt-info" data-k="info"></div><div class="kbt-cap" data-k="cap" aria-live="polite"></div><div class="kbt-note" data-k="note" role="status"></div></div>';
     var $ = function (k) { return host.querySelector('[data-k="' + k + '"]'); };
@@ -738,9 +906,9 @@
     var rb = doc.createElement('button'); rb.type = 'button'; rb.className = 'kbt-btn kbt-replies'; rb.setAttribute('data-k', 'playr'); rb.setAttribute('aria-label', '朗讀其他人的全部回應'); rb.textContent = '🔊 朗讀全部回應(0)';
     if (ctx.repliesHost) { ctx.repliesHost.style.display = ''; ctx.repliesHost.appendChild(rb); } else host.querySelector('.kbt-row').appendChild(rb);
     if (ctx.titleHost) { ctx.titleHost.style.display = ''; ctx.titleHost.appendChild(tb); } else { var rowEl = host.querySelector('.kbt-row'); rowEl.insertBefore(tb, rowEl.firstChild); }
-    var play = $('play'), playt = tb, playr = rb, stopB = $('stop'), eng = $('engine'), vs = $('voice'), rs = $('rate'), au = $('auto'), fl = $('flour'), flL = $('flourL'), tn = $('tone'), prog = $('prog'), seek = $('seek'), tcur = $('tcur'), ttot = $('ttot'), backB = $('back'), fwdB = $('fwd'), tlBox = $('tl'), tlist = $('tlist'), info = $('info'), cap = $('cap'), note = $('note');
+    var play = $('play'), playt = tb, playr = rb, stopB = $('stop'), eng = $('engine'), vs = $('voice'), rs = $('rate'), au = $('auto'), fl = $('flour'), flL = $('flourL'), bk = $('breath'), bkL = $('breathL'), tn = $('tone'), prog = $('prog'), seek = $('seek'), tcur = $('tcur'), ttot = $('ttot'), backB = $('back'), fwdB = $('fwd'), tlBox = $('tl'), tlist = $('tlist'), info = $('info'), cap = $('cap'), note = $('note');
     rs.value = prefs.rate || '0.9'; if (prefs.tone && tn.querySelector('option[value="' + prefs.tone + '"]')) tn.value = prefs.tone;
-    au.checked = prefs.auto !== false; fl.checked = prefs.flour !== false;
+    au.checked = prefs.auto !== false; fl.checked = prefs.flour !== false; bk.checked = prefs.breath !== false;
     eng.value = prefs.engine === 'browser' || Date.now() - aiCool < 1800000 ? 'browser' : 'ai';
     if (!synth()) eng.querySelector('option[value="browser"]').disabled = true;
     vs.value = prefs.voice && vs.querySelector('option[value="' + String(prefs.voice).replace(/"/g, '') + '"]') ? prefs.voice : 'ai:p2';   // 以前存過瀏覽器聲音的人, 換成預設的 AI 人聲
@@ -748,6 +916,7 @@
     function post() { var p = ctx.getPost() || {}; return { type: p.type, title: p.title || '', content: p.content || '' }; }
     function replies() { try { var l = ctx.getReplies && ctx.getReplies(); return Array.isArray(l) ? l.filter(function (r) { return r && (String(r.content || '').trim() || String(r.title || '').trim()); }) : []; } catch (e) { return []; } }
     function showInfo() {
+      bkL.hidden = eng.value === 'browser';   // 吸氣聲只有 AI 人聲有
       flL.hidden = !(PERSONAS.filter(function (x) { return x.id === vs.value.replace(/^ai:/, ''); })[0] || {}).rich;
       var t = analyze(post()), pr = preset(), pdef = PERSONAS.filter(function (x) { return x.id === vs.value.replace(/^ai:/, ''); })[0] || {};
       info.textContent = (pr ? '語氣(手動選擇): ' + pr.zh : au.checked ? '語氣(依這則貼文自動判斷): ' + t.label + (pdef.rich ? '; 說書人會每一小段依情節與情緒再變化' : '; 每一小段也會依自己的情緒、對話再微調') : '語氣: 自然、清楚(已關閉自動語氣)') + (eng.value === 'browser' ? ' ‧ 瀏覽器語音: 用語速、音高和停頓模擬語氣' : '');
@@ -761,8 +930,12 @@
       var tone = pr ? { style: pr.en } : au.checked && md !== 'replies' ? analyze(pst) : { style: '' };
       var chunks = md === 'replies' ? replyChunks(rl, au.checked && !pr, personaId, isBr) : chunksFor(pst, md === 'sel' ? 'body' : md, '', true, { sentence: isBr, rich: rich && !isBr, emo: au.checked && !pr && !isBr });
       if ((md === 'body' || md === 'sel') && au.checked && !pr) {   // 每一小段依自己的情緒、對話、故事類型調整語氣(AI 人聲送語氣描述; 瀏覽器聲音調語速與音高)
-        var genre = genreOf(pst.content);
-        chunks.forEach(function (c) { var t = toneForChunk(c.text, genre, tone.style, rich); c.dr = t.dr; c.dp = t.dp; c.dv = t.dv; c.rich = rich; c.label = t.label; if (t.changed) c.style = styleFor(personaId, t.style); });
+        var genre = genreOf(pst.content), prev = null, streak = 0, n = chunks.length;
+        chunks.forEach(function (c, idx) {
+          var t = toneForChunk(c.text, genre, tone.style, rich, { first: idx === 0, last: idx === n - 1, n: n, prev: prev, streak: streak }, pdef.lean);
+          c.dr = t.dr; c.dp = t.dp; c.dv = t.dv; c.rich = rich; c.label = t.label; c.level = t.level; if (t.changed) c.style = styleFor(personaId, t.style);
+          streak = t.emotion && HIGH[t.emotion] ? streak + 1 : 0; prev = t;
+        });
         var fo = md === 'body' && rich && fl.checked ? flourishChunks(genre, pst.content.length) : null;   // 說書人: 故事前面加開場、後面加收場
         if (fo) { [fo.open, fo.close].forEach(function (c) { c.rich = true; c.dr = 0; c.dp = 0; c.style = styleFor(personaId, fitStyle(uniq([genre.en, 'a showman\'s flourish, theatrical and inviting']), 260)); }); chunks = [fo.open].concat(chunks, [fo.close]); }
       } else if (rich) chunks.forEach(function (c) { c.rich = true; });
@@ -838,12 +1011,12 @@
     function secOfChunk(c, pl) { return pl.engine === 'ai' ? (durMem[clipKey(aiScript(c), pl.voice, c.style || pl.style, pl.model)] || 0) : 0; }
     function gapEst(c) { var t = String(c.text || ''), commas = (t.match(/[,\u3001\uFF0C]/g) || []).length, ends = (t.match(/[\u3002!?\uFF01\uFF1F]/g) || []).length; return commas * 0.15 + (ends || 1) * 0.42 + (c.par ? 0.38 : 0); }
     function cpsKey(pl) { return pl.engine === 'browser' ? 'b' : 'a:' + pl.voice; }
-    function chunkSec(c, pl) {
+    function chunkSec(c, pl, nxt) {
       var rate = parseFloat(rs.value) || 1, sc = secOfChunk(c, pl);
-      if (sc > 0) { var n0 = effLen(pronounce(forSpeech(c.text))), k0 = cpsKey(pl) + '|' + sc; if (n0 > 3 && !calSeen[k0]) { calSeen[k0] = 1; cpsNote(cpsKey(pl), n0 / sc); } return sc / rate; }   // 量到的長度; 順便記下這個聲音每秒念幾個字
+      if (sc > 0) { var gap0 = nxt ? joinGapMs(c, nxt, !!c.rich).gap / 1000 : 0; var n0 = effLen(pronounce(forSpeech(c.text))), k0 = cpsKey(pl) + '|' + sc; if (n0 > 3 && !calSeen[k0]) { calSeen[k0] = 1; cpsNote(cpsKey(pl), n0 / sc); } return sc / rate + gap0 / rate; }   // 量到的長度(加上段與段的停頓); 順便記下這個聲音每秒念幾個字
       var n = effLen(pronounce(forSpeech(c.text))), cps = cpsLoad()[cpsKey(pl)] || (pl.engine === 'browser' ? 4.0 : 4.4);
       if (pl.engine === 'browser') return n / (cps * rate * ((pl.br && pl.br.rate) || 1)) + gapEst(c) / rate;
-      return n / (cps * rate);
+      return n / (cps * rate) + (nxt ? joinGapMs(c, nxt, !!c.rich).gap / 1000 / rate : 0);
     }
     function tlBuild(pl, m) {   // 結構(每一句的位置與字數)只建一次; 時間另外算
       var src = srcOf(pl), ents = [];
@@ -861,7 +1034,7 @@
       var pl = tl.pl, t = 0, exact = pl.engine === 'ai', by = {};
       tl.ents.forEach(function (e) { (by[e.ci] = by[e.ci] || []).push(e); });
       pl.chunks.forEach(function (c, ci) {
-        var d = chunkSec(c, pl), list = by[ci] || [], tw = 0, acc = t;
+        var d = chunkSec(c, pl, pl.chunks[ci + 1]), list = by[ci] || [], tw = 0, acc = t;
         if (exact && !secOfChunk(c, pl)) exact = false;
         list.forEach(function (e) { tw += e.w; });
         list.forEach(function (e) { e.t0 = acc; acc += d * (e.w / (tw || 1)); e.t1 = acc; });
@@ -985,7 +1158,7 @@
       note.textContent = opt.note || ''; cap.textContent = ''; selNote(opt.note || '');
       var rd = sel.read, rmode = mode;
       reader = new Reader({
-        chunks: chunks, from: from, fromFrac: frac, engine: pl.engine, br: pl.br, voice: pl.voice, style: pl.style, model: pl.model, rate: userRate, onAiFail: aiFail,
+        chunks: chunks, from: from, fromFrac: frac, breath: bk.checked, engine: pl.engine, br: pl.br, voice: pl.voice, style: pl.style, model: pl.model, rate: userRate, onAiFail: aiFail,
         onChunk: function (i, c) {
           if (i < 0) { cap.textContent = ''; clearHighlight(); return; }
           cap.textContent = (c.reply ? '(回應 ' + c.reply + ')' : '') + c.text; if (rmode === 'sel') setTimeout(selPlace, 0);   // 字幕出現會把內文往下推, 浮動列跟著移
@@ -1013,6 +1186,7 @@
     });
     stopB.onclick = function () { if (reader) reader.stop(); };
     [vs, au, tn].forEach(function (e) { e.onchange = function () { showInfo(); if (!retune()) tlRefresh(); }; });
+    bk.onchange = function () { prefs.breath = bk.checked; savePrefs(prefs); if (reader) reader.o.breath = bk.checked; tlRefresh(); };
     fl.onchange = function () { prefs.flour = fl.checked; savePrefs(prefs); if (!retune()) tlRefresh(); };   // 讀到一半換聲音/語氣: 從現在讀到的地方接著讀
     eng.onchange = function () { engAuto = false; prefs.engine = eng.value; savePrefs(prefs); showInfo(); if (!retune()) tlRefresh(); };
     rs.onchange = function () { prefs.rate = rs.value; savePrefs(prefs); if (reader && reader.state !== 'idle') reader.setRate(parseFloat(rs.value) || 1); tlCompute(); tlLabels(); tlTick(); };   // 改速度馬上生效, 不用重頭
@@ -1042,6 +1216,6 @@
   global.KBTts = {
     PERSONAS: PERSONAS, TONES: TONES, STYLES: STYLES, EXPR: EXPR, exprText: exprText, analyze: analyze, splitSentences: splitSentences, groupSentences: groupSentences, forSpeech: forSpeech, withPauses: withPauses,
     mount: mount, stop: stop, pronounce: pronounce, numbersZh: numbersZh, cardinalZh: cardinalZh, genreOf: genreOf, emotionOf: emotionOf, toneForChunk: toneForChunk, browserUnits: browserUnits, brParams: brParams, twVoices: twVoices, exprBrowser: exprBrowser, chunksFor: chunksFor, replyChunks: replyChunks, resumeAt: resumeAt, personaVoice: personaVoice, personaStyle: personaStyle, aiClip: aiClip, voiceList: voiceList, localKey: localKey, Reader: Reader, aiState: aiState,
-    _t: { durMem: durMem, fmtT: fmtT, effLen: effLen, aiScript: aiScript, H: H, mem: mem, setHighlight: setHighlight, textMap: textMap, hash: hash, resetAi: function () { aiState.v = null; vlist = null; vP = null; } }
+    _t: { craftOf: craftOf, keyLinePause: keyLinePause, stats: stats, processWav: processWav, withBreathWav: withBreathWav, wavParse: wavParse, wavBuild: wavBuild, joinGapMs: joinGapMs, durMem: durMem, fmtT: fmtT, effLen: effLen, aiScript: aiScript, H: H, mem: mem, setHighlight: setHighlight, textMap: textMap, hash: hash, resetAi: function () { aiState.v = null; vlist = null; vP = null; } }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
