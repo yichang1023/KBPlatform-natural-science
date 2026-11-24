@@ -1,0 +1,27 @@
+/* 滑鼠懸浮效果(全站共用): 滑鼠移到按鈕、選項、清單項目上時, 像浮起來一點點(放大約 3.5%)並變亮。
+ * 只在「有滑鼠」的裝置啟用(手機、平板不受影響); 系統設定「減少動態效果」的人只變亮、不位移。
+ * 不想套用的元素加上 class="kb-nohover"。 */
+@media (hover: hover) and (pointer: fine) {
+  :where(button:not(:disabled), [role="tab"], [role="button"], summary, .nav-item, .student-item, .step-btn, a.btn,
+         a[href][class*="rounded"], a[href][class*="px-"], label.cursor-pointer) {
+    transition: transform .18s ease, filter .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  :is(button:not(:disabled), [role="tab"], [role="button"], summary, .nav-item, .student-item, .step-btn, a.btn,
+      a[href][class*="rounded"], a[href][class*="px-"], label.cursor-pointer):not(.kb-nohover):not([class*="hover:scale"]):not([class*="translate"]):not([class*="rotate"]):not([class~="transform"]):not(#asra-banner):hover {
+    filter: brightness(1.13) saturate(1.06) drop-shadow(0 3px 6px rgba(15, 23, 42, .2));
+  }
+  /* 清單項目與步驟: 底色也變亮, 和旁邊的項目分得更清楚 */
+  .nav-item:not(.kb-nohover):hover { background-color: #334155 !important; color: #fff; }
+  .student-item:not(.kb-nohover):hover { background-color: #eef2ff !important; border-color: #818cf8 !important; }
+  .step-btn:not(.kb-nohover):hover { background-color: #eef2ff; border-color: #a5b4fc; }
+  /* 「我要來反思」: 滑鼠移到整條橫幅時, 白色按鈕浮起 */
+  #asra-banner span.bg-white { transition: transform .18s ease, filter .18s ease; }
+  #asra-banner:hover span.bg-white { filter: brightness(1.1) drop-shadow(0 3px 6px rgba(15, 23, 42, .25)); }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :is(button:not(:disabled), [role="tab"], [role="button"], summary, .nav-item, .student-item, .step-btn, a.btn,
+      a[href][class*="rounded"], a[href][class*="px-"], label.cursor-pointer):not(.kb-nohover):not([class*="hover:scale"]):not([class*="translate"]):not([class*="rotate"]):not([class~="transform"]):not(#asra-banner):hover {
+    transform: translateY(-2px) scale(1.035);
+  }
+  #asra-banner:hover span.bg-white { transform: translateY(-2px) scale(1.07); }
+}
