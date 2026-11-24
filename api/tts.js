@@ -7,7 +7,7 @@
 const { clientIp, rate, originOk, send, bodyOf } = require('./_guard');
 const { getKey } = require('./_gcp');
 
-const MAX_TEXT = 700;                                   // 一次最多合成幾個字(瀏覽器端會把長貼文切成小段)
+const MAX_TEXT = 1000;                                   // 一次最多合成幾個字(瀏覽器端會把長貼文切成小段)
 const MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
 // 聲音名稱不設格式限制(想填什麼都可以: 預設聲音名 Kore…、自訂聲音編號 voice_…、AI Studio 上看到的名字); 只拿掉控制字元、限制長度. 名稱只會放進 JSON 傳給 Google, 對不對由 Google 判斷, 錯了會把原因顯示給使用者
 let day = { d: '', n: 0 };
@@ -35,6 +35,14 @@ function quotaMessage(raw) {
   if (m && (m[1] || m[2] || m[3])) { const h = +m[1] || 0, mi = +m[2] || 0, s = Math.ceil(+m[3] || 0); wait = h ? '約 ' + (h + (mi >= 30 ? 1 : 0)) + ' 小時後' : mi ? '約 ' + (mi + (s > 0 ? 1 : 0)) + ' 分鐘後' : '約 ' + Math.max(1, s) + ' 秒後'; }
   if (perMin) return '現在同時合成語音的人太多了(Gemini 每分鐘有次數限制),請等' + (wait ? wait.replace(/後$/, '') : '一分鐘') + '再試。聽過的內容仍可重複播放。';
   return '今天的語音額度用完了' + (free ? '。因為目前使用的是免費版的 Gemini API 金鑰,每天能合成的次數很少' : '(已超過目前 Gemini 方案的語音上限)') + '。' + (wait ? wait + '會恢復; ' : '') + '請明天再試,或請老師在 Google AI Studio 開啟計費(升級付費)。聽過的內容仍可重複播放。';
+}
+// 回傳聲音: 小的一次送出; 大的(幾 MB)改成分段串流送出 —— Vercel 的 4.5MB 回傳上限不適用於串流(實測 300 字的聲音包成 JSON 已經 4.4MB, 600 字約 9MB)
+function sendAudio(res, audio, model) {
+  if (typeof res.write !== 'function' || audio.length < 3000000) return send(res, 200, { audio, mime: 'audio/wav', model });
+  res.statusCode = 200; res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'no-store');
+  res.write('{"audio":"');
+  for (let i = 0; i < audio.length; i += 262144) res.write(audio.slice(i, i + 262144));
+  res.end('","mime":"audio/wav","model":' + JSON.stringify(String(model)) + '}');
 }
 function upstreamMessage(status, raw) {
   if (status === 400) return '這段文字或這個聲音,語音模型不接受。';
@@ -102,7 +110,7 @@ module.exports = async function handler(req, res) {
     if (!a || !a.data) return send(res, 502, { error: { message: '語音模型沒有回傳聲音,請換一段文字再試。' } });
     const mime = String(a.mimeType || a.mime_type || 'audio/wav');
     const audio = /wav|wave/i.test(mime) ? a.data : wrapWav(a.data);
-    return send(res, 200, { audio, mime: 'audio/wav', model });
+    return sendAudio(res, audio, model);
   } catch (e) {
     return send(res, 500, { error: { message: '朗讀服務發生錯誤' } });
   }
