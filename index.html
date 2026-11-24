@@ -114,6 +114,17 @@
             transform: translateY(0%);
         }
     </style>
+<style id="kb-hover-fx">
+/* 滑鼠移到選項上: 像浮起來一點點、顏色變亮(只在有滑鼠的裝置; 系統設定「減少動態效果」時不動) */
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+  #entry-grid .btn-glow{transition:transform .18s ease,filter .18s ease,box-shadow .18s ease,border-color .18s ease}
+  #entry-grid .btn-glow:hover{transform:translateY(-3px) scale(1.035);filter:brightness(1.35) saturate(1.1);box-shadow:0 10px 26px rgba(129,140,248,.35);border-color:rgba(199,210,254,.8)}
+  #entry-grid .btn-glow:active{transform:translateY(-1px) scale(1.01)}
+}
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:reduce){
+  #entry-grid .btn-glow:hover{filter:brightness(1.35);border-color:rgba(199,210,254,.8)}
+}
+</style>
 </head>
 <body class="min-h-screen flex flex-col font-sans">
 

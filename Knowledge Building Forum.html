@@ -69,6 +69,16 @@
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         @media (max-width: 767px) { .kb-fab { bottom: calc(5rem + env(safe-area-inset-bottom, 0px)) !important; } .kb-fab button { touch-action: manipulation; } }   /* 手機: 「+」鈕要在底部導覽列(含 iPhone 底部安全區)上方, 且蓋過捲軸層 */
     </style>
+<style id="kb-hover-fx">
+/* 滑鼠移到討論社群卡片上: 像浮起來一點點、顏色變亮(只在有滑鼠的裝置; 系統設定「減少動態效果」時不動) */
+.kb-topic-card{transition:transform .18s ease,box-shadow .18s ease,background-color .18s ease,border-color .18s ease}
+@media (hover:hover) and (pointer:fine){
+  .kb-topic-card:hover{background-color:#eef2ff;border-color:#818cf8;box-shadow:0 12px 28px rgba(79,70,229,.22)}
+}
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+  .kb-topic-card:hover{transform:translateY(-4px) scale(1.025);position:relative;z-index:5}
+}
+</style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-full w-full flex flex-col font-sans">
     <!-- Top Navbar -->
@@ -1874,7 +1884,7 @@
                         const authorName = window.state.userList[t.author] ? window.state.userList[t.author].name : 'Unknown';
 
                         return `
-                        <div onclick="window.app.topicClick(event,'${t.id}')" ondblclick="window.app.topicOpen(event,'${t.id}')" title="電腦版:連按兩下進入討論區" data-kbhref="Knowledge Building Forum.html?topic=${encodeURIComponent(t.id)}" class="bg-white rounded-xl border p-5 cursor-pointer hover:shadow-lg relative overflow-hidden group transition">
+                        <div onclick="window.app.topicClick(event,'${t.id}')" ondblclick="window.app.topicOpen(event,'${t.id}')" title="電腦版:連按兩下進入討論區" data-kbhref="Knowledge Building Forum.html?topic=${encodeURIComponent(t.id)}" class="kb-topic-card bg-white rounded-xl border p-5 cursor-pointer hover:shadow-lg relative overflow-hidden group transition">
                             <div class="flex justify-between mb-3 items-start">
                                 <div class="flex flex-wrap gap-1">${tagsHtml}</div>
                                 ${adminControls}
