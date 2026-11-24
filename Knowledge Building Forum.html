@@ -707,6 +707,7 @@
         };
 
         window.app.deleteNode = (id) => {
+            if (Date.now() - (window.state._enteredAt || 0) < 900) return window.ui.showToast('剛進到討論區,請稍等一下再按刪除', 'info');   // 連按太快的保護
             const tgt = window.state.nodes.find(n => n.id === id);
             if (!tgt) return;
             const hasReplies = window.state.nodes.some(n => n.parentId === id);
@@ -731,7 +732,18 @@
             });
         };
 
+        // 電腦版(有滑鼠): 討論區卡片要「連按兩下」才進入, 避免點太快第二下落在剛進去的畫面上(差點按到刪除); 手機/平板(觸控)維持點一下就進入
+        window.app.topicClick = (ev, id) => {
+            let fine = false; try { fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch (e) {}
+            if (!fine) return window.app.enterTopic(id);
+            if (ev && ev.target && ev.target.closest && ev.target.closest('button,a,input,select')) return;   // 卡片裡的小按鈕照常運作
+        };
+        window.app.topicOpen = (ev, id) => {
+            if (ev && ev.target && ev.target.closest && ev.target.closest('button,a,input,select')) return;
+            window.app.enterTopic(id);
+        };
         window.app.enterTopic = (id) => {
+            window.state._enteredAt = Date.now();   // 剛進入討論區的一小段時間內, 擋掉刪除(連按太快的保護)
             window.state.currentTopicId = id;
             window.state.canvas.scale=1;
             window.state.needsCentering = true;
@@ -1862,7 +1874,7 @@
                         const authorName = window.state.userList[t.author] ? window.state.userList[t.author].name : 'Unknown';
 
                         return `
-                        <div onclick="window.app.enterTopic('${t.id}')" data-kbhref="Knowledge Building Forum.html?topic=${encodeURIComponent(t.id)}" class="bg-white rounded-xl border p-5 cursor-pointer hover:shadow-lg relative overflow-hidden group transition">
+                        <div onclick="window.app.topicClick(event,'${t.id}')" ondblclick="window.app.topicOpen(event,'${t.id}')" title="電腦版:連按兩下進入討論區" data-kbhref="Knowledge Building Forum.html?topic=${encodeURIComponent(t.id)}" class="bg-white rounded-xl border p-5 cursor-pointer hover:shadow-lg relative overflow-hidden group transition">
                             <div class="flex justify-between mb-3 items-start">
                                 <div class="flex flex-wrap gap-1">${tagsHtml}</div>
                                 ${adminControls}
