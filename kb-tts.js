@@ -563,6 +563,7 @@
   var brSwing = 1;      // 語速起伏的倍率: 0.5 平穩 / 1 標準 / 1.8 明顯(面板可選)
   var BR_MUL = 0.1, BR_SLEW0 = 0.05;   // 瀏覽器語音語速的相對起伏範圍(標準 ±10%)與相鄰兩次的最大變化(標準 5%); 乘上 brSwing
   function brMulRange() { var d = BR_MUL * brSwing; return { min: 1 - d, max: 1 + d, slew: BR_SLEW0 * brSwing }; }
+  var BR_PITCH_MAX = 0.07, BR_PITCH_SLEW = 0.035, BR_VOL_MIN = 0.8, BR_VOL_SLEW = 0.1;   // 瀏覽器語音音高/音量的起伏範圍與相鄰小句最大變化: 聽起來要像「同一個人」在說話
   var BR_PRE_GAP = 120, brLatMs = 0;   // 停頓 ≤ BR_PRE_GAP 毫秒的小句提前排隊; brLatMs = 這個聲音從「叫它念」到「真的出聲」大約多久(念的時候邊量邊更新)
   function noteBrLat(ms) { if (!(ms >= 0) || ms > 3000) return; brLatMs = brLatMs ? brLatMs * 0.6 + ms * 0.4 : ms; }
   function brLat() { return Math.min(600, Math.round(brLatMs)); }   // 自然人聲要不要用「整句念」(可在面板關掉, 回到逐小句念)
@@ -1123,8 +1124,13 @@
         var rg = brMulRange(), mul = Math.max(rg.min, Math.min(rg.max, 1 + un.dr)), prevMul = self.brMul == null ? 1 : self.brMul;
         mul = prevMul + Math.max(-rg.slew, Math.min(rg.slew, mul - prevMul)); self.brMul = mul;
         u.rate = Math.max(0.5, Math.min(2, (o.rate || 1) * (br.rate || 1) * mul));
-        var pt = Math.max(0.1, Math.min(2, (br.pitch || 1) + un.dp)); if (Math.abs(pt - 1) > 0.005) u.pitch = pt;
-        if (un.dv) u.volume = Math.max(0.25, Math.min(1, 1 + un.dv));   // 耳語、低沉的地方小聲一點(大聲的地方維持最大)
+        // 音高、音量: 同一個人說話, 相鄰小句不能差太多(以前音高最多差 ±0.2、音量最低降到 0.25, 聽起來像換了一個人說話) —— 音高只在基準上下 BR_PITCH_MAX 內, 和上一個小句比最多差 BR_PITCH_SLEW; 音量不低於 BR_VOL_MIN, 相鄰最多差 BR_VOL_SLEW
+        var bp = br.pitch || 1, pdv = Math.max(-BR_PITCH_MAX, Math.min(BR_PITCH_MAX, un.dp)), pPrev = self.brPd == null ? 0 : self.brPd;
+        pdv = pPrev + Math.max(-BR_PITCH_SLEW, Math.min(BR_PITCH_SLEW, pdv - pPrev)); self.brPd = pdv;
+        var pt = Math.max(0.1, Math.min(2, bp + pdv)); if (Math.abs(pt - 1) > 0.005) u.pitch = pt;
+        var vv = Math.max(BR_VOL_MIN, Math.min(1, 1 + (un.dv || 0))), vPrev = self.brVol == null ? 1 : self.brVol;
+        vv = vPrev + Math.max(-BR_VOL_SLEW, Math.min(BR_VOL_SLEW, vv - vPrev)); self.brVol = vv;
+        if (vv < 0.995) u.volume = vv;   // 耳語、低沉的地方只小聲一點點
         function after(gap, fn) { clearGap(); self.gapT = setTimeout(function () { self.gapT = null; if (live()) fn(); }, Math.max(0, gap - brLat())); }
         function ended() {
           if (finished) return; finished = true; if (wd) { clearTimeout(wd); wd = null; }
