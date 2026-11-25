@@ -345,7 +345,7 @@
     </div>
 
     <!-- 頂部導航 -->
-    <nav class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white shadow-md sticky top-7 z-50">
+    <nav class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white shadow-md sticky top-7 z-50" style="background:linear-gradient(90deg,#3730a3,#4338ca)">
         <div class="container mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div class="flex items-center space-x-3 w-full sm:w-auto justify-center sm:justify-start">
 
@@ -377,14 +377,14 @@
     <main class="container mx-auto px-4 sm:px-6 py-8 space-y-8 fade-in pb-20">
 
         <!-- ASRA 反思評量入口 -->
-        <a href="ASRA.html" id="asra-banner" onclick="return goAsra(event)" class="block rounded-2xl p-4 sm:p-5 text-white shadow-md hover:shadow-lg transition bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500">
+        <a href="ASRA.html" id="asra-banner" onclick="return goAsra(event)" class="block rounded-2xl p-4 sm:p-5 text-white shadow-md hover:shadow-lg transition" style="background:linear-gradient(90deg,#0f766e 0%,#0e7c86 55%,#1e6fa8 100%)">
             <div class="flex flex-wrap items-center gap-4">
                 <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl flex-shrink-0"><i class="fas fa-seedling"></i></div>
                 <div class="flex-1 min-w-[14rem]">
                     <div class="text-lg font-black tracking-wide">ASRA 反思評量 <span class="text-xs font-bold opacity-90">看見自己的想法,決定下一步</span></div>
                     <div class="text-sm opacity-95 mt-0.5">把你的分析圖當證據:看走過的路 → 量進展 → 用證據反思 → 決定下一步 → 回頭再檢查</div>
                 </div>
-                <span class="bg-white text-emerald-700 font-black px-4 py-2 rounded-full text-sm whitespace-nowrap">我要來反思 <i class="fas fa-arrow-right ml-1"></i></span>
+                <span class="bg-white font-black px-4 py-2 rounded-full text-sm whitespace-nowrap" style="color:#0f5f58">我要來反思 <i class="fas fa-arrow-right ml-1"></i></span>
             </div>
         </a>
 
@@ -1100,12 +1100,26 @@ async function initApiKey() {
     }
 
     function initUserSwitcher() {
-        const container = document.getElementById('nav-user-select-container');
-        if (!container) return;
-        container.innerHTML = '';
+        const headerBox = document.getElementById('nav-user-select-container');
+        if (!headerBox) return;
+        headerBox.innerHTML = '';
+        // 老師與管理者: 選班級、選學生放在頁面最上面一條明顯的列(原本擠在最右上角, 容易被擠出畫面看不到)
+        let container = headerBox, onBar = false;
+        if (gateUser.role !== 'student') {
+            let bar = document.getElementById('student-picker-bar');
+            if (!bar) {
+                bar = document.createElement('div'); bar.id = 'student-picker-bar'; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', '選擇要看的學生');
+                bar.className = 'rounded-2xl p-3 sm:p-4 border flex flex-wrap items-center gap-x-3 gap-y-2'; bar.style.cssText = 'background:#eef2ff;border-color:#c7d2fe';
+                bar.innerHTML = '<span class="text-sm font-black" style="color:#312e81"><i class="fas fa-user-graduate mr-1"></i>老師檢視:選擇要看的學生</span><span data-inner class="flex flex-wrap items-center gap-2"></span>';
+                const ban = document.getElementById('asra-banner'); if (ban && ban.parentNode) ban.parentNode.insertBefore(bar, ban);
+            }
+            container = bar.querySelector('[data-inner]'); container.innerHTML = ''; onBar = true;
+        }
+        const SEL_CLS = onBar ? 'bg-white text-slate-800 text-sm border border-slate-300 rounded-lg px-3 py-2 outline-none font-bold cursor-pointer' : 'bg-white/10 text-white text-xs border border-white/20 rounded px-2 py-1.5 outline-none font-bold cursor-pointer';
+        const LAB_CLS = onBar ? 'text-xs font-bold whitespace-nowrap' : 'text-white/90 text-xs font-bold mr-1 whitespace-nowrap hidden md:inline';
 
         const select = document.createElement('select');
-        select.className = "bg-white/10 text-white text-xs border border-white/20 rounded px-2 py-1.5 outline-none font-bold cursor-pointer";
+        select.className = SEL_CLS;
         select.id = "student-selector";
 
         const users = Object.values(globalData.userList || {});
@@ -1126,12 +1140,12 @@ async function initApiKey() {
         if (showClass) {
             classSel = document.createElement('select');
             classSel.id = 'class-selector'; classSel.title = '選擇班級';
-            classSel.className = "bg-white/10 text-white text-xs border border-white/20 rounded px-2 py-1.5 outline-none font-bold cursor-pointer mr-2";
+            classSel.className = SEL_CLS + (onBar ? '' : ' mr-2');
             classSel.innerHTML = '';
             const all = optStyle(document.createElement('option')); all.value = 'all'; all.text = '全部班級(' + students.length + ' 人)'; classSel.appendChild(all);
             clsKeys.sort((a, b) => groups[a].name.localeCompare(groups[b].name, 'zh-Hant')).forEach(k => { const o = optStyle(document.createElement('option')); o.value = k; o.text = groups[k].name + '(' + groups[k].n + ' 人)'; classSel.appendChild(o); });
             classSel.value = clsFilter;
-            const lab1 = document.createElement('span'); lab1.textContent = '① 先選班級'; lab1.className = 'text-white/90 text-xs font-bold mr-1 whitespace-nowrap hidden md:inline'; container.appendChild(lab1);
+            const lab1 = document.createElement('span'); lab1.textContent = '① 先選班級'; lab1.className = LAB_CLS; if (onBar) lab1.style.color = '#4338ca'; container.appendChild(lab1);
             container.appendChild(classSel);
         }
         const inScope = u => clsFilter === 'all' || clsOf(u) === clsFilter;
@@ -1148,7 +1162,7 @@ async function initApiKey() {
             clsFilter = this.value; try { localStorage.setItem('kb_class_filter', clsFilter); } catch (e) {}
             const list = fillStudents(); if (list.length) { select.value = list[0].id; switchUser(list[0].id); }
         };
-        if (showClass) { const lab2 = document.createElement('span'); lab2.textContent = '② 再選學生'; lab2.className = 'text-white/90 text-xs font-bold mr-1 whitespace-nowrap hidden md:inline'; container.appendChild(lab2); }
+        if (showClass) { const lab2 = document.createElement('span'); lab2.textContent = '② 再選學生'; lab2.className = LAB_CLS; if (onBar) lab2.style.color = '#4338ca'; container.appendChild(lab2); }
         container.appendChild(select);
 
         let targetId = students.filter(inScope).length > 0 ? students.filter(inScope)[0].id : null;
