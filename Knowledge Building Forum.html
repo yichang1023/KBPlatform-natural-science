@@ -124,7 +124,7 @@
         </div>
 
         <div class="flex items-center gap-2 md:gap-4">
-            <div id="ai-persona-indicator" class="hidden md:flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium border border-indigo-100">
+            <div id="ai-persona-indicator" style="display:none" class="hidden md:flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium border border-indigo-100">
                 <i class="fa-solid fa-robot ai-pulse"></i>
                 <span id="active-ai-role">AI 協作中</span>
             </div>
@@ -1956,6 +1956,10 @@
                     }
                 });
             } catch (e) { console.error(e); }
+            try {   // 「AI 協作中」只在真的有 AI 可用時才顯示(設定中心沒關閉 AI, 且這台電腦或雲端有金鑰); 回到這個頁面時再檢查一次
+                const refreshAiBadge = () => { const el = document.getElementById('ai-persona-indicator'); if (!el || window.KB_DEMO || !window.KBAI || !KBAI.available) return; KBAI.available().then(ok => { el.style.display = ok ? '' : 'none'; }).catch(() => { el.style.display = 'none'; }); };
+                refreshAiBadge(); window.addEventListener('focus', refreshAiBadge);
+            } catch (e) {}
             window.app.updateTrashBadge();
             window.app.initCategorySelector();
             window.ui.renderUserInfo();

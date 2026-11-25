@@ -24,6 +24,12 @@
     })();
     return stCache;
   }
+  // 現在真的有 AI 可以用嗎(畫面上的「AI 協作中」「Gemini Online」要依這個顯示, 不能寫死): 設定中心沒有關掉 AI, 而且這台電腦存了金鑰或雲端有金鑰
+  function available(force) {
+    try { if (g.KB && g.KB.settings && (g.KB.settings.get().ai || {}).enabled === false) return Promise.resolve(false); } catch (e) {}
+    try { if (g.localStorage.getItem('kb_ai_key')) return Promise.resolve(true); } catch (e) {}
+    return status(force).then(function (s) { return !!(s && s.configured); }).catch(function () { return false; });
+  }
   function modelPref() { try { var m = (g.KB.settings.get().ai || {}).model; return m && m !== 'auto' ? m : undefined; } catch (e) { return undefined; } }
   // 與 fetch(Gemini) 相容:init.body 是 Gemini 的請求 JSON,回傳的 Response 內容就是 Gemini 的回應
   function proxyFetch(init) {
@@ -64,5 +70,5 @@
   }
   g.kbNoAnswer = noAnswer;
   var SRC_TEXT = { cloud: '雲端儲存的金鑰(老師在 App 裡存的)', env: 'Vercel 環境變數 GEMINI_API_KEY', none: '沒有' };
-  g.KBAI = { RULE: RULE, noAnswer: noAnswer, guard: guard, wrap: wrap, cleanJson: cleanJson, SRC_TEXT: SRC_TEXT, SENT: SENT, status: status, proxyFetch: proxyFetch, admin: admin, reset: function () { stCache = null; } };
+  g.KBAI = { RULE: RULE, noAnswer: noAnswer, guard: guard, wrap: wrap, cleanJson: cleanJson, SRC_TEXT: SRC_TEXT, SENT: SENT, status: status, available: available, proxyFetch: proxyFetch, admin: admin, reset: function () { stCache = null; } };
 })(window);

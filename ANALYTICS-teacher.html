@@ -463,7 +463,7 @@
         <div class="p-4 bg-slate-950 border-t border-slate-800 text-xs text-slate-500 shrink-0">
             System: <span class="text-green-500">Connected</span><br>
             DB Status: <span id="db-status-text">Checking...</span><br>
-            AI Status: <span id="ai-status-indicator" class="text-green-400">Gemini Online</span>
+            AI Status: <span id="ai-status-indicator" class="text-slate-400">Checking...</span>
         </div>
     </aside>
 
@@ -4573,5 +4573,20 @@ ${(content.how || content.diff) ? `<div class="ref-section"><div class="ref-sect
             document.querySelectorAll('.modal-overlay').forEach(el => el.classList.remove('open'));
         }
     </script>
+<script>
+/* 左下角的 AI 狀態: 依「真的有沒有 AI 可用」顯示(原本寫死 Gemini Online, 沒有金鑰也亮綠燈會誤導) */
+(function () {
+  function upd() {
+    var el = document.getElementById('ai-status-indicator'); if (!el || !window.KBAI || !KBAI.available) return;
+    var off = false; try { off = (KB.settings.get().ai || {}).enabled === false; } catch (e) {}
+    KBAI.available().then(function (ok) {
+      if (off) { el.textContent = 'Disabled (設定中心已關閉)'; el.className = 'text-amber-400'; }
+      else if (ok) { el.textContent = 'Gemini Online'; el.className = 'text-green-400'; }
+      else { el.textContent = 'Offline (No API Key)'; el.className = 'text-red-400'; }
+    }).catch(function () { el.textContent = 'Offline'; el.className = 'text-red-400'; });
+  }
+  window.addEventListener('load', function () { setTimeout(upd, 600); }); window.addEventListener('focus', upd);
+})();
+</script>
 </body>
 </html>
