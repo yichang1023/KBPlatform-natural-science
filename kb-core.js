@@ -133,10 +133,16 @@
     if (!Array.isArray(S.trash)) { S.trash = []; dirty.push('trash'); }
     var ds = defaultSettings();
     if (!S.settings || typeof S.settings !== 'object') { S.settings = ds; dirty.push('settings'); }
-    else { S.settings = deepMerge(ds, S.settings); }
+    else { S.settings = mergeSettings(S.settings); }
     if (!Array.isArray(S.audit)) { S.audit = []; dirty.push('audit'); }
     if (!Array.isArray(S.backups)) { S.backups = []; dirty.push('backups'); }
     dirty.forEach(function (k) { writeJSON(k, S[k]); });
+  }
+  // 設定合併: 合併預設值; 貼文朗讀(AI 人聲)預設開 — 舊資料裡存的「關」是「從來沒人設定過」的預設, 一次性改成開(管理者之後自己關掉, 會連同 _ttsOn1 一起存下來, 就不會再被改回去)
+  function mergeSettings(stored) {
+    var m = deepMerge(defaultSettings(), stored);
+    if (!m._ttsOn1) { m.tts = m.tts || {}; m.tts.ai = m.tts.ai || {}; m.tts.ai.enabled = true; m._ttsOn1 = true; }
+    return m;
   }
   function deepMerge(base, over) {
     var out = clone(base);
@@ -160,7 +166,7 @@
       if (!e.key || e.key.indexOf(NS) !== 0) return;
       var k = e.key.slice(NS.length);
       if (KEYS.indexOf(k) < 0 && k !== 'session') return;
-      if (k !== 'session') { S[k] = readJSON(k, S[k]); if (k === 'settings') S.settings = deepMerge(defaultSettings(), S.settings); }
+      if (k !== 'session') { S[k] = readJSON(k, S[k]); if (k === 'settings') S.settings = mergeSettings(S.settings); }
       notify([k], true);
     });
   }
@@ -719,7 +725,7 @@
       var pre = backup.create('還原前自動備份');
       S.users = clone(obj.users); S.classes = clone(obj.classes || []); S.groups = clone(obj.groups || []);
       S.topics = clone(obj.topics); S.nodes = clone(obj.nodes); S.trash = clone(obj.trash || []);
-      if (obj.settings) S.settings = deepMerge(defaultSettings(), obj.settings);
+      if (obj.settings) S.settings = mergeSettings(obj.settings);
       persist(['users', 'classes', 'groups', 'topics', 'nodes', 'trash', 'settings']);
       var cur = auth.current(); if (!cur) sessionWrite(null);
       audit('backup.restore', obj.label || obj.time || '', '還原前備份:' + pre.id);
@@ -917,7 +923,7 @@
     _state: function () { return S; },
     _applyRemote: function (patch) {
       var keys = [];
-      for (var k in patch) { S[k] = patch[k]; if (k === 'settings') S.settings = deepMerge(defaultSettings(), S.settings); writeJSON(k, S[k]); keys.push(k); }
+      for (var k in patch) { S[k] = patch[k]; if (k === 'settings') S.settings = mergeSettings(S.settings); writeJSON(k, S[k]); keys.push(k); }
       if (keys.length) notify(keys, true);
     },
     _mergeAudit: function (list) {
