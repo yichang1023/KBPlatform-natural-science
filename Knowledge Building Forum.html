@@ -878,14 +878,21 @@
                 const cw = wrapper ? wrapper.clientWidth : window.innerWidth;
                 const ch = wrapper ? wrapper.clientHeight : window.innerHeight;
 
-                // 節點卡片的預估尺寸 (寬 288px, 高約 200px)，計算置中目標點
-                const nodeW = 288;
-                const nodeH = 200;
-                const targetX = (cw / 2) - (firstNode.x + nodeW / 2) * window.state.canvas.scale;
-                const targetY = (ch / 2) - (firstNode.y + nodeH / 2) * window.state.canvas.scale;
+                // 節點卡片的實際尺寸(量不到就用預估的 288×200)
+                const el = document.getElementById('node-' + firstNode.id);
+                const nodeW = (el && el.offsetWidth) || 288;
+                const nodeH = (el && el.offsetHeight) || 200;
+                const c = window.state.canvas, narrow = window.innerWidth < 768;
+                // 回到起點: 縮得很小時, 一邊移動一邊放大回到看得清楚的大小(手機 80%、電腦 100%); 已經比這個大就維持目前大小
+                const readable = narrow ? 0.8 : 1;
+                const sc = animate ? Math.max(c.scale, readable) : c.scale;
+                // 起點放在最好找的位置: 從左到右的排法放左邊偏中間, 其他(往下長)放上方偏左, 這樣整串想法會在眼前展開
+                const ax = c.layoutDir === 'LR' ? 0.2 : (narrow ? 0.5 : 0.36), ay = c.layoutDir === 'LR' ? 0.5 : 0.26;
+                const targetX = cw * ax - (firstNode.x + nodeW / 2) * sc;
+                const targetY = ch * ay - (firstNode.y + nodeH / 2) * sc;
 
                 if (animate) {
-                    window.app.canvas.animatePanTo(targetX, targetY);
+                    window.app.canvas.animatePanTo(targetX, targetY, sc);
                 } else {
                     window.state.canvas.offsetX = targetX;
                     window.state.canvas.offsetY = targetY;
@@ -1899,24 +1906,23 @@
                 };
                 requestAnimationFrame(animate);
             },
-            animatePanTo: (targetX, targetY) => {
-                const startX = window.state.canvas.offsetX;
-                const startY = window.state.canvas.offsetY;
-                const duration = 600;
-                const startTime = performance.now();
-
+            // 平順地移動(並可同時縮放)到目標位置; 再按一次或開始新的動畫會接手, 系統設定「減少動態效果」時直接跳過去
+            animatePanTo: (targetX, targetY, targetScale) => {
+                const c = window.state.canvas, startX = c.offsetX, startY = c.offsetY, startS = c.scale;
+                const endS = targetScale > 0 ? targetScale : startS, tok = c._animTok = (c._animTok || 0) + 1;
+                let reduce = false; try { reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+                if (reduce) { c.offsetX = targetX; c.offsetY = targetY; c.scale = endS; window.app.canvas.applyTransform(); return; }
+                const far = Math.hypot(targetX - startX, targetY - startY) / Math.max(1, window.innerWidth) + Math.abs(Math.log(endS / startS));
+                const duration = Math.max(500, Math.min(950, 500 + far * 160)), startTime = performance.now();
                 const animate = (time) => {
-                    const elapsed = time - startTime;
-                    const progress = Math.min(elapsed / duration, 1);
-                    const ease = 1 - Math.pow(1 - progress, 3); // ease-out cubic 曲線
-
-                    window.state.canvas.offsetX = startX + (targetX - startX) * ease;
-                    window.state.canvas.offsetY = startY + (targetY - startY) * ease;
+                    if (tok !== c._animTok) return;   // 被新的動畫(或使用者的操作)取代
+                    const progress = Math.min((time - startTime) / duration, 1);
+                    const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;   // 先慢後快再慢, 看得出移動的過程
+                    c.scale = startS * Math.pow(endS / startS, ease);   // 縮放用倍率內插, 放大的感覺才平均
+                    c.offsetX = startX + (targetX - startX) * ease;
+                    c.offsetY = startY + (targetY - startY) * ease;
                     window.app.canvas.applyTransform();
-
-                    if (progress < 1) {
-                        requestAnimationFrame(animate);
-                    }
+                    if (progress < 1) requestAnimationFrame(animate);
                 };
                 requestAnimationFrame(animate);
             }
