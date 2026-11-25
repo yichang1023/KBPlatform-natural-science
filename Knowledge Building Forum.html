@@ -87,6 +87,12 @@
 }
 </style>
 <link rel="stylesheet" href="kb-hover.css">
+<style id="kb-wall-css">
+/* 想法牆: 一則想法底下很多沒人再回應的回應, 收成一個整齊的方格(小卡 + 淡色外框) */
+.kb-wall { position: absolute; background: rgba(241, 245, 249, .78); border: 1.5px dashed #cbd5e1; border-radius: 16px; pointer-events: none; }
+.kb-wall-title { position: absolute; left: 14px; right: 14px; top: 6px; font-size: 12px; font-weight: 700; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wall-card { box-shadow: 0 1px 2px rgba(15, 23, 42, .08); }
+</style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-full w-full flex flex-col font-sans">
     <!-- Top Navbar -->
@@ -1671,6 +1677,12 @@
             // 卡片大小: 寬度看是不是手機; 高度量現在畫面上最高的那張(排版間距才不會讓卡片重疊)
             // 目前畫布畫面的長寬比(排版會把整張圖排成接近這個比例, 一個畫面就看得到, 不用一直往右或往下拉)
             viewAspect: () => { try { const w = document.getElementById('canvas-wrapper'); if (w && w.clientWidth > 100 && w.clientHeight > 100) return Math.max(0.35, Math.min(3, w.clientWidth / w.clientHeight)); } catch (e) {} return window.innerWidth < 768 ? 0.6 : 1.6; },
+            // 想法牆的外框: 同一面牆的小卡取最外圍, 外加邊距與標題列(位置由小卡算出來, 所以不用另外存檔)
+            wallFrames: (nodes) => {
+                const W = (window.KBLayout && KBLayout.WALL) || { w: 208, h: 84, pad: 14, head: 30 }, g = {};
+                (nodes || []).forEach(n => { if (n.wall && isFinite(n.x) && isFinite(n.y)) { const o = g[n.wall] = g[n.wall] || { key: n.wall, x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity, count: 0 }; o.x1 = Math.min(o.x1, n.x); o.y1 = Math.min(o.y1, n.y); o.x2 = Math.max(o.x2, n.x + W.w); o.y2 = Math.max(o.y2, n.y + W.h); o.count++; } });
+                return Object.keys(g).map(k => { const o = g[k]; return { key: o.key, x: o.x1 - W.pad, y: o.y1 - W.head, w: o.x2 - o.x1 + W.pad * 2, h: o.y2 - o.y1 + W.head + W.pad, count: o.count }; });
+            },
             cardSize: () => {
                 let h = 182; try { document.querySelectorAll('.node-card').forEach(e => { h = Math.max(h, e.offsetHeight || 0); }); } catch (e) {}
                 return { w: window.innerWidth < 768 ? 256 : 288, h: Math.min(h, 320) };
@@ -1699,15 +1711,15 @@
                 window.app.canvas.applyTransform();
             },
             // 把想法放到新的位置: 位置先直接寫進資料(不靠動畫, 切到別的分頁、動畫被暫停也不會卡在半路), 接著呼叫端重畫
-            moveNodes: (targets) => {
+            moveNodes: (targets, applyWall) => {   // applyWall: 排版時一併設定哪些想法收在「想法牆」(小卡); 語意聚類等其他搬移不動這個設定
                 const byId = {}; window.app.canvas.topicNodes().forEach(n => { byId[n.id] = n; });
-                targets.forEach(t => { const n = byId[t.id]; if (n) { n.x = t.x; n.y = t.y; } });
+                targets.forEach(t => { const n = byId[t.id]; if (n) { n.x = t.x; n.y = t.y; if (applyWall) { if (t.wall) n.wall = t.wall; else delete n.wall; } } });
             },
             /* ---- 歷史: 排版、語意聚類、移動卡片, 每個討論區各記最近 20 步; 可以復原(Ctrl+Z), 也可以取消復原(Ctrl+Y) ---- */
             HIST_MAX: 20,
             hist: () => { const c = window.state.canvas, t = window.state.currentTopicId; c._h = c._h || {}; return (c._h[t] = c._h[t] || { u: [], r: [] }); },
             snapshot: (label) => {
-                const pos = {}; window.app.canvas.topicNodes().forEach(n => { pos[n.id] = { x: n.x, y: n.y, sx: n.savedX, sy: n.savedY }; });
+                const pos = {}; window.app.canvas.topicNodes().forEach(n => { pos[n.id] = { x: n.x, y: n.y, sx: n.savedX, sy: n.savedY, wl: n.wall }; });
                 return { label: label || '', pos: pos, mode: window.state.canvas.clusterMode, zones: (window.state.canvas.zones || []).slice(), main: window.state.canvas.mainIds ? window.state.canvas.mainIds.slice() : null, labels: (window.state.canvas.branchLabels || []).map(x => Object.assign({}, x)), dir: window.state.canvas.layoutDir || null };
             },
             pushHistory: (label, snap) => {
@@ -1716,7 +1728,7 @@
             restoreSnapshot: (snap) => {
                 const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes();
                 nodes.forEach(n => { delete n.savedX; delete n.savedY; });
-                nodes.forEach(n => { const p = snap.pos[n.id]; if (p) { n.x = p.x; n.y = p.y; if (p.sx !== undefined) { n.savedX = p.sx; n.savedY = p.sy; } } });
+                nodes.forEach(n => { const p = snap.pos[n.id]; if (p) { n.x = p.x; n.y = p.y; if (p.sx !== undefined) { n.savedX = p.sx; n.savedY = p.sy; } if (p.wl) n.wall = p.wl; else delete n.wall; } });
                 c.clusterMode = snap.mode || null; c.isClusterMode = !!snap.mode; c.zones = (snap.zones || []).slice();
                 c.mainIds = snap.main ? snap.main.slice() : null; c.branchLabels = (snap.labels || []).map(x => Object.assign({}, x)); c.layoutDir = snap.dir || c.layoutDir || null; c.smartTok = (c.smartTok || 0) + 1;   // 復原時, 還在後台跑的 AI 結果不要再蓋上來
                 setTimeout(() => { try { window.dataManager.save(); } catch (e) {} }, 900);
@@ -1754,10 +1766,10 @@
                 if (c.clusterMode) C.clearCluster(true);
                 const sz = C.cardSize(), res = KBLayout.arrange(nodes, dir, { w: sz.w, h: sz.h, aspect: C.viewAspect() });
                 c.layoutDir = res.dir;
-                C.moveNodes(res.targets);
+                C.moveNodes(res.targets, true);
                 C.viewAfterArrange(res.width, res.height);
                 setTimeout(() => { try { window.dataManager.save(); } catch (e) {} }, 900);
-                window.ui.showToast(dir === 'TB' ? '已排成「從上到下」: 想法往下推進, 同一串的第一則回應接在正下方, 其他回應排在左右的空欄' : '已排成「從左到右」: 想法往右推進, 同一串的第一則回應接在同一排, 其他回應排在上下的空排', 'success');
+                window.ui.showToast(dir === 'TB' ? '已排成「從上到下」: 想法往下推進, 同一串的第一則回應接在正下方, 其他回應排在左右的空欄; 一則想法底下有 5 則以上沒人再回應的, 收成整齊的「想法牆」' : '已排成「從左到右」: 想法往右推進, 同一串的第一則回應接在同一排, 其他回應排在上下的空排; 一則想法底下有 5 則以上沒人再回應的, 收成整齊的「想法牆」', 'success');
                 window.ui.renderCanvas();
             },
             // 語意聚類: mode = 'topic'(依內容主題) | 'type'(依想法類型) | null(關閉, 回到原本的位置)
@@ -1793,7 +1805,7 @@
                 const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes(), sz = C.cardSize();
                 const res = KBLayout.arrange(nodes, dir, { w: sz.w, h: sz.h, order: order, aspect: C.viewAspect() });
                 c.layoutDir = res.dir; c.mainIds = KBLayout.mainLine(nodes, order); c.branchLabels = labels || [];
-                C.moveNodes(res.targets); C.viewAfterArrange(res.width, res.height);
+                C.moveNodes(res.targets, true); C.viewAfterArrange(res.width, res.height);
                 setTimeout(() => { try { window.dataManager.save(); } catch (e) {} }, 900);
                 window.ui.renderCanvas();
             },
@@ -2451,7 +2463,12 @@
             const canPostNow = window.app.canPost();
             const heatInfoNow = window.state.canvas.isHeatmapMode && window.KBLayout ? window.app.canvas.heatInfo(nodes) : null;
             const labelMap = {}; (window.state.canvas.branchLabels || []).forEach(x => { labelMap[x.id] = x.text; });
-            document.getElementById('nodes-layer').innerHTML = nodes.map(node => {
+            const wallHtml = window.state.canvas.isClusterMode ? '' : window.app.canvas.wallFrames(nodes).map(f => {
+                const par = f.key === '_orphans' ? null : window.state.nodes.find(n => n.id === f.key);
+                const ttl = par ? '回應「' + window.app.escH(String(par.title || '無標題').slice(0, 14)) + '」的 ' + f.count + ' 則想法' : '還沒有人回應的想法 ' + f.count + ' 則';
+                return `<div class="kb-wall" style="left:${f.x}px;top:${f.y}px;width:${f.w}px;height:${f.h}px"><div class="kb-wall-title"><i class="fa-solid fa-table-cells-large"></i> ${ttl}</div></div>`;
+            }).join('');
+            document.getElementById('nodes-layer').innerHTML = wallHtml + nodes.map(node => {
                 const s = window.SCAFFOLDS[node.type];
                 const user = Object.values(window.state.userList).find(u => u.id === node.author) || {name: '?'};
                 const canDel = KB.can('forum.deleteOwn', { author: node.author, hasReplies: parentSet.has(node.id) });
@@ -2464,6 +2481,30 @@
                 const labelHtml = labelMap[node.id] ? `<div class="branch-label" title="分支主題(AI 協助)">${window.app.escH(labelMap[node.id])}</div>` : '';
                 const flameBadge = isPromising ? `<div title="${heatWhy}" class="absolute -top-3 -right-2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm animate-bounce-slow z-50"><i class="fa-solid fa-fire"></i> 熱點 ${hs.score}</div>` : '';
                 const isSelected = window.state.selectedNodeIds.includes(node.id) ? 'selected-node' : '';
+
+                if (node.wall) {   // 想法牆裡的小卡: 標題 + 作者就夠了, 點開(連按兩下或按眼睛)才看全文
+                    const WS = (window.KBLayout && KBLayout.WALL) || { w: 208, h: 84 }, bt = 'w-5 h-5 rounded hover:bg-white/60 text-slate-500 flex justify-center items-center text-[11px]';
+                    return `
+                <div id="node-${node.id}" class="absolute node-card wall-card bg-white rounded-lg border ${s.border} flex flex-col overflow-visible ${heatmapClass} ${isSelected}"
+                     style="left: ${node.x}px; top: ${node.y}px; width: ${WS.w}px; height: ${WS.h}px;"
+                     onmousedown="event.stopPropagation(); window.app.canvas.startDrag(event, '${node.id}')"
+                     ontouchstart="event.stopPropagation(); window.app.canvas.tapStart(event, '${node.id}'); window.app.canvas.startDrag(event, '${node.id}')"
+                     ontouchend="window.app.canvas.tapEnd(event, '${node.id}')"
+                     ondblclick="event.stopPropagation(); if (Date.now() - (window.state.canvas._tapOpened || 0) > 700) window.app.openNodeDetail('${node.id}')">
+                    ${flameBadge}
+                    <div class="px-2 py-0.5 ${s.bgSoft} border-b ${s.border} flex justify-between items-center cursor-move rounded-t-lg">
+                        <div class="flex items-center gap-1"><span class="w-4 h-4 rounded-full ${s.color} text-white flex justify-center items-center text-[9px]"><i class="fa-solid ${s.icon}"></i></span><span class="text-[10px] font-bold ${s.text}">${s.label}</span></div>
+                        <div class="flex">
+                            <button onclick="event.stopPropagation(); window.app.openNodeDetail('${node.id}')" class="${bt}" title="看全文" aria-label="看全文"><i class="fa-solid fa-eye"></i></button>
+                            ${canPostNow ? `<button onclick="event.stopPropagation(); window.app.openComposer('${node.id}')" class="${bt}" title="回覆" aria-label="回覆"><i class="fa-solid fa-reply"></i></button>` : ''}
+                            ${canEdit ? `<button onclick="event.stopPropagation(); window.app.openEditNode('${node.id}')" class="${bt} hover:text-indigo-600" title="編輯我的貼文" aria-label="編輯我的貼文"><i class="fa-solid fa-pen"></i></button>` : ''}
+                            ${canDel ? `<button onclick="event.stopPropagation(); window.app.deleteNode('${node.id}')" class="${bt} hover:text-red-500" title="刪除" aria-label="刪除"><i class="fa-solid fa-xmark"></i></button>` : ''}
+                        </div>
+                    </div>
+                    <div class="px-2 pt-1 pointer-events-none"><h4 class="font-bold text-slate-900 text-[13px] leading-snug line-clamp-2">${node.title || '無標題'}</h4></div>
+                    <div class="px-2 pb-1 mt-auto flex items-center gap-1 text-[10px] text-slate-500 pointer-events-none"><img src="${user.avatar}" class="w-3 h-3 rounded-full"><span class="truncate">${user.name}</span></div>
+                </div>`;
+                }
 
                 return `
                 <div id="node-${node.id}" class="absolute node-card w-64 md:w-72 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-visible ${heatmapClass} ${isSelected}"
@@ -2511,6 +2552,7 @@
                     const c = { question: '#3b82f6', extend: '#eab308', improve: '#22c55e', counter: '#ef4444', riseabove: '#a855f7' }[k];
                     return `<marker id="arrow-${k}" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${c}" /></marker>`;
                 }).join('')}
+                <marker id="arrow-wall" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b" /></marker>
             </defs>`;
 
             const cardWidth = window.innerWidth < 768 ? 256 : 288;
@@ -2519,7 +2561,24 @@
             const hOf = (n) => { const el = document.getElementById('node-' + n.id); return (el && el.offsetHeight) || 160; };
             const mainSet = (window.state.canvas.mainIds && window.state.canvas.mainIds.length) ? new Set(window.state.canvas.mainIds) : null;
             const colorMap = { question: '#3b82f6', extend: '#eab308', improve: '#22c55e', counter: '#ef4444', riseabove: '#a855f7' };
-            const paths = nodes.filter(n => n.parentId).map(node => {
+            const clusterOn = !!window.state.canvas.isClusterMode;
+            const wallEdges = clusterOn ? '' : window.app.canvas.wallFrames(nodes).filter(f => f.key !== '_orphans').map(f => {
+                const parent = window.state.nodes.find(p => p.id === f.key); if (!parent) return '';
+                const ph = hOf(parent), st = `stroke="#64748b" fill="none" stroke-width="2" stroke-opacity="0.55" marker-end="url(#arrow-wall)"`, cl = (v, a, b) => Math.max(a, Math.min(b, v));
+                if (f.x - (parent.x + cardWidth) > 24) {   // 想法牆在來源想法的右邊
+                    const sx = parent.x + cardWidth, sy = parent.y + ph / 2, ex = f.x, ey = cl(sy, f.y + 24, f.y + f.h - 24);
+                    if (Math.abs(ey - sy) < 2) return `<path d="M ${sx} ${sy} L ${ex} ${ey}" ${st} />`;
+                    const dx = (ex - sx) * 0.5; return `<path d="M ${sx} ${sy} C ${sx + dx} ${sy}, ${ex - dx} ${ey}, ${ex} ${ey}" ${st} />`;
+                }
+                if (f.y - (parent.y + ph) > 20) {   // 想法牆在來源想法的下方
+                    const sx = parent.x + halfW, sy = parent.y + ph, ex = cl(sx, f.x + 30, f.x + f.w - 30), ey = f.y;
+                    if (Math.abs(ex - sx) < 2) return `<path d="M ${sx} ${sy} L ${ex} ${ey}" ${st} />`;
+                    const off = (ey - sy) * 0.5; return `<path d="M ${sx} ${sy} C ${sx} ${sy + off}, ${ex} ${ey - off}, ${ex} ${ey}" ${st} />`;
+                }
+                const sx = parent.x + halfW, sy = parent.y + ph, ex = f.x + f.w / 2, ey = f.y, dist = Math.hypot(ex - sx, ey - sy) || 1;   // 其他位置(手動搬過的): 弧線連到外框上緣
+                return `<path d="M ${sx} ${sy} C ${sx} ${sy + dist * 0.4}, ${ex} ${ey - dist * 0.4}, ${ex} ${ey}" ${st} />`;
+            }).join('');
+            const paths = wallEdges + nodes.filter(n => n.parentId && (clusterOn || !n.wall)).map(node => {
                 const parent = window.state.nodes.find(p => p.id === node.parentId);
                 if (!parent) return '';
                 const ph = hOf(parent), nh = hOf(node), isMain = mainSet && mainSet.has(parent.id) && mainSet.has(node.id);

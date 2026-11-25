@@ -48,30 +48,71 @@
    * 同一層依發言時間排, 越早的分支越靠近它的上一則. 和現有排法的差別: 卡片之間留足間距(不重疊), 箭頭不會穿過卡片.
    * dir = 'LR'(從左到右: 層往右、排往下) 或 'TB'(從上到下: 層往下、排往右, 同樣的邏輯轉個方向)
    * opts = { w, h, x0, y0, gapAlong(層與層的空隙), gapAcross(排與排的空隙) }; 回傳 { targets, width, height, dir, trees, lanes } */
+  // 想法牆: 一則想法底下有 WALL.min 則以上「只有一則、沒人再回應」的回應時, 把它們收成一個整齊的方格(小卡 + 外框), 不要各占一排
+  var WALL = { w: 208, h: 84, gap: 10, pad: 14, head: 30, min: 5 };
+  // n 張小卡要排成幾欄才最省位置(以排版格子數計); 回傳 { cols, rows, bw, bh, ca(沿著走向佔幾格), cx(橫跨幾格) }
+  function wallShape(n, dir, alongStep, acrossStep, gapAlong, gapAcross) {
+    var best = null;
+    for (var c = 1; c <= Math.min(8, n); c++) {
+      var r = Math.ceil(n / c), bw = c * WALL.w + (c - 1) * WALL.gap + WALL.pad * 2, bh = r * WALL.h + (r - 1) * WALL.gap + WALL.pad + WALL.head;
+      var L = dir === 'LR' ? bw : bh, T = dir === 'LR' ? bh : bw;
+      var ca = Math.max(1, Math.ceil((L + gapAlong) / alongStep)), cx = Math.max(1, Math.ceil((T + gapAcross) / acrossStep));
+      var score = ca * alongStep * cx * acrossStep * (1 + 0.6 * Math.abs(Math.log(bw / bh / 1.6)));   // 佔的面積越小越好, 形狀越接近 1.6:1 的橫式越好
+      if (!best || score < best.score) best = { score: score, cols: c, rows: r, bw: bw, bh: bh, ca: ca, cx: cx };
+    }
+    return best;
+  }
   function arrange(nodes, dir, opts) {
     opts = opts || {}; dir = dir === 'TB' ? 'TB' : 'LR';
     var w = opts.w || 288, h = opts.h || 182, x0 = opts.x0 == null ? 80 : opts.x0, y0 = opts.y0 == null ? 80 : opts.y0;
-    var gapAlong = opts.gapAlong == null ? (dir === 'LR' ? 64 : 64) : opts.gapAlong, gapAcross = opts.gapAcross == null ? 44 : opts.gapAcross;
+    var gapAlong = opts.gapAlong == null ? 64 : opts.gapAlong, gapAcross = opts.gapAcross == null ? 44 : opts.gapAcross;
     var alongStep = (dir === 'LR' ? w : h) + gapAlong, acrossStep = (dir === 'LR' ? h : w) + gapAcross;
     var f = forest(nodes, opts.order), depth = {}, rowOf = {}, bands = [], i;
+    // 想法牆: 先把「只有一則、沒人再回應」的回應從樹裡拿出來(依原本是不是葉子判斷, 不受拿出來之後的影響)
+    var wallOf = {}, wallKey = {}, orphan = [], isLeaf = {};
+    Object.keys(f.kids).forEach(function (k) { isLeaf[k] = f.kids[k].length === 0; });
+    if (opts.wall !== false) {
+      Object.keys(f.kids).forEach(function (pid) {
+        var leaves = f.kids[pid].filter(function (c) { return isLeaf[c.id]; });
+        if (leaves.length >= WALL.min) { wallOf[pid] = leaves; leaves.forEach(function (l) { wallKey[l.id] = pid; }); f.kids[pid] = f.kids[pid].filter(function (c) { return !isLeaf[c.id]; }); }
+      });
+      var lone = f.roots.filter(function (r) { return isLeaf[r.id]; });   // 沒有人回應的獨立想法
+      if (lone.length >= WALL.min) { orphan = lone; lone.forEach(function (l) { wallKey[l.id] = '_orphans'; }); f.roots = f.roots.filter(function (r) { return !wallKey[r.id]; }); }
+    }
     // 每個節點的層(深度): 由樹根往下, 不用遞迴(脈絡可能有上百層)
     f.roots.forEach(function (r) { var st = [[r, 0]]; while (st.length) { var it = st.pop(); depth[it[0].id] = it[1]; f.kids[it[0].id].forEach(function (c) { st.push([c, it[1] + 1]); }); } });
     function chainEnd(n) { var d = depth[n.id], cur = n; while (f.kids[cur.id].length) { cur = f.kids[cur.id][0]; d = depth[cur.id]; } return d; }   // 沿著「第一則回應」走到底
+    var shapeCache = {};
+    function shapeFor(n) { return shapeCache[n] || (shapeCache[n] = wallShape(n, dir, alongStep, acrossStep, gapAlong, gapAcross)); }
     f.roots.forEach(function (root) {
-      // 這棵樹裡所有「脈絡的起點」: 樹根, 加上每個節點的第二則(含)以後的回應; 由淺到深、同層依時間處理
-      var starts = [{ n: root, parent: null, sib: 0 }], st2 = [root];
-      while (st2.length) { var p = st2.pop(); f.kids[p.id].forEach(function (c, k) { if (k > 0) starts.push({ n: c, parent: p, sib: k - 1 }); st2.push(c); }); }
-      starts.sort(function (a, b) { return depth[a.n.id] - depth[b.n.id] || byTime(a.n, b.n); });
+      // 這棵樹裡所有「脈絡的起點」: 樹根, 加上每個節點的第二則(含)以後的回應; 由淺到深、同層依時間處理; 想法牆排在同一層的最後
+      var starts = [{ n: root, parent: null, sib: 0 }], st2 = [root], wallsHere = [];
+      while (st2.length) {
+        var p = st2.pop();
+        f.kids[p.id].forEach(function (c, k) { if (k > 0) starts.push({ n: c, parent: p, sib: k - 1 }); st2.push(c); });
+        if (wallOf[p.id]) starts.push({ wall: true, p: p, a: depth[p.id] + 1 });
+      }
+      starts.sort(function (a, b) { var da = a.wall ? a.a : depth[a.n.id], db = b.wall ? b.a : depth[b.n.id]; return da - db || (a.wall ? 1 : 0) - (b.wall ? 1 : 0) || (a.wall || b.wall ? 0 : byTime(a.n, b.n)); });
       var occ = {};   // row → [[from, to], ...] 這一排已被占用的層範圍
       function free(row, a, b) { var list = occ[row] || []; for (var q = 0; q < list.length; q++) if (a <= list[q][1] + 1 && list[q][0] <= b + 1) return false; return true; }   // 前後各留一格空隙
-      var minRow = 0, maxRow = 0;
+      function freeStrict(row, a, b) { var list = occ[row] || []; for (var q = 0; q < list.length; q++) if (a <= list[q][1] && list[q][0] <= b) return false; return true; }   // 想法牆: 可以緊接在來源想法後面
+      var minRow = 0, maxRow = 0, wallAlong = 0;
       starts.forEach(function (s) {
+        if (s.wall) {
+          var shp = shapeFor(wallOf[s.p.id].length), a0 = s.a, b0 = a0 + shp.ca - 1, k = shp.cx, t = rowOf[s.p.id] - Math.floor((k - 1) / 2), r0 = null;
+          function okAt(r) { for (var q = 0; q < k; q++) if (!freeStrict(r + q, a0, b0)) return false; return true; }
+          for (var d = 0; r0 === null; d++) { if (okAt(t + d)) r0 = t + d; else if (d && okAt(t - d)) r0 = t - d; }   // 先放在來源想法旁邊(置中), 被占了就往下、往上找最近的空位
+          for (var q = 0; q < k; q++) (occ[r0 + q] = occ[r0 + q] || []).push([a0, b0]);
+          wallsHere.push({ key: s.p.id, a: a0, row: r0, members: wallOf[s.p.id], shp: shp });
+          minRow = Math.min(minRow, r0); maxRow = Math.max(maxRow, r0 + k - 1); wallAlong = Math.max(wallAlong, b0);
+          return;
+        }
         var a = depth[s.n.id], b = chainEnd(s.n), row;
         if (!s.parent) row = 0;
         else {
           var base = rowOf[s.parent.id], pref = s.sib % 2 === 0 ? 1 : -1;   // 第二則回應優先放下方, 第三則放上方, 依序交替; 離上一則最近的空排
-          for (var k = 1; ; k++) {
-            var c1 = base + pref * k, c2 = base - pref * k;
+          for (var k2 = 1; ; k2++) {
+            var c1 = base + pref * k2, c2 = base - pref * k2;
             if (free(c1, a, b)) { row = c1; break; }
             if (free(c2, a, b)) { row = c2; break; }
           }
@@ -80,14 +121,17 @@
         var cur = s.n; while (cur) { rowOf[cur.id] = row; cur = f.kids[cur.id][0]; }
         minRow = Math.min(minRow, row); maxRow = Math.max(maxRow, row);
       });
-      bands.push({ root: root, minRow: minRow, maxRow: maxRow });
+      bands.push({ root: root, minRow: minRow, maxRow: maxRow, wallAlong: wallAlong, walls: wallsHere });
     });
-    var bandOf = {};
+    if (orphan.length) {   // 沒人回應的獨立想法: 自己一個區塊(一面想法牆), 排在最後
+      var os = shapeFor(orphan.length);
+      bands.push({ root: null, minRow: 0, maxRow: os.cx - 1, wallAlong: os.ca - 1, walls: [{ key: '_orphans', a: 0, row: 0, members: orphan, shp: os }] });
+    }
     // 每棵樹各佔一個「區塊」; 再把所有區塊像拼圖一樣折行排進一個接近畫面比例的長方形(不要全部串成一長條, 才不用一直往右或往下拉)
-    var maxAlong = {};
+    var bandOf = {};
     bands.forEach(function (bd) {
-      bd.maxAlong = 0; var st = [bd.root];
-      while (st.length) { var n = st.pop(); bd.maxAlong = Math.max(bd.maxAlong, depth[n.id]); bandOf[n.id] = bd; f.kids[n.id].forEach(function (c) { st.push(c); }); }
+      bd.maxAlong = bd.wallAlong || 0;
+      if (bd.root) { var st = [bd.root]; while (st.length) { var n = st.pop(); bd.maxAlong = Math.max(bd.maxAlong, depth[n.id]); bandOf[n.id] = bd; f.kids[n.id].forEach(function (c) { st.push(c); }); } }
       bd.rows = bd.maxRow - bd.minRow + 1;
       var a = bd.maxAlong * alongStep, c2 = (bd.rows - 1) * acrossStep;
       bd.bw = dir === 'LR' ? a + w : c2 + w; bd.bh = dir === 'LR' ? c2 + h : a + h;
@@ -111,17 +155,24 @@
     var pkd = best ? best.pk : { pos: [], F: 0, T: 0 }, maxLanes = 1;
     bands.forEach(function (bd, bi) { var q = pkd.pos[bi]; bd.px = LRd ? q.a : q.b; bd.py = LRd ? q.b : q.a; maxLanes = Math.max(maxLanes, bd.rows); });
     var pkW = LRd ? pkd.F : pkd.T, pkH = LRd ? pkd.T : pkd.F;
-    var targets = nodes.map(function (n) {
+    var targets = [], wallFrames = [];
+    nodes.forEach(function (n) {
+      if (wallKey[n.id]) return;
       var bd = bandOf[n.id], along = depth[n.id], across = rowOf[n.id] - bd.minRow;
-      return dir === 'LR' ? { id: n.id, x: Math.round(x0 + bd.px + along * alongStep), y: Math.round(y0 + bd.py + across * acrossStep) } : { id: n.id, x: Math.round(x0 + bd.px + across * acrossStep), y: Math.round(y0 + bd.py + along * alongStep) };
+      targets.push(dir === 'LR' ? { id: n.id, x: Math.round(x0 + bd.px + along * alongStep), y: Math.round(y0 + bd.py + across * acrossStep) } : { id: n.id, x: Math.round(x0 + bd.px + across * acrossStep), y: Math.round(y0 + bd.py + along * alongStep) });
     });
-    return { targets: targets, width: x0 * 2 + pkW, height: y0 * 2 + pkH, dir: dir, trees: f.roots.length, lanes: maxLanes, alongStep: alongStep, acrossStep: acrossStep };
+    bands.forEach(function (bd) {
+      bd.walls.forEach(function (wl) {
+        var cx = dir === 'LR' ? x0 + bd.px + wl.a * alongStep : x0 + bd.px + (wl.row - bd.minRow) * acrossStep, cy = dir === 'LR' ? y0 + bd.py + (wl.row - bd.minRow) * acrossStep : y0 + bd.py + wl.a * alongStep;
+        wl.members.slice().sort(byTime).forEach(function (m, i) {
+          var cc = i % wl.shp.cols, rr = Math.floor(i / wl.shp.cols);
+          targets.push({ id: m.id, x: Math.round(cx + WALL.pad + cc * (WALL.w + WALL.gap)), y: Math.round(cy + WALL.head + rr * (WALL.h + WALL.gap)), wall: wl.key });
+        });
+        wallFrames.push({ key: wl.key, x: Math.round(cx), y: Math.round(cy), w: wl.shp.bw, h: wl.shp.bh, count: wl.members.length });
+      });
+    });
+    return { targets: targets, width: x0 * 2 + pkW, height: y0 * 2 + pkH, dir: dir, trees: f.roots.length, lanes: maxLanes, alongStep: alongStep, acrossStep: acrossStep, walls: wallFrames, wallIds: Object.keys(wallKey) };
   }
-
-  /* ---------- 1b. 最佳化: 主脈絡與回應順序 ----------
-   * 主脈絡 = 從樹根出發, 每一步都走「後面接得最長、最多人回應」的那一則; 它會排在同一排的中間, 箭頭加粗, 看一眼就知道討論主要往哪走.
-   * rankChildren: 每則想法的回應依「後面帶出多少討論(子孫數)」由多到少排, 一樣多就依時間(規則版, 不需要 AI)
-   * sanitizeAi: 檢查 AI 回傳的建議(主脈絡、回應順序、分支主題), 只收合理的; 回傳 { order, main[], labels[] } */
   function subtreeSizes(f) {
     var size = {}, order = [], st = f.roots.slice();
     while (st.length) { var n = st.pop(); order.push(n); f.kids[n.id].forEach(function (c) { st.push(c); }); }
@@ -296,5 +347,5 @@
     return { x: x, y: y + (list.length + 1) * sy, moved: true };
   }
 
-  g.KBLayout = { rankChildren: rankChildren, mainLine: mainLine, sanitizeAi: sanitizeAi, subtreeSizes: function (nodes) { return subtreeSizes(forest(nodes)); }, arrange: arrange, heat: heat, pickHot: pickHot, clusterTopics: clusterTopics, clusterTypes: clusterTypes, placeZones: placeZones, freeSpot: freeSpot, forest: forest, TYPES: TYPES, TYPE_ZH: TYPE_ZH, words: words };
+  g.KBLayout = { rankChildren: rankChildren, mainLine: mainLine, sanitizeAi: sanitizeAi, subtreeSizes: function (nodes) { return subtreeSizes(forest(nodes)); }, arrange: arrange, WALL: WALL, heat: heat, pickHot: pickHot, clusterTopics: clusterTopics, clusterTypes: clusterTypes, placeZones: placeZones, freeSpot: freeSpot, forest: forest, TYPES: TYPES, TYPE_ZH: TYPE_ZH, words: words };
 })(typeof window !== 'undefined' ? window : globalThis);
