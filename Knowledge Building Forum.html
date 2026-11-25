@@ -1654,6 +1654,8 @@
             /* ---- 最佳化排版 / 語意聚類 / 潛力熱點(算法在 kb-layout.js) ---- */
             topicNodes: () => window.state.nodes.filter(n => n.topicId === window.state.currentTopicId),
             // 卡片大小: 寬度看是不是手機; 高度量現在畫面上最高的那張(排版間距才不會讓卡片重疊)
+            // 目前畫布畫面的長寬比(排版會把整張圖排成接近這個比例, 一個畫面就看得到, 不用一直往右或往下拉)
+            viewAspect: () => { try { const w = document.getElementById('canvas-wrapper'); if (w && w.clientWidth > 100 && w.clientHeight > 100) return Math.max(0.35, Math.min(3, w.clientWidth / w.clientHeight)); } catch (e) {} return window.innerWidth < 768 ? 0.6 : 1.6; },
             cardSize: () => {
                 let h = 182; try { document.querySelectorAll('.node-card').forEach(e => { h = Math.max(h, e.offsetHeight || 0); }); } catch (e) {}
                 return { w: window.innerWidth < 768 ? 256 : 288, h: Math.min(h, 320) };
@@ -1735,7 +1737,7 @@
                 C.pushHistory(dir === 'TB' ? '排版:從上到下' : '排版:從左到右');
                 c.smartTok++; c.smartBusy = false; c.mainIds = null; c.branchLabels = [];   // 一般排版: 沒有主脈絡標示, 也不要讓還在後台跑的 AI 結果蓋上來
                 if (c.clusterMode) C.clearCluster(true);
-                const sz = C.cardSize(), res = KBLayout.arrange(nodes, dir, { w: sz.w, h: sz.h });
+                const sz = C.cardSize(), res = KBLayout.arrange(nodes, dir, { w: sz.w, h: sz.h, aspect: C.viewAspect() });
                 c.layoutDir = res.dir;
                 C.moveNodes(res.targets);
                 C.viewAfterArrange(res.width, res.height);
@@ -1774,7 +1776,7 @@
                AI 只提供「建議」(主脈絡、順序、名稱), 座標由程式精準計算, 建議不合理的部分會被忽略; AI 失敗就保留規則版. */
             applySmart: (dir, order, labels) => {
                 const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes(), sz = C.cardSize();
-                const res = KBLayout.arrange(nodes, dir, { w: sz.w, h: sz.h, order: order });
+                const res = KBLayout.arrange(nodes, dir, { w: sz.w, h: sz.h, order: order, aspect: C.viewAspect() });
                 c.layoutDir = res.dir; c.mainIds = KBLayout.mainLine(nodes, order); c.branchLabels = labels || [];
                 C.moveNodes(res.targets); C.viewAfterArrange(res.width, res.height);
                 setTimeout(() => { try { window.dataManager.save(); } catch (e) {} }, 900);

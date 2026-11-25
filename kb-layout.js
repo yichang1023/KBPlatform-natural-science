@@ -51,7 +51,7 @@
   function arrange(nodes, dir, opts) {
     opts = opts || {}; dir = dir === 'TB' ? 'TB' : 'LR';
     var w = opts.w || 288, h = opts.h || 182, x0 = opts.x0 == null ? 80 : opts.x0, y0 = opts.y0 == null ? 80 : opts.y0;
-    var gapAlong = opts.gapAlong == null ? (dir === 'LR' ? 72 : 84) : opts.gapAlong, gapAcross = opts.gapAcross == null ? (dir === 'LR' ? 44 : 44) : opts.gapAcross;
+    var gapAlong = opts.gapAlong == null ? (dir === 'LR' ? 64 : 64) : opts.gapAlong, gapAcross = opts.gapAcross == null ? 44 : opts.gapAcross;
     var alongStep = (dir === 'LR' ? w : h) + gapAlong, acrossStep = (dir === 'LR' ? h : w) + gapAcross;
     var f = forest(nodes, opts.order), depth = {}, rowOf = {}, bands = [], i;
     // 每個節點的層(深度): 由樹根往下, 不用遞迴(脈絡可能有上百層)
@@ -82,17 +82,40 @@
       });
       bands.push({ root: root, minRow: minRow, maxRow: maxRow });
     });
-    // 每棵樹各佔一個區塊, 區塊之間空一排
-    var off = 0, bandOf = {};
-    bands.forEach(function (bd) { bd.off = off - bd.minRow; off += bd.maxRow - bd.minRow + 2; });
-    bands.forEach(function (bd) { var st = [bd.root]; while (st.length) { var n = st.pop(); bandOf[n.id] = bd; f.kids[n.id].forEach(function (c) { st.push(c); }); } });
-    var maxDepth = 0, maxRowAll = 0;
-    var targets = nodes.map(function (n) {
-      var along = depth[n.id], across = rowOf[n.id] + bandOf[n.id].off; maxDepth = Math.max(maxDepth, along); maxRowAll = Math.max(maxRowAll, across);
-      return dir === 'LR' ? { id: n.id, x: Math.round(x0 + along * alongStep), y: Math.round(y0 + across * acrossStep) } : { id: n.id, x: Math.round(x0 + across * acrossStep), y: Math.round(y0 + along * alongStep) };
+    var bandOf = {};
+    // 每棵樹各佔一個「區塊」; 再把所有區塊像拼圖一樣折行排進一個接近畫面比例的長方形(不要全部串成一長條, 才不用一直往右或往下拉)
+    var maxAlong = {};
+    bands.forEach(function (bd) {
+      bd.maxAlong = 0; var st = [bd.root];
+      while (st.length) { var n = st.pop(); bd.maxAlong = Math.max(bd.maxAlong, depth[n.id]); bandOf[n.id] = bd; f.kids[n.id].forEach(function (c) { st.push(c); }); }
+      bd.rows = bd.maxRow - bd.minRow + 1;
+      var a = bd.maxAlong * alongStep, c2 = (bd.rows - 1) * acrossStep;
+      bd.bw = dir === 'LR' ? a + w : c2 + w; bd.bh = dir === 'LR' ? c2 + h : a + h;
     });
-    var cols = dir === 'LR' ? maxDepth : maxRowAll, rows = dir === 'LR' ? maxRowAll : maxDepth;
-    return { targets: targets, width: x0 * 2 + cols * (dir === 'LR' ? alongStep : acrossStep) + w, height: y0 * 2 + rows * (dir === 'LR' ? acrossStep : alongStep) + h, dir: dir, trees: f.roots.length, lanes: maxRowAll + 1, alongStep: alongStep, acrossStep: acrossStep };
+    var gx = opts.blockGapX == null ? 72 : opts.blockGapX, gy = opts.blockGapY == null ? 52 : opts.blockGapY, aspect = opts.aspect > 0 ? opts.aspect : 1.6;
+    // 排版的「走向」要和名稱一致: 從左到右 = 一路往右排滿一行再換下一行(像文字); 從上到下 = 一路往下排滿一欄再換到右邊的下一欄
+    var LRd = dir === 'LR', gFlow = LRd ? gx : gy, gAcross = LRd ? gy : gx, aspF = LRd ? aspect : 1 / aspect;
+    bands.forEach(function (bd) { bd.fl = LRd ? bd.bw : bd.bh; bd.th = LRd ? bd.bh : bd.bw; });
+    function pack(limit) {
+      var a = 0, b = 0, lineT = 0, F = 0, pos = [];
+      bands.forEach(function (bd) { if (a > 0 && a + bd.fl > limit) { b += lineT + gAcross; a = 0; lineT = 0; } pos.push({ a: a, b: b }); a += bd.fl + gFlow; lineT = Math.max(lineT, bd.th); F = Math.max(F, a - gFlow); });
+      return { pos: pos, F: F, T: b + lineT };
+    }
+    var best = null, areaSum = 0, minW = 0, sumW = 0;
+    bands.forEach(function (bd) { areaSum += bd.fl * bd.th; minW = Math.max(minW, bd.fl); sumW += bd.fl + gFlow; });
+    for (var s = 0; s <= 48; s++) {   // 試 49 種折行長度, 挑「形狀最像畫面、浪費空白最少」的
+      var lim = minW * Math.pow(Math.max(1, sumW / minW), s / 48), pk = pack(lim);
+      var score = Math.pow(Math.log(pk.F / pk.T) - Math.log(aspF), 2) + 0.5 * (pk.F * pk.T / Math.max(1, areaSum) - 1);
+      if (!best || score < best.score - 1e-9) best = { score: score, pk: pk };
+    }
+    var pkd = best ? best.pk : { pos: [], F: 0, T: 0 }, maxLanes = 1;
+    bands.forEach(function (bd, bi) { var q = pkd.pos[bi]; bd.px = LRd ? q.a : q.b; bd.py = LRd ? q.b : q.a; maxLanes = Math.max(maxLanes, bd.rows); });
+    var pkW = LRd ? pkd.F : pkd.T, pkH = LRd ? pkd.T : pkd.F;
+    var targets = nodes.map(function (n) {
+      var bd = bandOf[n.id], along = depth[n.id], across = rowOf[n.id] - bd.minRow;
+      return dir === 'LR' ? { id: n.id, x: Math.round(x0 + bd.px + along * alongStep), y: Math.round(y0 + bd.py + across * acrossStep) } : { id: n.id, x: Math.round(x0 + bd.px + across * acrossStep), y: Math.round(y0 + bd.py + along * alongStep) };
+    });
+    return { targets: targets, width: x0 * 2 + pkW, height: y0 * 2 + pkH, dir: dir, trees: f.roots.length, lanes: maxLanes, alongStep: alongStep, acrossStep: acrossStep };
   }
 
   /* ---------- 1b. 最佳化: 主脈絡與回應順序 ----------
