@@ -1609,10 +1609,16 @@
                     window.app.canvas.applyTransform();
                 }
             },
+            // 符合畫面: 把這個討論區所有想法一次縮進畫面(太多時最小縮到 10%, 再用滑鼠或手指移動); 沒有想法就回到原點
             fitView: () => {
-                window.state.canvas.scale = window.innerWidth < 768 ? 0.8 : 1;
-                window.state.canvas.offsetX = 0;
-                window.state.canvas.offsetY = 0;
+                const c = window.state.canvas, wrap = document.getElementById('canvas-wrapper');
+                let nodes = []; try { nodes = window.app.canvas.topicNodes().filter(n => isFinite(n.x) && isFinite(n.y)); } catch (e) {}
+                if (!wrap || !nodes.length) { c.scale = window.innerWidth < 768 ? 0.8 : 1; c.offsetX = 0; c.offsetY = 0; return window.app.canvas.applyTransform(); }
+                const sz = window.app.canvas.cardSize(), cw = wrap.clientWidth || 800, ch = wrap.clientHeight || 600;
+                const x1 = Math.min(...nodes.map(n => n.x)), y1 = Math.min(...nodes.map(n => n.y)), x2 = Math.max(...nodes.map(n => n.x)) + Math.max(sz.w, 288), y2 = Math.max(...nodes.map(n => n.y)) + sz.h;
+                const pad = 40, bw = Math.max(1, x2 - x1), bh = Math.max(1, y2 - y1);
+                const sc = Math.max(0.1, Math.min(window.innerWidth < 768 ? 0.8 : 1, (cw - pad * 2) / bw, (ch - pad * 2) / bh));
+                c.scale = sc; c.offsetX = Math.round((cw - bw * sc) / 2 - x1 * sc); c.offsetY = Math.round((ch - bh * sc) / 2 - y1 * sc);
                 window.app.canvas.applyTransform();
             },
             // 手機: 在想法卡片上「快速點兩下」打開內容(手機瀏覽器在可拖曳的畫布上不會送出 dblclick, 所以自己判斷:
