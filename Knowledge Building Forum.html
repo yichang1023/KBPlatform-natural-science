@@ -1002,7 +1002,7 @@
                 ny = -window.state.canvas.offsetY + (wrap?.clientHeight || 600)/2 - 100;
             }
             try {   // 新貼文不要疊在別張卡片上: 位置被占了就往旁邊、往下找最近的空位
-                if (window.KBLayout && KBLayout.freeSpot) { const sz = window.app.canvas.cardSize(), spot = KBLayout.freeSpot(window.app.canvas.topicNodes(), nx, ny, { w: sz.w, h: sz.h }); nx = spot.x; ny = spot.y; }
+                if (window.KBLayout && KBLayout.freeSpot) { const sz = window.app.canvas.cardSize(), spot = KBLayout.freeSpot(window.app.canvas.topicNodes(), nx, ny, { w: Math.max(sz.w, 288), h: sz.h }); nx = spot.x; ny = spot.y; }
             } catch (e) {}
             const randomCluster = ['A', 'B', 'C'][Math.floor(Math.random() * 3)];
 
