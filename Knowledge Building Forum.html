@@ -1434,7 +1434,7 @@
                     const dist = window.app.canvas.getDistance(e.touches);
                     const zoomFactor = dist / window.state.canvas.lastPinchDist;
                     const oldScale = window.state.canvas.scale;
-                    const newScale = Math.min(Math.max(0.2, window.state.canvas.startPinchScale * zoomFactor), 3);
+                    const newScale = Math.min(Math.max(0.03, window.state.canvas.startPinchScale * zoomFactor), 3);
 
                     if (newScale !== oldScale) {
                         const wrapper = document.getElementById('canvas-wrapper');
@@ -1578,8 +1578,8 @@
                 const my = e.clientY - rect.top;
 
                 const oldScale = window.state.canvas.scale;
-                const d = -e.deltaY * 0.001;
-                const newScale = Math.min(Math.max(0.2, oldScale + d), 3);
+                const d = -e.deltaY * 0.001 * Math.max(0.15, Math.min(1, oldScale));   // 縮得很小時步伐跟著變小, 才控制得住
+                const newScale = Math.min(Math.max(0.03, oldScale + d), 3);
 
                 if (newScale !== oldScale) {
                     // 計算縮放變化率，並動態補償 offsetX 和 offsetY
@@ -1599,7 +1599,7 @@
                 const my = wrapper.clientHeight / 2;
 
                 const oldScale = window.state.canvas.scale;
-                const newScale = Math.min(Math.max(0.2, oldScale + d), 3);
+                const newScale = Math.min(Math.max(0.03, oldScale + d * Math.max(0.15, Math.min(1, oldScale))), 3);   // 縮得很小時每按一下的幅度也跟著變小
 
                 if (newScale !== oldScale) {
                     const scaleChange = newScale / oldScale;
@@ -1609,15 +1609,17 @@
                     window.app.canvas.applyTransform();
                 }
             },
-            // 符合畫面: 把這個討論區所有想法一次縮進畫面(太多時最小縮到 10%, 再用滑鼠或手指移動); 沒有想法就回到原點
+            // 符合畫面: 把這個討論區所有想法(含分區標題)一次縮進畫面, 用畫面上實際的卡片大小去量; 放不下就縮到最大視野(最小 3%), 沒有想法就回到原點
             fitView: () => {
                 const c = window.state.canvas, wrap = document.getElementById('canvas-wrapper');
                 let nodes = []; try { nodes = window.app.canvas.topicNodes().filter(n => isFinite(n.x) && isFinite(n.y)); } catch (e) {}
                 if (!wrap || !nodes.length) { c.scale = window.innerWidth < 768 ? 0.8 : 1; c.offsetX = 0; c.offsetY = 0; return window.app.canvas.applyTransform(); }
                 const sz = window.app.canvas.cardSize(), cw = wrap.clientWidth || 800, ch = wrap.clientHeight || 600;
-                const x1 = Math.min(...nodes.map(n => n.x)), y1 = Math.min(...nodes.map(n => n.y)), x2 = Math.max(...nodes.map(n => n.x)) + Math.max(sz.w, 288), y2 = Math.max(...nodes.map(n => n.y)) + sz.h;
-                const pad = 40, bw = Math.max(1, x2 - x1), bh = Math.max(1, y2 - y1);
-                const sc = Math.max(0.1, Math.min(window.innerWidth < 768 ? 0.8 : 1, (cw - pad * 2) / bw, (ch - pad * 2) / bh));
+                let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+                nodes.forEach(n => { const el = document.getElementById('node-' + n.id), w = (el && el.offsetWidth) || Math.max(sz.w, 288), h = (el && el.offsetHeight) || sz.h; x1 = Math.min(x1, n.x); y1 = Math.min(y1, n.y); x2 = Math.max(x2, n.x + w); y2 = Math.max(y2, n.y + h); });
+                (c.zones || []).forEach(z => { if (isFinite(z.x) && isFinite(z.y)) { x1 = Math.min(x1, z.x); y1 = Math.min(y1, z.y); x2 = Math.max(x2, z.x + (z.width || 0)); y2 = Math.max(y2, z.y + (z.height || 0)); } });
+                const pad = 24, bw = Math.max(1, x2 - x1), bh = Math.max(1, y2 - y1);
+                const sc = Math.max(0.03, Math.min(window.innerWidth < 768 ? 0.8 : 1, (cw - pad * 2) / bw, (ch - pad * 2) / bh));
                 c.scale = sc; c.offsetX = Math.round((cw - bw * sc) / 2 - x1 * sc); c.offsetY = Math.round((ch - bh * sc) / 2 - y1 * sc);
                 window.app.canvas.applyTransform();
             },
@@ -1683,7 +1685,7 @@
             fitBounds: (width, height) => {
                 const wrap = document.getElementById('canvas-wrapper'); if (!wrap || !width || !height) return;
                 const cw = wrap.clientWidth || 800, ch = wrap.clientHeight || 600;
-                const sc = Math.max(0.25, Math.min(1, cw / width, ch / height));
+                const sc = Math.max(0.05, Math.min(1, cw / width, ch / height));
                 window.state.canvas.scale = sc;
                 window.state.canvas.offsetX = Math.round((cw - width * sc) / 2);
                 window.state.canvas.offsetY = Math.round(Math.max(0, (ch - height * sc) / 2) + 20);
