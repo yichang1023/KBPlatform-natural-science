@@ -260,5 +260,18 @@
     return { targets: targets, zones: zones, width: totalW, height: y };
   }
 
-  g.KBLayout = { rankChildren: rankChildren, mainLine: mainLine, sanitizeAi: sanitizeAi, subtreeSizes: function (nodes) { return subtreeSizes(forest(nodes)); }, arrange: arrange, heat: heat, pickHot: pickHot, clusterTopics: clusterTopics, clusterTypes: clusterTypes, placeZones: placeZones, forest: forest, TYPES: TYPES, TYPE_ZH: TYPE_ZH, words: words };
+  // 新貼文要放的位置: 從想放的地方(x, y)開始, 如果那裡已經有別張卡片(或太靠近), 就依序往旁邊、往下找最近的空位, 不會疊在一起
+  function freeSpot(nodes, x, y, opts) {
+    opts = opts || {}; var sx = (opts.w || 288) + (opts.gapX == null ? 28 : opts.gapX), sy = (opts.h || 182) + (opts.gapY == null ? 28 : opts.gapY);
+    var list = (nodes || []).filter(function (n) { return n && isFinite(n.x) && isFinite(n.y); });
+    function free(cx, cy) { for (var i = 0; i < list.length; i++) { if (Math.abs(list[i].x - cx) < sx && Math.abs(list[i].y - cy) < sy) return false; } return true; }
+    if (free(x, y)) return { x: x, y: y, moved: false };
+    var cand = [];
+    for (var r = 0; r <= 10; r++) for (var c = -10; c <= 10; c++) cand.push({ c: c, r: r, d: Math.pow(c * sx, 2) + Math.pow(r * sy, 2) });
+    cand.sort(function (a, b) { return a.d - b.d || b.c - a.c || a.r - b.r; });   // 一樣近時, 先往右、再往下
+    for (var k = 0; k < cand.length; k++) { var px = x + cand[k].c * sx, py = y + cand[k].r * sy; if (free(px, py)) return { x: px, y: py, moved: true }; }
+    return { x: x, y: y + (list.length + 1) * sy, moved: true };
+  }
+
+  g.KBLayout = { rankChildren: rankChildren, mainLine: mainLine, sanitizeAi: sanitizeAi, subtreeSizes: function (nodes) { return subtreeSizes(forest(nodes)); }, arrange: arrange, heat: heat, pickHot: pickHot, clusterTopics: clusterTopics, clusterTypes: clusterTypes, placeZones: placeZones, freeSpot: freeSpot, forest: forest, TYPES: TYPES, TYPE_ZH: TYPE_ZH, words: words };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -992,7 +992,7 @@
             if(pid) {
                 const p = window.state.nodes.find(n => n.id === pid);
                 if (p) {
-                    nx = p.x + (Math.random()*100 - 50); ny = p.y + 200;
+                    nx = p.x; ny = p.y + 210;
                 } else {
                     nx = 100; ny = 100; // Safe fallback if parent is missing
                 }
@@ -1001,6 +1001,9 @@
                 nx = -window.state.canvas.offsetX + (wrap?.clientWidth || 800)/2 - 140;
                 ny = -window.state.canvas.offsetY + (wrap?.clientHeight || 600)/2 - 100;
             }
+            try {   // 新貼文不要疊在別張卡片上: 位置被占了就往旁邊、往下找最近的空位
+                if (window.KBLayout && KBLayout.freeSpot) { const sz = window.app.canvas.cardSize(), spot = KBLayout.freeSpot(window.app.canvas.topicNodes(), nx, ny, { w: sz.w, h: sz.h }); nx = spot.x; ny = spot.y; }
+            } catch (e) {}
             const randomCluster = ['A', 'B', 'C'][Math.floor(Math.random() * 3)];
 
             const defaultPromisingness = 50;
