@@ -18,6 +18,9 @@
     <script src="kb-voice.js"></script>
     <script src="kb-media.js"></script>
     <script src="kb-tts.js"></script>
+    <script src="kb-nav.js"></script>
+    <script src="kb-layout.js"></script>
+    <script src="kb-ai.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -35,6 +38,7 @@
     </script>
 
     <style>
+        #modal-node.kb-compact .grid.grid-cols-5 { display: none; }
         html, body { height: 100%; width: 100%; overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
         #canvas-bg { background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: -1; }
         .custom-scroll { -webkit-overflow-scrolling: touch; }
@@ -47,6 +51,9 @@
         .node-card:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); z-index: 50; }
         .node-card.selected-node { box-shadow: 0 0 0 3px #3b82f6, 0 10px 15px -3px rgba(59, 130, 246, 0.2); border-color: #3b82f6; z-index: 60; }
         .promising-node { box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.4), 0 0 25px rgba(249, 115, 22, 0.5); border-color: #f97316 !important; transform: translateY(-2px); z-index: 45; }
+        .kb-kbd { display: inline-block; font: 600 10px/1 ui-monospace, Menlo, Consolas, monospace; color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; border-bottom-width: 2px; border-radius: 4px; padding: 2px 4px; margin-left: 4px; vertical-align: 1px; }
+        .branch-label { position: absolute; left: 6px; top: -27px; max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 700; color: #4338ca; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 9999px; padding: 2px 10px; pointer-events: none; }
+        .smart-chip { position: absolute; top: 4.2rem; left: 50%; transform: translateX(-50%); z-index: 41; background: #eef2ff; border: 1px solid #c7d2fe; color: #4338ca; font-size: 12px; font-weight: 700; border-radius: 9999px; padding: 4px 14px; box-shadow: 0 2px 8px rgba(67,56,202,.15); pointer-events: none; }
         .cluster-zone { position: absolute; border: 2px dashed rgba(203, 213, 225, 0.6); border-radius: 24px; display: flex; flex-direction: column; align-items: center; padding-top: 1rem; pointer-events: none; transition: all 0.5s ease-in-out; background: rgba(255, 255, 255, 0.4); }
         .cluster-title { font-weight: 700; font-size: 1rem; padding: 0.5rem 1.5rem; border-radius: 9999px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); background: white; color: #475569; border: 1px solid #e2e8f0; }
         path.connection { fill: none; stroke-width: 2; transition: stroke 0.3s; pointer-events: none; }
@@ -170,7 +177,7 @@
     <!-- Modals -->
     <!-- Topic Create Modal -->
     <div id="modal-topic" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden flex items-end md:items-center justify-center p-4">
-        <div class="bg-white rounded-t-xl md:rounded-xl shadow-2xl w-full max-w-lg p-6 transform transition-all scale-100 max-h-[85vh] overflow-y-auto mb-safe md:mb-0">
+        <div class="bg-white rounded-t-xl md:rounded-xl shadow-2xl w-full max-w-lg p-6 transform transition-all scale-100 max-h-[85vh] overflow-y-auto mb-safe md:mb-0" style="max-height:85vh;max-height:85dvh">
             <h3 id="modal-topic-title" class="text-xl font-bold mb-4 flex items-center gap-2"><i class="fa-solid fa-folder-plus text-indigo-600"></i> 開啟探究主題</h3>
             <div class="space-y-4">
                 <div>
@@ -198,9 +205,21 @@
         </div>
     </div>
 
+    <!-- 快捷鍵說明 -->
+    <div id="modal-shortcuts" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[105] hidden flex items-center justify-center p-4" role="dialog" aria-label="快捷鍵說明">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl flex flex-col" style="max-height:min(85vh,85dvh)">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <h3 class="font-bold text-slate-800"><i class="fa-regular fa-keyboard"></i> 快捷鍵(參考 Word 的習慣)</h3>
+                <button onclick="window.ui.closeModal('modal-shortcuts')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400" aria-label="關閉"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="shortcuts-body" class="p-5 overflow-y-auto text-sm text-slate-700"></div>
+            <div class="px-5 py-2 border-t border-slate-100 text-[11px] text-slate-400 shrink-0">在輸入文字的地方(標題、內容)不會觸發快捷鍵。Mac 用 Cmd 代替 Ctrl、Option 代替 Alt。</div>
+        </div>
+    </div>
+
     <!-- Node Composer Modal -->
     <div id="modal-node" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden flex items-end md:items-center justify-center sm:p-4">
-        <div class="bg-white rounded-t-xl sm:rounded-xl shadow-2xl w-full max-w-2xl p-4 sm:p-6 relative overflow-hidden flex flex-col mb-safe md:mb-0" style="max-height:min(90vh,94%)">
+        <div class="bg-white rounded-t-xl sm:rounded-xl shadow-2xl w-full max-w-2xl p-4 sm:p-6 relative overflow-hidden flex flex-col mb-safe md:mb-0" style="max-height:min(90vh,94%);max-height:min(90dvh,94%)">
             <div class="flex justify-between items-center mb-4 shrink-0">
                  <h3 class="text-lg md:text-xl font-bold">貢獻想法</h3>
                  <button onclick="window.ui.closeModal('modal-node')" class="text-slate-400 hover:text-slate-600 p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
@@ -232,7 +251,7 @@
 
     <!-- Node Detail Modal -->
     <div id="modal-detail" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[65] hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]" style="max-height:85vh;max-height:85dvh">
             <div class="px-4 py-3 md:px-6 md:py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50 rounded-t-xl">
                 <div class="flex items-center gap-3">
                     <div id="detail-scaffold-icon" class="w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-white text-lg"></div>
@@ -295,7 +314,7 @@
 
     <!-- Trash Modal -->
     <div id="modal-trash" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]" style="max-height:85vh;max-height:85dvh">
             <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-red-50 rounded-t-xl">
                 <h3 class="text-lg font-bold text-red-700 flex items-center gap-2"><i class="fa-solid fa-trash-can"></i> 資源回收桶</h3>
                 <button onclick="window.ui.closeModal('modal-trash')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-100 text-red-400"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -354,7 +373,7 @@
             canvas: {
                 scale: 1, offsetX: 0, offsetY: 0,
                 isDragging: false, lastX: 0, lastY: 0,
-                draggedNodeId: null, isClusterMode: false, isHeatmapMode: false,
+                draggedNodeId: null, isClusterMode: false, clusterMode: null, zones: [], isHeatmapMode: false, heatAi: {}, aiOk: null, mainIds: null, branchLabels: [], smartTok: 0, smartBusy: false,
                 animFrame: null,
                 isSelecting: false, selectionStart: {x: 0, y: 0}, selectionCurrent: {x: 0, y: 0},
                 isPanMode: false,
@@ -514,6 +533,7 @@
 
         // 點擊畫面空白處自動收起所有選單的防呆機制
         document.addEventListener('click', (e) => {
+            try { window.app.canvas.closeMenus(); } catch (x) {}   // 排版、語意聚類的下拉選單: 點空白處收起
             const userMenu = document.getElementById('user-menu');
             const analyticsDrop = document.getElementById('analytics-dropdown');
             if (userMenu && !e.target.closest('#user-menu') && !e.target.closest('button[onclick*="toggleUserMenu"]')) {
@@ -761,6 +781,90 @@
             window.app.router('canvas');
         };
 
+        /* ---- 快捷鍵(參考 Word): 復原 Ctrl+Z、取消復原 Ctrl+Y、全選 Ctrl+A、Ctrl+Home / Ctrl+End、方向鍵、PageUp / PageDown、F1 說明、Ctrl+Enter 送出;
+           論壇專屬的功能用 Alt + 字母(避開瀏覽器自己的 Ctrl 組合): Alt+L/T 排版、Alt+1/2/0 聚類、Alt+H 熱點、Alt+N 貢獻想法、Alt+M 拖曳/選取 ---- */
+        window.app.SHORTCUTS = [
+            { g: '編輯', k: 'Ctrl+Z', zh: '復原上一步(排版、語意聚類、移動卡片, 每個討論區最多記 20 步)', run: () => window.app.canvas.undoLayout(), m: e => ctrlKey(e) && !e.shiftKey && !e.altKey && e.code === 'KeyZ' },
+            { g: '編輯', k: 'Ctrl+Y / Ctrl+Shift+Z', zh: '取消復原', run: () => window.app.canvas.redoLayout(), m: e => ctrlKey(e) && !e.altKey && (e.code === 'KeyY' || (e.shiftKey && e.code === 'KeyZ')) },
+            { g: '編輯', k: 'Ctrl+A', zh: '選取全部卡片', run: () => window.app.selectAllNodes(), m: e => ctrlKey(e) && !e.shiftKey && !e.altKey && e.code === 'KeyA' },
+            { g: '編輯', k: 'Esc', zh: '取消選取、收起選單、關閉視窗', run: () => { window.app.canvas.closeMenus(); window.app.clearSelection(); }, m: e => e.key === 'Escape' && !ctrlKey(e) && !e.altKey, pass: true },
+            { g: '編輯', k: 'Alt+N', zh: '貢獻想法(開啟發言視窗)', run: () => window.app.openComposer(null), m: e => e.altKey && !e.shiftKey && !ctrlKey(e) && e.code === 'KeyN' },
+            { g: '編輯', k: 'Ctrl+Enter', zh: '在發言視窗裡發布', run: () => window.app.submitNode(), m: e => ctrlKey(e) && e.key === 'Enter', composer: true },
+            { g: '排版', k: 'Alt+L', zh: '最佳化排版: 從左到右', run: () => window.app.canvas.arrange('LR'), m: e => e.altKey && !e.shiftKey && !ctrlKey(e) && e.code === 'KeyL' },
+            { g: '排版', k: 'Alt+T', zh: '最佳化排版: 從上到下', run: () => window.app.canvas.arrange('TB'), m: e => e.altKey && !e.shiftKey && !ctrlKey(e) && e.code === 'KeyT' },
+            { g: '排版', k: 'Alt+O', zh: '最佳化排版(AI 協助): 主脈絡排同一排、分支變淡並標主題; 沿用目前的方向, 預設從左到右', run: () => window.app.canvas.optimize(), m: e => e.altKey && !e.shiftKey && !ctrlKey(e) && e.code === 'KeyO' },
+            { g: '分析', k: 'Alt+1', zh: '語意聚類: 依內容主題', run: () => window.app.canvas.setCluster('topic'), m: e => e.altKey && !ctrlKey(e) && e.code === 'Digit1' },
+            { g: '分析', k: 'Alt+2', zh: '語意聚類: 依想法類型(提問 / 延伸 / 改進 / 反例 / 昇華)', run: () => window.app.canvas.setCluster('type'), m: e => e.altKey && !ctrlKey(e) && e.code === 'Digit2' },
+            { g: '分析', k: 'Alt+0', zh: '關閉語意聚類(放回原本的位置)', run: () => window.app.canvas.setCluster(null), m: e => e.altKey && !ctrlKey(e) && e.code === 'Digit0' },
+            { g: '分析', k: 'Alt+H', zh: '潛力熱點 開 / 關', run: () => window.app.canvas.toggleHeatmap(), m: e => e.altKey && !e.shiftKey && !ctrlKey(e) && e.code === 'KeyH' },
+            { g: '分析', k: 'Alt+Shift+H', zh: '請 AI 複核潛力熱點(有 AI 金鑰時)', run: () => { if (window.state.canvas.isHeatmapMode) window.app.canvas.askAiHeat(); else window.ui.showToast('先按 Alt+H 打開潛力熱點', 'info'); }, m: e => e.altKey && e.shiftKey && !ctrlKey(e) && e.code === 'KeyH' },
+            { g: '檢視', k: '+ / -', zh: '放大 / 縮小', run: null, m: e => !ctrlKey(e) && !e.altKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_'), z: true },
+            { g: '檢視', k: '0', zh: '符合畫面(回到預設縮放)', run: () => window.app.canvas.fitView(), m: e => !ctrlKey(e) && !e.altKey && e.key === '0' },
+            { g: '檢視', k: '方向鍵', zh: '移動畫面(按住 Shift 移得更快)', run: null, m: e => !ctrlKey(e) && !e.altKey && /^Arrow/.test(e.key), arrows: true },
+            { g: '檢視', k: 'PageUp / PageDown', zh: '往上 / 往下翻一頁', run: null, m: e => !ctrlKey(e) && !e.altKey && (e.key === 'PageUp' || e.key === 'PageDown'), pages: true },
+            { g: '檢視', k: 'Ctrl+Home', zh: '回到起點(第一則想法)', run: () => window.app.centerOnFirstNode(true), m: e => ctrlKey(e) && !e.altKey && e.key === 'Home' },
+            { g: '檢視', k: 'Ctrl+End', zh: '到最新的一則想法', run: () => window.app.centerOnLatestNode(), m: e => ctrlKey(e) && !e.altKey && e.key === 'End' },
+            { g: '檢視', k: 'Alt+M', zh: '切換「拖曳 / 選取」模式', run: () => window.app.canvas.toggleMode(), m: e => e.altKey && !e.shiftKey && !ctrlKey(e) && e.code === 'KeyM' },
+            { g: '說明', k: 'F1 或 ?', zh: '顯示這張快捷鍵說明', run: () => window.app.showShortcuts(), m: e => e.key === 'F1' || (e.key === '?' && !ctrlKey(e) && !e.altKey), any: true }
+        ];
+        const ctrlKey = (e) => e.ctrlKey || e.metaKey;
+        window.app.selectAllNodes = () => {
+            const ids = window.app.canvas.topicNodes().map(n => n.id); window.state.selectedNodeIds = ids;
+            document.querySelectorAll('.node-card').forEach(el => el.classList.add('selected-node'));
+            window.ui.showToast('已選取全部 ' + ids.length + ' 張卡片', 'info');
+        };
+        window.app.clearSelection = () => { window.state.selectedNodeIds = []; document.querySelectorAll('.node-card.selected-node').forEach(el => el.classList.remove('selected-node')); };
+        window.app.centerOnLatestNode = () => {
+            const ns = window.app.canvas.topicNodes(); if (!ns.length) return;
+            const n = ns.reduce((a, b) => ((b.date || 0) >= (a.date || 0) ? b : a), ns[0]), wrap = document.getElementById('canvas-wrapper'), c = window.state.canvas;
+            const cw = wrap ? wrap.clientWidth : 800, ch = wrap ? wrap.clientHeight : 600, sz = window.app.canvas.cardSize();
+            c.offsetX = (cw / 2) - (n.x + sz.w / 2) * c.scale; c.offsetY = (ch / 2) - (n.y + sz.h / 2) * c.scale; window.app.canvas.applyTransform();
+        };
+        window.app.showShortcuts = () => {
+            const groups = {}; window.app.SHORTCUTS.forEach(x => { (groups[x.g] = groups[x.g] || []).push(x); });
+            document.getElementById('shortcuts-body').innerHTML = Object.keys(groups).map(g => `<div class="mb-3"><div class="text-[11px] font-bold text-slate-400 mb-1">${g}</div>${groups[g].map(x => `<div class="flex items-start justify-between gap-3 py-1 border-b border-slate-50"><span>${x.zh}</span><span class="shrink-0 whitespace-nowrap">${x.k.split(' / ').map(k => `<kbd class="kb-kbd">${k}</kbd>`).join(' ')}</span></div>`).join('')}</div>`).join('');
+            document.getElementById('modal-shortcuts').classList.remove('hidden');
+        };
+        window.app.onKey = (e) => {
+            const t = e.target, typing = t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
+            const sc = window.app.SHORTCUTS.find(x => x.m(e)); if (!sc) return;
+            const openModal = [].slice.call(document.querySelectorAll('[id^="modal-"].fixed')).filter(m => !m.classList.contains('hidden'));
+            const composerOpen = openModal.some(m => m.id === 'modal-node');
+            if (sc.composer) { if (composerOpen) { e.preventDefault(); sc.run(); } return; }   // Ctrl+Enter: 在發言視窗(含輸入框裡)發布
+            if (typing) return;
+            if (sc.any) { e.preventDefault(); sc.run(); return; }
+            if (sc.pass) { sc.run(); return; }   // Esc: 照常往下傳(關視窗), 另外收起選單、取消選取
+            if (window.state.currentView !== 'canvas' || openModal.length) return;
+            e.preventDefault();
+            const c = window.state.canvas;
+            if (sc.z) { window.app.canvas.zoom(/^[+=]$/.test(e.key) ? 0.1 : -0.1); return; }
+            if (sc.arrows) { const step = e.shiftKey ? 320 : 80; if (e.key === 'ArrowLeft') c.offsetX += step; if (e.key === 'ArrowRight') c.offsetX -= step; if (e.key === 'ArrowUp') c.offsetY += step; if (e.key === 'ArrowDown') c.offsetY -= step; window.app.canvas.applyTransform(); return; }
+            if (sc.pages) { const wrap = document.getElementById('canvas-wrapper'), step = ((wrap && wrap.clientHeight) || 600) * 0.85; c.offsetY += e.key === 'PageUp' ? step : -step; window.app.canvas.applyTransform(); return; }
+            sc.run();
+        };
+        if (!window.__kbKeysOn) { window.__kbKeysOn = true; document.addEventListener('keydown', (e) => { try { window.app.onKey(e); } catch (x) { console.error(x); } }); }
+
+        window.app.kbAiJson = async (prompt) => {
+            let init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } }) };
+            if (window.KBAI && KBAI.guard) init = KBAI.guard(init);
+            let key = ''; try { key = localStorage.getItem('kb_ai_key') || ''; } catch (e) {}
+            let r;
+            if (key) {
+                let pref = ''; try { pref = ((KB.settings.get().ai || {}).model) || ''; } catch (e) {} if (pref === 'auto') pref = '';
+                const models = [pref, 'gemini-3.8-flash', 'gemini-2.5-flash'].filter((m, i, a) => m && a.indexOf(m) === i);
+                for (const m of models) { r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + key, init); if (r.status !== 404) break; }
+            } else {
+                const st = window.KBAI ? await KBAI.status() : null;
+                if (!st || !st.configured) throw new Error('這裡沒有設定 AI 金鑰');
+                r = await KBAI.proxyFetch(init);
+            }
+            if (window.KBAI && KBAI.wrap) r = KBAI.wrap(r);
+            if (!r.ok) throw new Error('AI 服務暫時無法使用(' + r.status + ')');
+            const j = await r.json(), t = (((j.candidates || [])[0] || {}).content || {}).parts;
+            const txt = (t || []).map(p => p.text || '').join('');
+            return JSON.parse(window.KBAI && KBAI.cleanJson ? txt.replace(/^```(?:json)?|```$/g, '').trim() : txt);
+        };
+
         window.app.centerOnFirstNode = (animate = false) => {
             if (!window.state.currentTopicId) return;
             const nodes = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId);
@@ -860,7 +964,7 @@
         };
 
         window.app.submitNode = () => {
-            if(!window.state.composer.selectedScaffold) return window.ui.showToast('請選擇意圖', 'error');
+            if(!window.state.composer.selectedScaffold) return window.ui.showToast('你忘了選擇貢獻想法的目的是哪一個了唷', 'error');
             const title = document.getElementById('node-title').value;
             const content = document.getElementById('node-content').value;
             if(!title) return window.ui.showToast('請輸入標題', 'error');
@@ -1257,7 +1361,22 @@
             },
             handleDoubleClick: (e) => {
                 if (e.target.closest('.node-card')) return;
+                if (Date.now() - (window.state.canvas._blankToggled || 0) < 700) return;   // 手機剛用「快速點兩下」切換過, 不要又被 dblclick 切回去
                 window.app.canvas.toggleMode();
+            },
+            // 手機: 在畫布空白處「快速點兩下」切換 拖曳 / 選取(手機瀏覽器在這種畫布上不送 dblclick, 自己判斷: 兩次輕點都沒移動、間隔 0.45 秒內)
+            blankTapStart: (e) => {
+                const t = e.touches && e.touches[0];
+                if (!t || e.touches.length > 1 || (e.target.closest && e.target.closest('.node-card'))) { window.state.canvas._btap = null; return; }
+                window.state.canvas._btap = { x: t.clientX, y: t.clientY, t: Date.now() };
+            },
+            blankTapEnd: (e) => {
+                const tp = window.state.canvas._btap; window.state.canvas._btap = null;
+                const ct = e.changedTouches && e.changedTouches[0];
+                if (!tp || !ct || (e.target.closest && e.target.closest('.node-card')) || Date.now() - tp.t > 500 || Math.hypot(ct.clientX - tp.x, ct.clientY - tp.y) > 12) { window.state.canvas._blankLast = 0; return; }
+                const now = Date.now();
+                if (window.state.canvas._blankLast && now - window.state.canvas._blankLast < 450) { window.state.canvas._blankLast = 0; window.state.canvas._blankToggled = now; window.app.canvas.toggleMode(); }
+                else window.state.canvas._blankLast = now;
             },
             startPan: (e) => {
                 if (e.touches && e.touches.length === 2) {
@@ -1393,6 +1512,10 @@
                 }
                 if (window.state.canvas.draggedNodeId) {
                     window.state.canvas.draggedNodeId = null;
+                    try {
+                        const pre = window.state.canvas._dragPre; window.state.canvas._dragPre = null;
+                        if (pre && Object.keys(pre.pos).some(id => { const n = window.state.nodes.find(x => x.id === id), p = pre.pos[id]; return n && (Math.abs(n.x - p.x) > 3 || Math.abs(n.y - p.y) > 3); })) window.app.canvas.pushHistory('移動卡片', pre);
+                    } catch (e) {}
                 }
                 if (window.state.canvas.isSelecting) {
                     const start = window.state.canvas.selectionStart;
@@ -1489,7 +1612,22 @@
                 window.state.canvas.offsetY = 0;
                 window.app.canvas.applyTransform();
             },
+            // 手機: 在想法卡片上「快速點兩下」打開內容(手機瀏覽器在可拖曳的畫布上不會送出 dblclick, 所以自己判斷:
+            // 兩次輕點都沒有移動、間隔 0.45 秒內、在同一張卡片上)
+            tapStart: (e, id) => {
+                const t = e.touches && e.touches[0]; if (!t) return;
+                window.state.canvas._tap = { id: id, x: t.clientX, y: t.clientY, t: Date.now(), n: e.touches.length };
+            },
+            tapEnd: (e, id) => {
+                const tp = window.state.canvas._tap; window.state.canvas._tap = null;
+                const ct = e.changedTouches && e.changedTouches[0];
+                if (!tp || tp.id !== id || !ct || tp.n > 1 || Date.now() - tp.t > 500 || Math.hypot(ct.clientX - tp.x, ct.clientY - tp.y) > 12) { window.state.canvas._lastTap = null; return; }
+                const last = window.state.canvas._lastTap, now = Date.now();
+                if (last && last.id === id && now - last.t < 450) { window.state.canvas._lastTap = null; window.state.canvas._tapOpened = now; window.app.openNodeDetail(id); }
+                else window.state.canvas._lastTap = { id: id, t: now };
+            },
             startDrag: (e, id) => {
+                window.state.canvas._dragPre = window.app.canvas.snapshot('移動卡片');   // 拖曳之前的位置, 放開時有真的移動才記進歷史
                 window.state.canvas.draggedNodeId = id;
                 const c = window.app.canvas.getCoords(e);
                 window.state.canvas.lastX = c.x;
@@ -1510,44 +1648,201 @@
                 window.state.canvas.isHeatmapMode = !window.state.canvas.isHeatmapMode;
                 window.ui.renderCanvas();
             },
-            toggleCluster: () => {
-                const isCluster = !window.state.canvas.isClusterMode;
-                window.state.canvas.isClusterMode = isCluster;
-                const nodes = window.state.nodes.filter(n => n.topicId === window.state.currentTopicId);
-
-                if (isCluster) {
-                    const clusterGroups = { 'A': [], 'B': [], 'C': [], 'Other': [] };
-                    nodes.forEach(n => {
-                        if (window.CLUSTER_CENTERS[n.cluster]) clusterGroups[n.cluster].push(n);
-                        else clusterGroups['Other'].push(n);
-                    });
-
-                    const targets = [];
-                    const nodeW = 320;
-                    const nodeH = 200;
-                    Object.entries(clusterGroups).forEach(([key, groupNodes]) => {
-                        const center = window.CLUSTER_CENTERS[key] || {x: 0, y: 0, width: 1000, height: 1000};
-                        const cols = Math.max(1, Math.floor(center.width / nodeW));
-                        groupNodes.forEach((n, idx) => {
-                            if (n.savedX === undefined) { n.savedX = n.x; n.savedY = n.y; }
-                            const col = idx % cols;
-                            const row = Math.floor(idx / cols);
-                            const startX = center.x - ((cols * nodeW) / 2) + (nodeW / 2);
-                            const startY = center.y - (center.height / 2) + 100;
-                            const tx = startX + (col * nodeW);
-                            const ty = startY + (row * nodeH);
-                            targets.push({ id: n.id, x: tx, y: ty });
-                        });
-                    });
-                    window.app.canvas.animateNodes(targets);
-                } else {
-                    const targets = nodes.map(n => ({
-                        id: n.id,
-                        x: n.savedX !== undefined ? n.savedX : n.x,
-                        y: n.savedY !== undefined ? n.savedY : n.y
-                    }));
-                    window.app.canvas.animateNodes(targets);
+            /* ---- 最佳化排版 / 語意聚類 / 潛力熱點(算法在 kb-layout.js) ---- */
+            topicNodes: () => window.state.nodes.filter(n => n.topicId === window.state.currentTopicId),
+            // 卡片大小: 寬度看是不是手機; 高度量現在畫面上最高的那張(排版間距才不會讓卡片重疊)
+            cardSize: () => {
+                let h = 182; try { document.querySelectorAll('.node-card').forEach(e => { h = Math.max(h, e.offsetHeight || 0); }); } catch (e) {}
+                return { w: window.innerWidth < 768 ? 256 : 288, h: Math.min(h, 320) };
+            },
+            // 上方工具列的下拉選單: 開一個、其他關起來; 點空白處關閉
+            openMenu: (name, e) => {
+                if (e) e.stopPropagation();
+                ['layout', 'cluster'].forEach(k => { const m = document.getElementById('menu-' + k); if (m) { if (k === name) m.classList.toggle('hidden'); else m.classList.add('hidden'); } });
+            },
+            closeMenus: () => { ['layout', 'cluster'].forEach(k => { const m = document.getElementById('menu-' + k); if (m) m.classList.add('hidden'); }); },
+            // 排好之後的視角: 整張圖放得進畫面(縮放不小於 50%)就整張放進去; 太大(脈絡很長)就用 80%(手機 60%)看, 並移到第一則想法, 不要縮到看不清楚
+            viewAfterArrange: (width, height) => {
+                const wrap = document.getElementById('canvas-wrapper'); if (!wrap) return;
+                const cw = wrap.clientWidth || 800, ch = wrap.clientHeight || 600, c = window.state.canvas;
+                const fit = Math.min(1, cw / width, ch / height);
+                if (fit >= 0.5) { c.scale = fit; c.offsetX = Math.round((cw - width * fit) / 2); c.offsetY = Math.round(Math.max(0, (ch - height * fit) / 2)); window.app.canvas.applyTransform(); }
+                else { c.scale = window.innerWidth < 768 ? 0.6 : 0.8; window.app.centerOnFirstNode(false); }
+            },
+            fitBounds: (width, height) => {
+                const wrap = document.getElementById('canvas-wrapper'); if (!wrap || !width || !height) return;
+                const cw = wrap.clientWidth || 800, ch = wrap.clientHeight || 600;
+                const sc = Math.max(0.25, Math.min(1, cw / width, ch / height));
+                window.state.canvas.scale = sc;
+                window.state.canvas.offsetX = Math.round((cw - width * sc) / 2);
+                window.state.canvas.offsetY = Math.round(Math.max(0, (ch - height * sc) / 2) + 20);
+                window.app.canvas.applyTransform();
+            },
+            // 把想法放到新的位置: 位置先直接寫進資料(不靠動畫, 切到別的分頁、動畫被暫停也不會卡在半路), 接著呼叫端重畫
+            moveNodes: (targets) => {
+                const byId = {}; window.app.canvas.topicNodes().forEach(n => { byId[n.id] = n; });
+                targets.forEach(t => { const n = byId[t.id]; if (n) { n.x = t.x; n.y = t.y; } });
+            },
+            /* ---- 歷史: 排版、語意聚類、移動卡片, 每個討論區各記最近 20 步; 可以復原(Ctrl+Z), 也可以取消復原(Ctrl+Y) ---- */
+            HIST_MAX: 20,
+            hist: () => { const c = window.state.canvas, t = window.state.currentTopicId; c._h = c._h || {}; return (c._h[t] = c._h[t] || { u: [], r: [] }); },
+            snapshot: (label) => {
+                const pos = {}; window.app.canvas.topicNodes().forEach(n => { pos[n.id] = { x: n.x, y: n.y, sx: n.savedX, sy: n.savedY }; });
+                return { label: label || '', pos: pos, mode: window.state.canvas.clusterMode, zones: (window.state.canvas.zones || []).slice(), main: window.state.canvas.mainIds ? window.state.canvas.mainIds.slice() : null, labels: (window.state.canvas.branchLabels || []).map(x => Object.assign({}, x)), dir: window.state.canvas.layoutDir || null };
+            },
+            pushHistory: (label, snap) => {
+                const h = window.app.canvas.hist(); h.u.push(snap || window.app.canvas.snapshot(label)); if (h.u.length > window.app.canvas.HIST_MAX) h.u.shift(); h.r = [];
+            },
+            restoreSnapshot: (snap) => {
+                const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes();
+                nodes.forEach(n => { delete n.savedX; delete n.savedY; });
+                nodes.forEach(n => { const p = snap.pos[n.id]; if (p) { n.x = p.x; n.y = p.y; if (p.sx !== undefined) { n.savedX = p.sx; n.savedY = p.sy; } } });
+                c.clusterMode = snap.mode || null; c.isClusterMode = !!snap.mode; c.zones = (snap.zones || []).slice();
+                c.mainIds = snap.main ? snap.main.slice() : null; c.branchLabels = (snap.labels || []).map(x => Object.assign({}, x)); c.layoutDir = snap.dir || c.layoutDir || null; c.smartTok = (c.smartTok || 0) + 1;   // 復原時, 還在後台跑的 AI 結果不要再蓋上來
+                setTimeout(() => { try { window.dataManager.save(); } catch (e) {} }, 900);
+                window.ui.renderCanvas();
+            },
+            undoLayout: () => {
+                const C = window.app.canvas, h = C.hist(); C.closeMenus();
+                if (!h.u.length) return window.ui.showToast('沒有可以復原的步驟', 'info');
+                const snap = h.u.pop(), cur = C.snapshot(snap.label); h.r.push(cur); if (h.r.length > C.HIST_MAX) h.r.shift();
+                C.restoreSnapshot(snap);
+                window.ui.showToast('已復原「' + (snap.label || '上一步') + '」(還可以復原 ' + h.u.length + ' 步)', 'success');
+            },
+            redoLayout: () => {
+                const C = window.app.canvas, h = C.hist(); C.closeMenus();
+                if (!h.r.length) return window.ui.showToast('沒有可以取消復原的步驟', 'info');
+                const snap = h.r.pop(), cur = C.snapshot(snap.label); h.u.push(cur); if (h.u.length > C.HIST_MAX) h.u.shift();
+                C.restoreSnapshot(snap);
+                window.ui.showToast('已取消復原「' + (snap.label || '這一步') + '」(還可以取消復原 ' + h.r.length + ' 步)', 'success');
+            },
+            // 回到沒有聚類的狀態(不動畫、不存檔): 讓聚類或排版之前先把卡片放回自己原本的位置
+            clearCluster: (restore) => {
+                const c = window.state.canvas;
+                if (restore) window.app.canvas.topicNodes().forEach(n => { if (n.savedX !== undefined) { n.x = n.savedX; n.y = n.savedY; } });
+                window.app.canvas.topicNodes().forEach(n => { delete n.savedX; delete n.savedY; });
+                c.clusterMode = null; c.isClusterMode = false; c.zones = [];
+            },
+            // 最佳化排版: dir = 'LR'(從左到右) 或 'TB'(從上到下). 依發言脈絡排(第一則回應接在同一排, 其他回應排在上下的空排), 卡片不重疊; 排好會存起來, 並記進歷史
+            arrange: (dir) => {
+                const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes();
+                C.closeMenus();
+                if (!nodes.length) return window.ui.showToast('這個討論區還沒有想法可以排版', 'info');
+                if (!window.KBLayout) return;
+                C.pushHistory(dir === 'TB' ? '排版:從上到下' : '排版:從左到右');
+                c.smartTok++; c.smartBusy = false; c.mainIds = null; c.branchLabels = [];   // 一般排版: 沒有主脈絡標示, 也不要讓還在後台跑的 AI 結果蓋上來
+                if (c.clusterMode) C.clearCluster(true);
+                const sz = C.cardSize(), res = KBLayout.arrange(nodes, dir, { w: sz.w, h: sz.h });
+                c.layoutDir = res.dir;
+                C.moveNodes(res.targets);
+                C.viewAfterArrange(res.width, res.height);
+                setTimeout(() => { try { window.dataManager.save(); } catch (e) {} }, 900);
+                window.ui.showToast(dir === 'TB' ? '已排成「從上到下」: 想法往下推進, 同一串的第一則回應接在正下方, 其他回應排在左右的空欄' : '已排成「從左到右」: 想法往右推進, 同一串的第一則回應接在同一排, 其他回應排在上下的空排', 'success');
+                window.ui.renderCanvas();
+            },
+            // 語意聚類: mode = 'topic'(依內容主題) | 'type'(依想法類型) | null(關閉, 回到原本的位置)
+            setCluster: (mode) => {
+                const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes(); C.closeMenus();
+                if (!window.KBLayout) return;
+                if (!mode) {
+                    if (c.clusterMode) {
+                        C.pushHistory('關閉語意聚類');
+                        const targets = nodes.map(n => ({ id: n.id, x: n.savedX !== undefined ? n.savedX : n.x, y: n.savedY !== undefined ? n.savedY : n.y }));
+                        C.clearCluster(false); C.moveNodes(targets);
+                    }
+                    return window.ui.renderCanvas();
                 }
+                if (!nodes.length) return window.ui.showToast('這個討論區還沒有想法可以聚類', 'info');
+                C.pushHistory(mode === 'type' ? '語意聚類:依想法類型' : '語意聚類:依內容主題');
+                c.smartTok++; c.smartBusy = false; c.mainIds = null; c.branchLabels = [];
+                nodes.forEach(n => { if (n.savedX === undefined) { n.savedX = n.x; n.savedY = n.y; } });   // 記住原本的位置, 關閉聚類就放回去
+                const sz = C.cardSize(), groups = (mode === 'type' ? KBLayout.clusterTypes(nodes) : KBLayout.clusterTopics(nodes)).groups;
+                const narrow = window.innerWidth < 768;   // 手機: 一區一排往下排(橫的排會縮得太小)
+                const res = KBLayout.placeZones(groups, { w: sz.w, h: sz.h, oneRow: mode === 'type' && !narrow, perRow: narrow ? 1 : 3, maxCols: narrow ? 1 : (mode === 'type' ? 1 : 2) });
+                c.clusterMode = mode; c.isClusterMode = true; c.zones = res.zones;
+                C.moveNodes(res.targets); C.fitBounds(res.width, res.height);
+                window.ui.showToast(mode === 'type' ? '已依想法類型分區: 提問 / 延伸 / 改進 / 反例 / 昇華' : '已依內容主題分區(用貼文裡常出現的詞分群, 區名是這群最常出現的詞)', 'success');
+                window.ui.renderCanvas();
+            },
+            toggleCluster: () => { window.app.canvas.setCluster(window.state.canvas.clusterMode ? null : 'topic'); },
+            /* ---- 最佳化排版(AI 協助) ----
+               先用規則「立刻」排好(回應依「帶出多少討論」排序, 主脈絡排在同一排、箭頭加粗, 分支變淡), 版面馬上就能看;
+               有 AI 的話, 在後台請 AI 看內容: 找主脈絡、決定回應的先後、替重要分支取主題名, 完成後自動微調(這一步可以單獨復原).
+               AI 只提供「建議」(主脈絡、順序、名稱), 座標由程式精準計算, 建議不合理的部分會被忽略; AI 失敗就保留規則版. */
+            applySmart: (dir, order, labels) => {
+                const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes(), sz = C.cardSize();
+                const res = KBLayout.arrange(nodes, dir, { w: sz.w, h: sz.h, order: order });
+                c.layoutDir = res.dir; c.mainIds = KBLayout.mainLine(nodes, order); c.branchLabels = labels || [];
+                C.moveNodes(res.targets); C.viewAfterArrange(res.width, res.height);
+                setTimeout(() => { try { window.dataManager.save(); } catch (e) {} }, 900);
+                window.ui.renderCanvas();
+            },
+            optimize: async (dir) => {
+                const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes(); C.closeMenus();
+                if (!nodes.length) return window.ui.showToast('這個討論區還沒有想法可以排版', 'info');
+                if (!window.KBLayout) return;
+                dir = dir === 'TB' ? 'TB' : dir === 'LR' ? 'LR' : (c.layoutDir || 'LR');
+                const topic = window.state.currentTopicId, tok = ++c.smartTok, ids0 = nodes.length;
+                C.pushHistory('最佳化排版(' + (dir === 'TB' ? '從上到下' : '從左到右') + ')');
+                if (c.clusterMode) C.clearCluster(true);
+                const base = KBLayout.rankChildren(nodes);
+                C.applySmart(dir, base, []);   // 規則版: 立刻排好
+                const ai = await C.checkAi();
+                if (tok !== c.smartTok) return;
+                if (!ai) return window.ui.showToast('已最佳化排版: 主脈絡排在同一排、箭頭加粗, 分支變淡。(這裡沒有 AI 金鑰, 所以沒有 AI 協助; 設定 AI 金鑰後會自動加上)', 'success');
+                c.smartBusy = true; window.ui.showToast('已先用規則排好版面; AI 正在後台協助最佳化, 完成後會自動微調…', 'info'); window.ui.renderCanvas();
+                try {
+                    const f = KBLayout.forest(nodes), who = {}; let wn = 0, many = nodes.length > 120;
+                    const list = nodes.slice().sort((a, b) => (a.date || 0) - (b.date || 0)).slice(0, 220).map(n => {
+                        if (!who[n.author]) who[n.author] = '同學' + String.fromCharCode(65 + (wn++ % 26));
+                        return { id: n.id, 類型: (KBLayout.TYPE_ZH[n.type] || n.type), 作者: who[n.author], 回應給: n.parentId || '', 標題: String(n.title || '').slice(0, 30), 內容: String(n.content || '').slice(0, many ? 30 : 60), 後續回應數: (f.kids[n.id] || []).length };
+                    });
+                    const prompt = '你是知識建構論壇的小助教, 正在幫老師整理討論區的版面。下面是這個討論區的想法(JSON, 依發言時間排; 「回應給」是它回應的那一則的 id, 空白的是討論的起點)。\n請幫忙三件事:\n1. main: 找出「主脈絡」——從某個起點出發, 每一步選一則最能代表這個討論主要往哪裡探究的回應, 依序列出 id(每一則都要真的是上一則的回應)。\n2. order: 對有 2 則以上回應的想法, 依「最值得先看、最能把探究往前推」的順序排出它的回應 id(格式: 父想法 id → 回應 id 的陣列)。\n3. labels: 替最多 8 個重要的分支(用該分支第一則想法的 id)取 2~8 個字的主題名稱, 要讓小學生看得懂。\n版面要讓人看起來輕鬆、不累: 主脈絡不要太跳躍, 分支名稱要短。\n只回覆 JSON: {"main":["id",...],"order":{"父id":["id",...]},"labels":[{"id":"...","text":"..."}]}。不要使用「答案」兩個字。\n' + JSON.stringify(list);
+                    const resp = await window.app.kbAiJson(prompt);
+                    if (tok !== c.smartTok || window.state.currentTopicId !== topic) return;   // 使用者已經做了別的排版或換了討論區: 不蓋掉
+                    const clean = KBLayout.sanitizeAi(nodes, resp, base);
+                    C.pushHistory('AI 微調最佳化');
+                    C.applySmart(dir, clean.order, clean.labels);
+                    window.ui.showToast('AI 已協助最佳化: 主脈絡 ' + c.mainIds.length + ' 則, 分支主題 ' + clean.labels.length + ' 個(按 Ctrl+Z 可以回到規則版)', 'success');
+                } catch (e) {
+                    if (tok === c.smartTok) window.ui.showToast('AI 暫時無法協助, 已保留規則版的最佳化排版', 'error');
+                } finally { if (tok === c.smartTok) { c.smartBusy = false; window.ui.renderCanvas(); } }
+            },
+            // 潛力熱點: 先用規則算(回應數、回應的人數、延伸幾層、後續有沒有改進/反例/昇華、內容有沒有依據); AI 複核過的分數與規則各占一半
+            heatInfo: (nodes) => {
+                const c = window.state.canvas, base = KBLayout.heat(nodes), ai = (c.heatAi || {})[window.state.currentTopicId] || {};
+                let any = false;
+                Object.keys(base.scores).forEach(id => { const a = ai[id]; if (a && typeof a.score === 'number') { any = true; base.scores[id].ruleScore = base.scores[id].score; base.scores[id].score = Math.round((base.scores[id].score + a.score) / 2); base.scores[id].ai = a; } });
+                if (any) base.hotIds = KBLayout.pickHot(base.scores, nodes);
+                base.usedAi = any; return base;
+            },
+            checkAi: async () => {
+                const c = window.state.canvas; if (c.aiOk !== null) return c.aiOk;
+                let ok = false;
+                try { if (localStorage.getItem('kb_ai_key')) ok = true; else if (window.KBAI) { const st = await KBAI.status(); ok = !!(st && st.configured); } } catch (e) {}
+                c.aiOk = ok;
+                const b = document.getElementById('btn-heat-ai'); if (b) b.classList.toggle('hidden', !ok);
+                return ok;
+            },
+            // 請 AI 複核: 只送想法的文字(不送姓名; 作者換成代號), 要 AI 依「能不能把討論往前推」給 0~100 分與一句理由
+            askAiHeat: async () => {
+                const C = window.app.canvas, c = window.state.canvas, nodes = C.topicNodes();
+                if (!nodes.length) return;
+                const btn = document.getElementById('btn-heat-ai'), old = btn ? btn.innerHTML : '';
+                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> AI 複核中…'; }
+                try {
+                    const f = KBLayout.forest(nodes), who = {}; let wn = 0;
+                    const list = nodes.slice().sort((a, b) => (a.date || 0) - (b.date || 0)).slice(0, 60).map(n => {
+                        if (!who[n.author]) who[n.author] = '同學' + String.fromCharCode(65 + (wn++ % 26));
+                        return { id: n.id, 類型: (KBLayout.TYPE_ZH[n.type] || n.type), 作者: who[n.author], 標題: String(n.title || '').slice(0, 40), 內容: String(n.content || '').slice(0, 140), 回應數: (f.kids[n.id] || []).length, 回應給: n.parentId || '' };
+                    });
+                    const prompt = '你是知識建構論壇的小助教。下面是一個討論區的想法(JSON)。請替每一則想法打 0~100 分:看它「有沒有潛力把大家的討論往前推進」——例如提出值得探究的問題、有依據或推理、能連結不同的看法、可能被改進、質疑或整合。回應很多不代表一定好, 回應少的新想法如果很有潛力也可以高分。\n只回覆 JSON 陣列, 每則一筆:[{"id":"想法的id","score":分數,"why":"15 字內的理由"}]。不要使用「答案」兩個字。\n' + JSON.stringify(list);
+                    const arr = await window.app.kbAiJson(prompt);
+                    const out = {}; (Array.isArray(arr) ? arr : []).forEach(x => { if (x && x.id && isFinite(+x.score)) out[x.id] = { score: Math.max(0, Math.min(100, Math.round(+x.score))), why: String(x.why || '').slice(0, 40) }; });
+                    if (!Object.keys(out).length) throw new Error('AI 沒有回傳可以用的結果');
+                    c.heatAi = c.heatAi || {}; c.heatAi[window.state.currentTopicId] = out;
+                    window.ui.showToast('AI 已複核(AI 分數與規則分數各占一半)', 'success');
+                } catch (e) { window.ui.showToast('AI 複核失敗, 先用規則判斷: ' + String(e && e.message || e).slice(0, 60), 'error'); }
                 window.ui.renderCanvas();
             },
             animateNodes: (targets) => {
@@ -1661,7 +1956,7 @@
 
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
-                    const modals = ['modal-topic', 'modal-node', 'modal-detail', 'modal-confirm', 'modal-addUser', 'modal-trash', 'modal-analytics-menu'];
+                    const modals = ['modal-shortcuts', 'modal-topic', 'modal-node', 'modal-detail', 'modal-confirm', 'modal-addUser', 'modal-trash', 'modal-analytics-menu'];
                     modals.forEach(id => {
                         const el = document.getElementById(id);
                         if (el && !el.classList.contains('hidden')) {
@@ -1770,6 +2065,7 @@
         // 手機: 彈出鍵盤、縮放或畫面被推動時, 視窗跟著「真正看得到的範圍」, 上方的 X 和下方的按鈕才不會跑到畫面外
         window.ui.fitModal = (id) => {
             const ov = document.getElementById(id), vv = window.visualViewport; if (!ov || ov.classList.contains('hidden')) return;
+            try { ov.classList.toggle('kb-compact', id === 'modal-node' && !!vv && vv.height < 560 && !!(window.state && window.state.composer && window.state.composer.selectedScaffold)); } catch (e) {}
             const S = ['top', 'left', 'width', 'height', 'right', 'bottom'];
             if (!vv || (Math.abs(vv.offsetTop) < 1 && Math.abs(vv.offsetLeft) < 1 && Math.abs(vv.scale - 1) < 0.01 && Math.abs(vv.height - window.innerHeight) < 2)) { S.forEach(k => { ov.style[k] = ''; }); return; }
             ov.style.top = vv.offsetTop + 'px'; ov.style.left = vv.offsetLeft + 'px'; ov.style.width = vv.width + 'px'; ov.style.height = vv.height + 'px'; ov.style.right = 'auto'; ov.style.bottom = 'auto';
@@ -1929,16 +2225,38 @@
                     ${KB.topicClass(topic) ? `<span class="hidden md:inline-block bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"><i class="fa-solid fa-people-roof"></i> ${window.app.escH(window.app.className(KB.topicClass(topic)))}</span>` : ''}
                     ${window.app.canPost() ? '' : `<span id="readonly-badge" class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" title="${window.app.escH(KB.postBlock(topic.id))}"><i class="fa-solid fa-eye"></i> 僅閱讀</span>`}
                 </div>
-                <div class="flex gap-2 pointer-events-auto">
-                    <button onclick="window.app.canvas.toggleHeatmap()" id="btn-heatmap" class="${window.state.canvas.isHeatmapMode ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white/90 text-slate-500 border-slate-200'} backdrop-blur shadow-sm border rounded-lg px-3 py-1 text-xs font-bold flex items-center gap-1 transition-all hover:scale-105">
+                <div class="flex flex-wrap justify-end gap-1.5 md:gap-2 pointer-events-auto max-w-[62%] md:max-w-none">
+                    <button onclick="window.app.canvas.toggleHeatmap()" id="btn-heatmap" title="潛力熱點 (Alt+H)" class="${window.state.canvas.isHeatmapMode ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white/90 text-slate-500 border-slate-200'} backdrop-blur shadow-sm border rounded-lg px-3 py-1 text-xs font-bold flex items-center gap-1 transition-all hover:scale-105">
                         <i class="fa-solid fa-fire ${window.state.canvas.isHeatmapMode ? 'animate-pulse' : ''}"></i>
                         <span class="text-[10px] md:text-xs">潛力熱點</span>
                     </button>
-                    <button onclick="window.app.canvas.toggleCluster()" id="btn-cluster" class="${window.state.canvas.isClusterMode ? 'bg-purple-100 text-purple-600 border-purple-200' : 'bg-white/90 text-slate-500 border-slate-200'} backdrop-blur shadow-sm border rounded-lg px-3 py-1 text-xs font-bold flex items-center gap-1 transition-all hover:scale-105">
-                        <i class="fa-solid fa-sparkles ${window.state.canvas.isClusterMode ? 'text-purple-500' : ''}"></i>
-                        <span class="text-[10px] md:text-xs">語意聚類</span>
-                    </button>
+                    <div class="relative">
+                        <button onclick="window.app.canvas.openMenu('cluster', event)" id="btn-cluster" aria-haspopup="true" class="${window.state.canvas.isClusterMode ? 'bg-purple-100 text-purple-600 border-purple-200' : 'bg-white/90 text-slate-500 border-slate-200'} backdrop-blur shadow-sm border rounded-lg px-3 py-1 text-xs font-bold flex items-center gap-1 transition-all hover:scale-105">
+                            <i class="fa-solid fa-sparkles ${window.state.canvas.isClusterMode ? 'text-purple-500' : ''}"></i>
+                            <span class="text-[10px] md:text-xs">語意聚類${window.state.canvas.clusterMode === 'type' ? '・類型' : window.state.canvas.clusterMode === 'topic' ? '・主題' : ''}</span><i class="fa-solid fa-caret-down text-[9px]"></i>
+                        </button>
+                        <div id="menu-cluster" class="hidden absolute right-0 mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-lg p-1 z-50 text-xs text-slate-700">
+                            <button onclick="window.app.canvas.setCluster('topic')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-100"><b>依內容主題</b> <kbd class="kb-kbd">Alt+1</kbd><br><span class="text-slate-500">用貼文裡常出現的詞分群, 區名是這群最常出現的詞</span></button>
+                            <button onclick="window.app.canvas.setCluster('type')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-100"><b>依想法類型</b> <kbd class="kb-kbd">Alt+2</kbd><br><span class="text-slate-500">提問 / 延伸 / 改進 / 反例 / 昇華 各一區</span></button>
+                            ${window.state.canvas.clusterMode ? `<button onclick="window.app.canvas.setCluster(null)" class="w-full text-left px-3 py-2 rounded hover:bg-slate-100 text-slate-600 border-t border-slate-100 mt-1"><i class="fa-solid fa-rotate-left"></i> 關閉聚類, 放回原本的位置 <kbd class="kb-kbd">Alt+0</kbd></button>` : ''}
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <button onclick="window.app.canvas.openMenu('layout', event)" id="btn-layout" aria-haspopup="true" aria-label="整理排版" class="bg-white/90 text-slate-500 border-slate-200 backdrop-blur shadow-sm border rounded-lg px-3 py-1 text-xs font-bold flex items-center gap-1 transition-all hover:scale-105">
+                            <i class="fa-solid fa-diagram-project"></i><span class="text-[10px] md:text-xs">排版</span><i class="fa-solid fa-caret-down text-[9px]"></i>
+                        </button>
+                        <div id="menu-layout" class="hidden absolute right-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg p-1 z-50 text-xs text-slate-700">
+                            <div class="px-3 pt-2 text-[12px] text-indigo-700"><b><i class="fa-solid fa-wand-magic-sparkles"></i> 最佳化排版(AI 協助)</b> <kbd class="kb-kbd">Alt+O</kbd></div>
+                            <div class="px-3 pb-1 text-[11px] text-slate-500">找出主脈絡排在同一排、箭頭加粗, 分支變淡並標上主題, 看起來更輕鬆。先用規則立刻排好, AI 在後台協助微調, 結果可以復原。</div>
+                            <div class="flex gap-1 px-2 pb-2"><button onclick="window.app.canvas.optimize('LR')" class="flex-1 rounded bg-indigo-50 text-indigo-700 font-bold py-1.5 hover:bg-indigo-100"><i class="fa-solid fa-arrow-right"></i> 從左到右</button><button onclick="window.app.canvas.optimize('TB')" class="flex-1 rounded bg-indigo-50 text-indigo-700 font-bold py-1.5 hover:bg-indigo-100"><i class="fa-solid fa-arrow-down"></i> 從上到下</button></div>
+                            <div class="border-t border-slate-100 mt-1 pt-1 flex">
+                                <button onclick="window.app.canvas.undoLayout()" class="flex-1 text-left px-3 py-2 rounded hover:bg-slate-100 text-slate-600"><i class="fa-solid fa-rotate-left"></i> 復原 <span class="text-slate-400">(${window.app.canvas.hist().u.length}/20)</span> <kbd class="kb-kbd">Ctrl+Z</kbd></button>
+                                <button onclick="window.app.canvas.redoLayout()" class="flex-1 text-left px-3 py-2 rounded hover:bg-slate-100 text-slate-600"><i class="fa-solid fa-rotate-right"></i> 取消復原 <span class="text-slate-400">(${window.app.canvas.hist().r.length})</span> <kbd class="kb-kbd">Ctrl+Y</kbd></button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="bg-white/90 backdrop-blur shadow-sm border rounded-lg p-1 flex items-center">
+                        <button onclick="window.app.showShortcuts()" class="w-8 h-8 hidden md:flex items-center justify-center hover:bg-slate-100 text-slate-500" title="快捷鍵說明 (F1)" aria-label="快捷鍵說明"><i class="fa-regular fa-keyboard"></i></button>
                         <button onclick="window.app.centerOnFirstNode(true)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-kb-blue" title="回到起點"><i class="fa-solid fa-location-crosshairs"></i></button>
                         <div class="w-px h-5 bg-slate-200 mx-1"></div>
                         <button onclick="window.app.canvas.fitView()" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100" title="符合畫面(全部想法一次看到)" aria-label="符合畫面"><i class="fa-solid fa-expand"></i></button>
@@ -1980,7 +2298,8 @@
                  style="cursor: ${isPanMode ? 'grab' : 'default'}"
                  ondblclick="window.app.canvas.handleDoubleClick(event)"
                  onmousedown="window.app.canvas.startPan(event)"
-                 ontouchstart="window.app.canvas.startPan(event)"
+                 ontouchstart="window.app.canvas.blankTapStart(event); window.app.canvas.startPan(event)"
+                 ontouchend="window.app.canvas.blankTapEnd(event)"
                  onmousemove="window.app.canvas.pan(event)"
                  ontouchmove="window.app.canvas.pan(event)"
                  onwheel="window.app.canvas.handleWheel(event)">
@@ -1995,7 +2314,11 @@
             if (window.state.canvas.isClusterMode) {
                 const labelLayer = document.getElementById('cluster-labels-layer');
                 if (labelLayer) {
-                    labelLayer.innerHTML = Object.values(window.CLUSTER_CENTERS).map(c => `
+                    const zs = window.state.canvas.zones || [];
+                    labelLayer.innerHTML = zs.length ? zs.map(z => `
+                        <div class="cluster-zone" style="left: ${z.x}px; top: ${z.y}px; width: ${z.width}px; height: ${z.height}px;${z.color ? ' border-color:' + z.color + '66;' : ''}">
+                            <div class="cluster-title" style="${z.color ? 'color:' + z.color + '; border-color:' + z.color + '55;' : ''}">${window.app.escH(z.title)} <span style="opacity:.6">(${z.count})</span></div>
+                        </div>`).join('') : Object.values(window.CLUSTER_CENTERS).map(c => `
                         <div class="cluster-zone" style="left: ${c.x - c.width/2}px; top: ${c.y - c.height/2}px; width: ${c.width}px; height: ${c.height}px;">
                             <div class="cluster-title">${c.title}</div>
                         </div>`).join('');
@@ -2005,6 +2328,19 @@
             }
 
             window.ui.drawNodes(nodes);
+            try { if (window.state.canvas.smartBusy) { const hp = document.getElementById('canvas-wrapper'); if (hp && hp.parentNode) { const chip = document.createElement('div'); chip.id = 'smart-chip'; chip.className = 'smart-chip'; chip.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles fa-beat"></i> AI 正在後台協助最佳化…'; hp.parentNode.appendChild(chip); } } } catch (e) {}
+            try {   // 潛力熱點開著: 在工具列下面放一行說明(怎麼判斷的)與「請 AI 複核」
+                const hostEl = document.getElementById('canvas-wrapper');
+                if (window.state.canvas.isHeatmapMode && hostEl && hostEl.parentNode) {
+                    const hi = window.app.canvas.heatInfo(nodes), box = document.createElement('div');
+                    box.id = 'heat-note'; box.className = 'absolute top-32 md:top-20 right-2 md:right-4 z-40 max-w-[92%] md:max-w-sm bg-white/95 backdrop-blur border border-orange-200 rounded-lg shadow-sm px-3 py-2 text-[11px] text-slate-600 pointer-events-auto';
+                    box.innerHTML = `<div class="font-bold text-orange-600 mb-0.5"><i class="fa-solid fa-fire"></i> 潛力熱點 ${hi.hotIds.length} 則${hi.usedAi ? '(已加入 AI 複核)' : '(依規則判斷)'}</div>
+                        <div class="md:hidden">點卡片上的 🔥 看原因(也可以在電腦上把滑鼠移上去)</div>
+                        <div class="hidden md:block">看這則想法有沒有帶動討論: 回應數、回應的同學人數、延伸了幾層、後續有沒有改進/反例/昇華、內容有沒有依據。分數要夠高且排在前 30% 才算熱點; 把滑鼠移到 🔥 上可以看原因。</div>
+                        <button id="btn-heat-ai" onclick="window.app.canvas.askAiHeat()" class="${window.state.canvas.aiOk ? '' : 'hidden '}mt-1.5 bg-orange-500 text-white rounded px-2 py-1 font-bold"><i class="fa-solid fa-robot"></i> 請 AI 複核</button>`;
+                    hostEl.parentNode.appendChild(box); window.app.canvas.checkAi();
+                }
+            } catch (e) {}
 
             setTimeout(() => {
                 window.ui.drawConnections(nodes);
@@ -2094,6 +2430,8 @@
         window.ui.drawNodes = (nodes) => {
             const parentSet = new Set(window.state.nodes.map(n => n.parentId).filter(Boolean));
             const canPostNow = window.app.canPost();
+            const heatInfoNow = window.state.canvas.isHeatmapMode && window.KBLayout ? window.app.canvas.heatInfo(nodes) : null;
+            const labelMap = {}; (window.state.canvas.branchLabels || []).forEach(x => { labelMap[x.id] = x.text; });
             document.getElementById('nodes-layer').innerHTML = nodes.map(node => {
                 const s = window.SCAFFOLDS[node.type];
                 const user = Object.values(window.state.userList).find(u => u.id === node.author) || {name: '?'};
@@ -2101,18 +2439,22 @@
                 const canEdit = KB.can('forum.editOwn', { author: node.author });
 
                 // Strictly > 70 threshold
-                const isPromising = window.state.canvas.isHeatmapMode && node.promisingness > 70;
+                const hs = heatInfoNow && heatInfoNow.scores[node.id], isPromising = !!(window.state.canvas.isHeatmapMode && hs && hs.hot);
                 const heatmapClass = isPromising ? 'promising-node' : '';
-                const flameBadge = isPromising ? `<div class="absolute -top-3 -right-2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm animate-bounce-slow z-50"><i class="fa-solid fa-fire"></i> 熱點</div>` : '';
+                const heatWhy = hs ? window.app.escH(((hs.ai && hs.ai.why) ? 'AI: ' + hs.ai.why + '。' : '') + (hs.reasons.length ? hs.reasons.join('、') : '還沒有人回應') + '(分數 ' + hs.score + ')') : '';
+                const labelHtml = labelMap[node.id] ? `<div class="branch-label" title="分支主題(AI 協助)">${window.app.escH(labelMap[node.id])}</div>` : '';
+                const flameBadge = isPromising ? `<div title="${heatWhy}" class="absolute -top-3 -right-2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm animate-bounce-slow z-50"><i class="fa-solid fa-fire"></i> 熱點 ${hs.score}</div>` : '';
                 const isSelected = window.state.selectedNodeIds.includes(node.id) ? 'selected-node' : '';
 
                 return `
                 <div id="node-${node.id}" class="absolute node-card w-64 md:w-72 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-visible ${heatmapClass} ${isSelected}"
                      style="left: ${node.x}px; top: ${node.y}px;"
                      onmousedown="event.stopPropagation(); window.app.canvas.startDrag(event, '${node.id}')"
-                     ontouchstart="event.stopPropagation(); window.app.canvas.startDrag(event, '${node.id}')"
-                     ondblclick="event.stopPropagation(); window.app.openNodeDetail('${node.id}')">
+                     ontouchstart="event.stopPropagation(); window.app.canvas.tapStart(event, '${node.id}'); window.app.canvas.startDrag(event, '${node.id}')"
+                     ontouchend="window.app.canvas.tapEnd(event, '${node.id}')"
+                     ondblclick="event.stopPropagation(); if (Date.now() - (window.state.canvas._tapOpened || 0) > 700) window.app.openNodeDetail('${node.id}')">
                     ${flameBadge}
+                    ${labelHtml}
                     <div class="px-3 py-2 ${s.bgSoft} border-b ${s.border} flex justify-between items-center cursor-move rounded-t-xl">
                         <div class="flex items-center gap-2">
                             <span class="w-5 h-5 rounded-full ${s.color} text-white flex justify-center items-center text-xs"><i class="fa-solid ${s.icon}"></i></span>
@@ -2155,25 +2497,27 @@
             const cardWidth = window.innerWidth < 768 ? 256 : 288;
             const halfW = cardWidth / 2;
 
+            const hOf = (n) => { const el = document.getElementById('node-' + n.id); return (el && el.offsetHeight) || 160; };
+            const mainSet = (window.state.canvas.mainIds && window.state.canvas.mainIds.length) ? new Set(window.state.canvas.mainIds) : null;
+            const colorMap = { question: '#3b82f6', extend: '#eab308', improve: '#22c55e', counter: '#ef4444', riseabove: '#a855f7' };
             const paths = nodes.filter(n => n.parentId).map(node => {
                 const parent = window.state.nodes.find(p => p.id === node.parentId);
                 if (!parent) return '';
-                const startX = parent.x + halfW;
-                const startY = parent.y + 140;
-                const endX = node.x + halfW;
-                const endY = node.y;
-
-                const dist = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-                let curveFactor = 0.4;
-                if (endY < startY) curveFactor = 0.6;
-
-                const cp1x = startX;
-                const cp1y = startY + dist * curveFactor;
-                const cp2x = endX;
-                const cp2y = endY - dist * curveFactor;
-
-                const colorMap = { question: '#3b82f6', extend: '#eab308', improve: '#22c55e', counter: '#ef4444', riseabove: '#a855f7' };
-                return `<path d="M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}" stroke="${colorMap[node.type]}" fill="none" stroke-width="2" stroke-opacity="0.6" marker-end="url(#arrow-${node.type})" />`;
+                const ph = hOf(parent), nh = hOf(node), isMain = mainSet && mainSet.has(parent.id) && mainSet.has(node.id);
+                const stroke = `stroke="${colorMap[node.type]}" fill="none" stroke-width="${mainSet ? (isMain ? 3.4 : 1.6) : 2}" stroke-opacity="${mainSet ? (isMain ? 0.95 : 0.4) : 0.65}" marker-end="url(#arrow-${node.type})"`;   // 最佳化之後: 主脈絡的箭頭加粗, 分支變淡(視覺有重點、不累)
+                if (node.x - (parent.x + cardWidth) > 24) {   // 回應在想法的右邊: 想法右緣中間 → 回應左緣中間
+                    const sx = parent.x + cardWidth, sy = parent.y + ph / 2, ex = node.x, ey = node.y + nh / 2;
+                    if (Math.abs(ey - sy) < 2) return `<path d="M ${sx} ${sy} L ${ex} ${ey}" ${stroke} />`;   // 同一排: 一條直線
+                    const dx = (ex - sx) * 0.5; return `<path d="M ${sx} ${sy} C ${sx + dx} ${sy}, ${ex - dx} ${ey}, ${ex} ${ey}" ${stroke} />`;
+                }
+                const startX = parent.x + halfW, startY = parent.y + ph, endX = node.x + halfW, endY = node.y;
+                if (endY - startY > 20) {   // 回應在想法的下方: 想法下緣中間 → 回應上緣中間(垂直的 S 形; 同一欄是直線)
+                    if (Math.abs(endX - startX) < 2) return `<path d="M ${startX} ${startY} L ${endX} ${endY}" ${stroke} />`;
+                    const off = (endY - startY) * 0.5; return `<path d="M ${startX} ${startY} C ${startX} ${startY + off}, ${endX} ${endY - off}, ${endX} ${endY}" ${stroke} />`;
+                }
+                const dist = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));   // 其他位置(手動排的): 保留原本的弧線
+                let curveFactor = 0.4; if (endY < startY) curveFactor = 0.6;
+                return `<path d="M ${startX} ${startY} C ${startX} ${startY + dist * curveFactor}, ${endX} ${endY - dist * curveFactor}, ${endX} ${endY}" ${stroke} />`;
             }).join('');
 
             layer.innerHTML += paths;
