@@ -1948,6 +1948,12 @@
             window.dataManager.load();
             try {   // 語音輸入:在「標題」「內容」旁邊加「🎤 用說的」(原本的打字輸入不變)
                 if (window.KBVoice) KBVoice.init({
+                    // AI 補標點(只加標點、不改字; 沒有 AI 就不會用): kb-voice.js 會檢查 AI 回的字跟原本完全一樣才採用
+                    aiPunct: async (text) => {
+                        if (!window.KBAI || !KBAI.available || !(await KBAI.available())) return null;
+                        const r = await window.app.kbAiJson('你是中文標點助手。下面是小學生用語音輸入說出來的一段話(語音辨識的結果, 沒有標點)。請只做一件事: 幫它加上適當的標點符號(，。？！、：；「」), 像一般文章那樣依語意斷句。\n嚴格規則: 不可以增加、刪除、改寫、調換任何一個字(包含錯字也不要改), 只能插入標點; 問句用「？」結尾; 不要加換行。\n只回傳 JSON: {"text":"加好標點的全文"}\n原文: ' + JSON.stringify(text));
+                        return r && typeof r.text === 'string' ? r.text : null;
+                    },
                     fields: [{ el: document.getElementById('node-title'), id: 'node-title', label: '標題' }, { el: document.getElementById('node-content'), id: 'node-content', label: '內容' }],
                     getContext: () => {
                         const t = window.state.topics.find(x => x.id === window.state.currentTopicId) || {};

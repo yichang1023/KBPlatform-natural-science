@@ -331,8 +331,9 @@
   }
 
   /* ---------- 狀態 ---------- */
-  var cfg = { getContext: null, silenceMs: 30000, noSpeechMs: 30000, useTrack: false, usePhrases: false, proto: '', autoPunct: lsGetP() };
+  var cfg = { getContext: null, silenceMs: 30000, noSpeechMs: 30000, useTrack: false, usePhrases: false, proto: '', autoPunct: lsGetP(), autoEnd: lsGetAE(), autoEndMs: 4500, aiPunct: null };
   function lsGetP() { try { return global.localStorage.getItem('kb_voice_punct') !== '0'; } catch (e) { return true; } }
+  function lsGetAE() { try { return global.localStorage.getItem('kb_voice_autoend') !== '0'; } catch (e) { return true; } }
   function isFile() { return (cfg.proto || (global.location && global.location.protocol)) === 'file:'; }
   var FILE_TIP = '你現在是用「檔案」方式(file://)開啟網頁,Chrome 在這種方式下不會記住麥克風權限,所以才會一直問。請雙擊資料夾裡的「<b>啟動測試版.bat</b>」,改用 localhost 開啟,只會問一次,也才有音量條和錄音。';
   var fields = {};            // id -> { el, multiline, btn, meta:{used,raw,auto,confSum,confN,rawParts[]}, segs:[], base:'' }
@@ -362,11 +363,13 @@
     panel = doc.createElement('div'); panel.id = 'kbv-panel'; panel.className = 'kbv-panel hidden'; panel.setAttribute('role', 'status'); panel.setAttribute('aria-live', 'polite');
     panel.innerHTML = '<div class="kbv-top"><div class="kbv-state" data-k="state"></div><div class="kbv-meter" data-k="meter" aria-hidden="true"></div></div>' +
       '<div class="kbv-live" data-k="live"></div><div data-k="hint"></div><div class="kbv-chips" data-k="chips"></div><div data-k="alts"></div>' +
-      '<div class="kbv-acts" data-k="acts"></div><div class="kbv-tags" data-k="tags"></div><label class="kbv-pt"><input type="checkbox" data-k="punct"> 自動加標點(說話停頓補逗號、說完補句號,語氣上揚或問句補問號)</label><details class="kbv-cmds"><summary>口說標點(像 iPhone 一樣:說出名字就打出符號)</summary>說「逗號」→ ，　「句號」→ 。　「問號」→ ？　「驚嘆號」→ ！　「冒號」→ ：　「分號」→ ；　「頓號」→ 、　「刪節號」→ ……　「破折號」→ ——　「左引號」「右引號」→ 「 」　「左括號」「右括號」→ （ ）　「換行」→ 換一行　「新段落」→ 空一行</details><div class="kbv-note" data-k="note"></div>' +
+      '<div class="kbv-acts" data-k="acts"></div><div class="kbv-tags" data-k="tags"></div><label class="kbv-pt"><input type="checkbox" data-k="punct"> 自動加標點(說話停頓補逗號、說完補句號,語氣上揚或問句補問號)</label><label class="kbv-pt"><input type="checkbox" data-k="autoend"> 說完停一下,自動收起來(不用每次按「說完了」)</label><details class="kbv-cmds"><summary>口說標點(像 iPhone 一樣:說出名字就打出符號)</summary>說「逗號」→ ，　「句號」→ 。　「問號」→ ？　「驚嘆號」→ ！　「冒號」→ ：　「分號」→ ；　「頓號」→ 、　「刪節號」→ ……　「破折號」→ ——　「左引號」「右引號」→ 「 」　「左括號」「右括號」→ （ ）　「換行」→ 換一行　「新段落」→ 空一行</details><div class="kbv-note" data-k="note"></div>' +
       '<details class="kbv-diag"><summary>診斷資訊(出問題時請截圖給老師)</summary><pre data-k="diag"></pre></details>';
-    ['state', 'meter', 'live', 'hint', 'chips', 'alts', 'acts', 'tags', 'punct', 'note', 'diag'].forEach(function (k) { P[k] = panel.querySelector('[data-k=' + k + ']'); });
+    ['state', 'meter', 'live', 'hint', 'chips', 'alts', 'acts', 'tags', 'punct', 'autoend', 'note', 'diag'].forEach(function (k) { P[k] = panel.querySelector('[data-k=' + k + ']'); });
     var m = ''; for (var i = 0; i < 12; i++) m += '<i></i>'; P.meter.innerHTML = m;
     P.punct.checked = cfg.autoPunct !== false;
+    P.autoend.checked = cfg.autoEnd !== false;
+    P.autoend.onchange = function () { cfg.autoEnd = P.autoend.checked; try { global.localStorage.setItem('kb_voice_autoend', P.autoend.checked ? '1' : '0'); } catch (e) {} };
     P.punct.onchange = function () {
       cfg.autoPunct = P.punct.checked; try { global.localStorage.setItem('kb_voice_punct', P.punct.checked ? '1' : '0'); } catch (e) {}
       var f = curField; if (!f) return;
@@ -626,7 +629,12 @@
       setState(a.gotAudio ? '🎤 我在聽,請開始說話…' : '🎤 準備好了,請開始說話…');
       if (now - a.startedAt > cfg.noSpeechMs) { endSession('nospeech'); }
     } else if (speaking) setState('👂 聽到了!慢慢說,說完再按「說完了」');
-    else {
+    else if (cfg.autoEnd !== false && a.replaceIdx === undefined && !a.interimLen && a.f.segs.some(function (s) { return !s.deleted; })) {
+      // 已經有說完的句子, 又安靜了一陣子: 像 iPhone 一樣自己收起來(還想說就直接開口, 會繼續收音)
+      var leftA = Math.max(1, Math.ceil((cfg.autoEndMs - sinceVoice) / 1000));
+      setState(sinceVoice > 1500 ? '🎤 說完了嗎?' + leftA + ' 秒後我自動收起來(想繼續說就直接說)' : '🎤 想一想也沒關係,想好了繼續說');
+      if (sinceVoice > cfg.autoEndMs) endSession('auto');
+    } else {
       var left = Math.ceil((cfg.silenceMs - sinceVoice) / 1000);
       setState(left <= 5 ? '🎤 還在嗎?' + left + ' 秒後我會先收起來' : '🎤 想一想也沒關係,想好了繼續說,說完請按「說完了」');
       if (sinceVoice > cfg.silenceMs) endSession('silence');
@@ -768,7 +776,8 @@
       f.btn.classList.remove('on'); f.btn.setAttribute('aria-pressed', 'false'); setMeter(0); setLive('', '');
       qualityAdvice(a);
       if (a.replaceIdx === undefined) writeField(f);   // 把還沒確定的暫時文字換成整理好的正式文字
-      showDone(f, a.advice || '');
+      showDone(f, a.advice || (reason === 'auto' && f.segs.length ? '你停了一下,我先幫你收起來了。還想說就按「繼續說」。' : ''));
+      if (reason !== 'nospeech' && a.replaceIdx === undefined && f.segs.length && segConf(f) >= 0.5) maybeAiPunct(f);
       if (reason === 'nospeech' && !f.segs.length) { setState('😶 沒有聽到聲音'); setHint('我沒有聽到聲音。請確認麥克風沒有靜音、離近一點,再按「🎤 再試一次」,或改用打字。', 'bad'); actions([{ label: '🎤 再試一次', main: true, fn: function () { start(f, {}); } }, { label: '⌨️ 改用打字', fn: function () { hidePanel(); f.el.focus(); } }]); }
       else if (!f.segs.length && a.hadSpeech) { setState('🤔 我聽不出你說什麼'); setHint('聽到你有說話,但是聽不清楚內容。請<b>慢一點、一句一句說</b>,離麥克風近一點;或改用打字。', 'bad'); actions([{ label: '🎤 再說一次', main: true, fn: function () { start(f, {}); } }, { label: '⌨️ 改用打字', fn: function () { hidePanel(); f.el.focus(); } }]); }
       else if (reason === 'toomany') setHint('已經聽很久了,先幫你收起來。要繼續請再按「繼續說」。', '');
@@ -811,6 +820,60 @@
   function cancelAll() { if (A) cancelSession(); hidePanel(); }
   function reset() { cancelAll(); Object.keys(fields).forEach(function (id) { var f = fields[id]; f.segs = []; f.base = ''; f.after = ''; f.auto = undefined; f.meta = { used: false, rawParts: [], confSum: 0, confN: 0, manual: false }; if (f.clipUrl) { try { global.URL.revokeObjectURL(f.clipUrl); } catch (e) {} f.clipUrl = null; } }); if (P.chips) P.chips.innerHTML = ''; if (P.alts) P.alts.innerHTML = ''; }
   // 發文時帶走的紀錄:語音辨識原始文字 + 學生有沒有再修改
+  /* ---------- AI 補標點(只加標點、不改字) ----------
+   *  說完之後, 如果這一站有 AI(由論壇頁提供 cfg.aiPunct), 把「去掉標點的辨識文字」交給 AI 加標點, 像 iPhone 聽寫一樣依語意判斷逗號與句號。
+   *  AI 只提供建議: 程式會檢查「去掉標點與空白之後, 文字和原本完全一樣」才採用, 多一個字、少一個字、換一個字都會整個丟掉, 回到原本規則補的標點。
+   *  採用後可以按「還原標點」回到原本的版本。  */
+  var P_ALL = /[\s，。、？！：；,.?!:;…「」『』“”"'‘’（）()《》〈〉—\-～~·]/g;
+  function stripAll(s) { return String(s || '').replace(P_ALL, ''); }
+  // 檢查 AI 回傳的文字: 只能多了標點; 通過回傳整理過的全形標點文字, 沒通過回傳 null
+  function verifyPunct(orig, out) {
+    if (typeof out !== 'string') return null;
+    var o = out.trim(); if (!o || /[\r\n]/.test(o)) return null;
+    if (stripAll(o) !== stripAll(orig)) return null;
+    if (o.length > String(orig).length * 2 + 10) return null;
+    o = o.replace(/(\D),(?=\D)/g, '$1，').replace(/\?/g, '？').replace(/!/g, '！').replace(/(\D):(?=\D)/g, '$1：').replace(/;/g, '；');
+    return o;
+  }
+  // 句尾: 這段話後面沒有字才補句號/問號; 插在別的文字中間就不要自己收尾
+  function finishAiText(f, text) {
+    var t = text;
+    if (closingOK(f)) {
+      if (/[，、；：,;:]$/.test(t)) t = t.slice(0, -1) + enderFor(t.slice(0, -1));
+      else if (!/[。？！…?!.」』）)]$/.test(t)) t += enderFor(t);
+    } else t = t.replace(/[，。、？！；：,.?!;:]+$/, '');
+    return seam(f, t);
+  }
+  function maybeAiPunct(f) {
+    if (typeof cfg.aiPunct !== 'function' || cfg.autoPunct === false || !f.multiline) return;
+    var list = f.segs.filter(function (s) { return !s.deleted && s.text; });
+    if (!list.length) return;
+    var plain = list.map(function (s) { return s.text; }).join('').replace(/[，。、？！：；,.?!:;…]/g, '').replace(/\s+/g, ' ').trim();
+    var n = stripAll(plain).length; if (n < 10 || n > 600) return;
+    var tok = f.aiTok = (f.aiTok || 0) + 1, expect = f.auto;
+    setHint('✨ AI 正在幫你補標點…(只加標點、不會改你說的字)', '');
+    var timer, limit = new Promise(function (res) { timer = setTimeout(function () { res(null); }, 9000); });
+    Promise.race([Promise.resolve().then(function () { return cfg.aiPunct(plain); }), limit]).then(function (out) {
+      clearTimeout(timer);
+      if (f.aiTok !== tok || A) return;   // 又開始說話了, 或換了別的
+      if (String(f.el.value) !== expect) { setHint('', ''); return; }   // 這段時間你自己改了字, 不要蓋掉
+      var fixed = verifyPunct(plain, out);
+      if (!fixed) { dlog('AI 補標點沒有採用'); setHint('', ''); return; }
+      fixed = finishAiText(f, fixed);
+      var v = (f.base || '') + fixed + (f.after || ''), prev = { value: f.el.value, caret: f.caret };
+      if (v === f.el.value) { setHint('', ''); return; }
+      setVal(f, v, (f.base || '').length + fixed.length); f.auto = v; f.meta.aiPunct = true;
+      try { f.el.dispatchEvent(new global.Event('input', { bubbles: true })); } catch (e) {}
+      setHint('✨ AI 幫你補好標點了(只加標點,沒有改字)。不喜歡的話可以按「還原標點」。', 'ok');
+      var cur = P.acts ? Array.prototype.slice.call(P.acts.querySelectorAll('button')) : [];
+      if (cur.length && !P.acts.querySelector('[data-undo-ai]')) {
+        var b = doc.createElement('button'); b.type = 'button'; b.className = 'kbv-act'; b.setAttribute('data-undo-ai', '1'); b.textContent = '↩ 還原標點';
+        b.onclick = function () { if (String(f.el.value) === f.auto) { setVal(f, prev.value, prev.caret); f.auto = prev.value; f.meta.aiPunct = false; try { f.el.dispatchEvent(new global.Event('input', { bubbles: true })); } catch (e) {} } setHint('已經還原成原本的標點。', 'ok'); b.remove(); };
+        P.acts.insertBefore(b, P.acts.firstChild.nextSibling);
+      }
+    }).catch(function () { clearTimeout(timer); if (f.aiTok === tok) setHint('', ''); });
+  }
+
   function collect() {
     var out = null;
     Object.keys(fields).forEach(function (id) {
@@ -818,14 +881,14 @@
       var final = String(f.el.value || '');
       var key = id.replace(/^node-/, '');
       out = out || {};
-      out[key] = { raw: f.meta.rawParts.join(' | ').slice(0, 600), edited: !!f.meta.manual || final !== (f.auto === undefined ? '' : f.auto), conf: f.meta.confN ? Math.round(f.meta.confSum / f.meta.confN * 100) / 100 : 0 };
+      out[key] = { raw: f.meta.rawParts.join(' | ').slice(0, 600), edited: !!f.meta.manual || final !== (f.auto === undefined ? '' : f.auto), aiPunct: !!f.meta.aiPunct, conf: f.meta.confN ? Math.round(f.meta.confSum / f.meta.confN * 100) / 100 : 0 };
     });
     return out;
   }
 
   global.KBVoice = {
-    init: function (o) { o = o || {}; cfg.getContext = o.getContext || null; if (o.silenceMs) cfg.silenceMs = o.silenceMs; if (o.noSpeechMs) cfg.noSpeechMs = o.noSpeechMs; (o.fields || []).forEach(function (x) { attach(x.el, x); }); },
+    init: function (o) { o = o || {}; cfg.getContext = o.getContext || null; if (typeof o.aiPunct === 'function') cfg.aiPunct = o.aiPunct; if (o.autoEndMs) cfg.autoEndMs = o.autoEndMs; if (o.silenceMs) cfg.silenceMs = o.silenceMs; if (o.noSpeechMs) cfg.noSpeechMs = o.noSpeechMs; (o.fields || []).forEach(function (x) { attach(x.el, x); }); },
     attach: attach, refresh: refresh, stop: cancelAll, isActive: function () { return !!A; }, reset: reset, collect: collect, enabled: enabled, supported: supported,
-    _t: { tidyPunct: tidyPunct, SPOKEN_WORDS: SPOKEN_WORDS, punctuate: punctuate, enderFor: enderFor, isQuestionText: isQuestionText, setAuto: function (v) { cfg.autoPunct = v; }, setProto: function (p) { cfg.proto = p; }, cfg: cfg, pickBest: pickBest, applyFixes: applyFixes, spokenPunct: spokenPunct, composeText: composeText, joinerFor: joinerFor, detectPitch: detectPitch, pitchRise: pitchRise, composedFor: composedFor, rebase: rebase, squeezeSpaces: squeezeSpaces, processSegmentText: processSegmentText, buildVocab: buildVocab, looksLikeQuestion: looksLikeQuestion, state: function () { return { A: A, fields: fields }; }, LEXICON: LEXICON, FIX: FIX }
+    _t: { setAiPunct: function (fn) { cfg.aiPunct = fn; }, setAutoEnd: function (v) { cfg.autoEnd = v; }, verifyPunct: verifyPunct, finishAiText: finishAiText, tidyPunct: tidyPunct, SPOKEN_WORDS: SPOKEN_WORDS, punctuate: punctuate, enderFor: enderFor, isQuestionText: isQuestionText, setAuto: function (v) { cfg.autoPunct = v; }, setProto: function (p) { cfg.proto = p; }, cfg: cfg, pickBest: pickBest, applyFixes: applyFixes, spokenPunct: spokenPunct, composeText: composeText, joinerFor: joinerFor, detectPitch: detectPitch, pitchRise: pitchRise, composedFor: composedFor, rebase: rebase, squeezeSpaces: squeezeSpaces, processSegmentText: processSegmentText, buildVocab: buildVocab, looksLikeQuestion: looksLikeQuestion, state: function () { return { A: A, fields: fields }; }, LEXICON: LEXICON, FIX: FIX }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
