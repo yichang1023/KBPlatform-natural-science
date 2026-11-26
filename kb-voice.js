@@ -345,7 +345,7 @@
   }
 
   /* ---------- 狀態 ---------- */
-  var cfg = { getContext: null, silenceMs: 30000, noSpeechMs: 30000, useTrack: false, usePhrases: false, proto: '', autoPunct: lsGetP(), autoEnd: lsGetAE(), autoEndMs: 4500, aiPunct: null };
+  var cfg = { getContext: null, silenceMs: 30000, noSpeechMs: 30000, useTrack: false, usePhrases: false, proto: '', autoPunct: lsGetP(), autoEnd: lsGetAE(), autoEndMs: 10000, aiPunct: null };
   function lsGetP() { try { return global.localStorage.getItem('kb_voice_punct') !== '0'; } catch (e) { return true; } }
   function lsGetAE() { try { return global.localStorage.getItem('kb_voice_autoend') !== '0'; } catch (e) { return true; } }
   function isFile() { return (cfg.proto || (global.location && global.location.protocol)) === 'file:'; }
@@ -657,7 +657,7 @@
     else if (cfg.autoEnd !== false && a.replaceIdx === undefined && !a.interimLen && a.f.segs.some(function (s) { return !s.deleted; })) {
       // 已經有說完的句子, 又安靜了一陣子: 像 iPhone 一樣自己收起來(還想說就直接開口, 會繼續收音)
       var leftA = Math.max(1, Math.ceil((cfg.autoEndMs - sinceVoice) / 1000));
-      setState(sinceVoice > 1500 ? '🎤 說完了嗎?' + leftA + ' 秒後我自動收起來(想繼續說就直接說)' : '🎤 想一想也沒關係,想好了繼續說');
+      setState(cfg.autoEndMs - sinceVoice <= 4000 ? '🎤 說完了嗎?' + leftA + ' 秒後我自動收起來(想繼續說就直接說)' : '🎤 想一想也沒關係,想好了繼續說');   // 前面安靜地等, 只有最後 4 秒才倒數
       if (sinceVoice > cfg.autoEndMs) endSession('auto');
     } else {
       var left = Math.ceil((cfg.silenceMs - sinceVoice) / 1000);
