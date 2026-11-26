@@ -53,6 +53,20 @@
     var re = new RegExp('([' + CJK + '])\\s+(?=[' + CJK + '])', 'g');
     return String(s || '').replace(re, '$1').replace(/\s+([，。？！、：；,.?!])/g, '$1');
   }
+  // 拖長音或雜音時辨識器會吐出「還還還還還…」:同一個字連續超過 5 個,只留 3 個(原始辨識文字另外留存,不改)
+  function collapseRuns(s) { return String(s || '').replace(/([㐀-鿿])\1{5,}/g, '$1$1$1'); }
+  // 同一時間辨識器可能回好幾筆「還沒確定」的結果,有些手機/瀏覽器每一筆都包含前一筆(疊在一起)。
+  // 被別筆完整包含的就丟掉,不重疊的(穩定的一段 + 還在變的一段)兩段都留
+  function mergeInterim(list) {
+    var out = [];
+    list.forEach(function (t) {
+      t = String(t || ''); var k = t.replace(/\s+/g, ''); if (!k) return;
+      for (var i = 0; i < out.length; i++) { if (out[i].k.indexOf(k) >= 0) return; }
+      out = out.filter(function (o) { return k.indexOf(o.k) < 0; });
+      out.push({ t: t, k: k });
+    });
+    return out.map(function (o) { return o.t; }).join('');
+  }
   function countHits(text, vocab) { var n = 0; for (var i = 0; i < vocab.length; i++) { if (vocab[i].length > 1 && text.indexOf(vocab[i]) >= 0) n++; } return n; }
 
   // 口說標點(像 iPhone 的聽寫):說出標點的名字就打出標點。也收錄辨識器常聽錯的說法(例如「豆號」「巨號」)
@@ -179,7 +193,7 @@
   }
   function cfgAuto() { return cfg.autoPunct !== false; }
   function processSegmentText(raw, multiline, marks) {
-    var t = squeezeSpaces(String(raw || '').trim());
+    var t = collapseRuns(squeezeSpaces(String(raw || '').trim()));
     t = applyFixes(t).text;
     if (multiline) t = punctuate(t, marks);   // 先依停頓與連接詞補逗號(位置依原始辨識文字)
     t = spokenPunct(t, multiline);            // 再把口說的標點名稱換成符號(說出來的優先,自動補的較弱標點會被整理掉)
@@ -610,8 +624,10 @@
         var gap = now - a.silentSince;
         if (a.curMark) { a.curMark.ms = gap; a.curMark = null; }
         if (a.lastSeg && a.lastSegPending) { a.lastSeg.gap = gap; a.lastSegPending = false; }
+        if (gap > 1200) a.voiceResume = now;
         a.silentSince = 0; a.pitchBuf = [];
       }
+      if (!a.hadSpeech) a.voiceResume = now;
       a.lastVoice = now; a.hadSpeech = true; a.speechFrames++; a.maxRms = Math.max(a.maxRms, rms); if (clipped > buf.length * 0.02) a.clip++;
       if (a.ctx && a.ctx.sampleRate) { var f0 = detectPitch(buf, a.ctx.sampleRate); (a.pitchBuf = a.pitchBuf || []).push(f0); if (a.pitchBuf.length > 30) a.pitchBuf.shift(); }
     } else if (a.hadSpeech) {
@@ -628,7 +644,16 @@
     if (!a.hadSpeech) {
       setState(a.gotAudio ? '🎤 我在聽,請開始說話…' : '🎤 準備好了,請開始說話…');
       if (now - a.startedAt > cfg.noSpeechMs) { endSession('nospeech'); }
-    } else if (speaking) setState('👂 聽到了!慢慢說,說完再按「說完了」');
+    } else if (speaking) {
+      // 一直有聲音、辨識器卻很久沒有送字來(說太快或辨識器塞住了):先告訴孩子;太久就讓辨識器把手上的字送出來並重開(字會先留下來)
+      var stall = now - Math.max(a.lastEventAt || 0, a.recStartedAt || 0, a.voiceResume || 0);
+      if (stall > 6000 && a.rec && now - (a.flushAt || 0) > 8000) {
+        a.flushAt = now; dlog('辨識器 ' + Math.round(stall / 1000) + ' 秒沒有回應,讓它送出目前的字並重開');
+        var rr = a.rec; try { rr.stop(); } catch (e) {}
+        setTimeout(function () { if (A === a && a.rec === rr && !a.recEnded && a.active && !a.stopping) { try { rr.abort(); } catch (e) {} } }, 2500);
+      }
+      setState(stall > 2500 ? '👂 有聽到,正在變成文字…說太快會比較慢,可以一句一句說' : '👂 聽到了!慢慢說,說完再按「說完了」');
+    }
     else if (cfg.autoEnd !== false && a.replaceIdx === undefined && !a.interimLen && a.f.segs.some(function (s) { return !s.deleted; })) {
       // 已經有說完的句子, 又安靜了一陣子: 像 iPhone 一樣自己收起來(還想說就直接開口, 會繼續收音)
       var leftA = Math.max(1, Math.ceil((cfg.autoEndMs - sinceVoice) / 1000));
@@ -665,13 +690,14 @@
     rec.onspeechstart = function () { dlog('speechstart(聽到說話)'); };
     rec.onspeechend = function () { dlog('speechend'); };
     rec.onresult = function (e) {
-      var interim = '', now = Date.now(); a.rt = a.rt || {};
+      var parts = [], now = Date.now(); a.rt = a.rt || {}; a.cm = a.cm || {}; a.lastEventAt = now;
       for (var i = e.resultIndex; i < e.results.length; i++) {
         var r = e.results[i], txt = r[0] ? r[0].transcript : '';
-        if (r.isFinal) commit(a, r, i);
-        else { var rt = a.rt[i] || (a.rt[i] = { t0: now, t1: now, txt: '', interim: true }); if (txt !== rt.txt) { rt.txt = txt; rt.t1 = now; } a.curIdx = i; interim += txt; }
+        if (r.isFinal) { var ck = txt.replace(/\s+/g, ''); if (a.cm[i] === ck) { dlog('同一句重複送來(第 ' + i + ' 句),略過'); continue; } a.cm[i] = ck; commit(a, r, i); }
+        else { var rt = a.rt[i] || (a.rt[i] = { t0: now, t1: now, txt: '', interim: true }); if (txt !== rt.txt) { rt.txt = txt; rt.t1 = now; } a.curIdx = i; parts.push(txt); }
       }
-      a.interim = interim; a.interimLen = squeezeSpaces(interim).length; showInterim(a);
+      var interim = mergeInterim(parts);
+      a.interim = interim; a.interimLen = collapseRuns(squeezeSpaces(interim)).length; showInterim(a);
     };
     rec.onerror = function (e) {
       var code = e && e.error; a.errs++; dlog('錯誤 ' + code);
@@ -684,14 +710,17 @@
       if (a.softErrs > 2) failSession(a, msgFor(code));
     };
     rec.onend = function () {
-      dlog('辨識器 end' + (A === a && a.active && !a.stopping ? '(會自動重開)' : ''));
+      dlog('辨識器 end' + (A === a && a.active && !a.stopping ? '(會自動重開)' : '')); a.recEnded = true;
+      // 按了「說完了」之後:辨識器把最後的結果送完就收尾(不用乾等)
+      if (A === a && a.finishing && a.finishFn) { setTimeout(a.finishFn, 80); return; }
       if (A !== a || !a.active || a.stopping) return;
       if (a.replaceIdx !== undefined && a.replaced) return endSession('replaced');
+      salvage(a, '辨識器自己結束');   // 還沒確定的字先留下來, 不要因為重開而不見
       // 一開始就立刻結束好幾次:通常是麥克風權限沒被允許(或被瀏覽器收回)
       if (a.recStartedAt && Date.now() - a.recStartedAt < 1200) { a.rapidEnds = (a.rapidEnds || 0) + 1; if (a.rapidEnds >= 3) return failSession(a, msgFor('not-allowed')); } else a.rapidEnds = 0;
       a.restarts++;
       if (a.restarts > 60) return endSession('toomany');
-      setTimeout(function () { if (A === a && a.active && !a.stopping) startRec(a); }, 150);
+      setTimeout(function () { if (A === a && a.active && !a.stopping) startRec(a); }, 40);   // 重開越快, 中間漏聽的字越少
     };
     actions([{ label: '✅ 說完了', main: true, fn: function () { endSession('manual'); } }, { label: '✖ 取消這次', fn: function () { cancelSession(); } }]);
     setState('🎤 準備好了,請開始說話…');
@@ -700,7 +729,7 @@
   // 一邊說一邊讓文字直接出現在輸入欄裡(停頓處會先出現逗號;還沒確定的部分,收尾時整理成正式文字)
   function marksFor(a) { return a.marks.filter(function (m) { return m.idx === undefined || a.curIdx === undefined || m.idx === a.curIdx; }); }
   function showInterim(a) {
-    var f = a.f, raw = squeezeSpaces(a.interim || ''), shown = spokenPunct(f.multiline ? punctuate(raw, marksFor(a)) : raw, f.multiline);
+    var f = a.f, raw = collapseRuns(squeezeSpaces(a.interim || '')), shown = spokenPunct(f.multiline ? punctuate(raw, marksFor(a)) : raw, f.multiline);
     setLive(composeText(f.segs, f.multiline), shown);
     if (a.replaceIdx === undefined) {
       var comp = composedFor(f);
@@ -710,10 +739,19 @@
   }
   function startRec(a) {
     try {
-      a.usedTrack = false; a.recStartedAt = Date.now(); a.rt = {}; a.curIdx = undefined; if (a.restarts > 0) { a.marks = []; a.curMark = null; }
+      a.usedTrack = false; a.recStartedAt = Date.now(); a.recEnded = false; a.rt = {}; a.cm = {}; a.curIdx = undefined; if (a.restarts > 0) { a.marks = []; a.curMark = null; }
       if (cfg.useTrack && a.track && a.restarts === 0) { try { a.rec.start(a.track); a.usedTrack = true; return; } catch (e) {} }
       a.rec.start();
     } catch (e) { /* 已在收音中 */ }
+  }
+  // 辨識器沒來得及把最後一段「確定」就結束了:已經出現在欄位裡的暫時文字不要丟掉, 當成一句(信心標低, 會標黃色請孩子確認)
+  function salvage(a, why) {
+    var t = collapseRuns(squeezeSpaces(a.interim || '')).trim();
+    a.interim = ''; a.interimLen = 0;
+    if (!t || a.replaceIdx !== undefined) return false;
+    dlog('把還沒確定的字先留下來「' + t.slice(0, 12) + '」(' + why + ')');
+    commit(a, [{ transcript: t, confidence: 0.45 }], undefined);
+    return true;
   }
   // 一句話辨識完成
   function commit(a, r, idx) {
@@ -772,7 +810,7 @@
     // 讓辨識器把最後一句送回來(約 0.6 秒),再收尾
     setState('⏳ 整理中…');
     var finish = function () {
-      if (a.done) return; a.done = true; stopStream(a); if (A === a) A = null;
+      if (a.done) return; a.done = true; salvage(a, '收尾時還沒確定'); stopStream(a); if (A === a) A = null;
       f.btn.classList.remove('on'); f.btn.setAttribute('aria-pressed', 'false'); setMeter(0); setLive('', '');
       qualityAdvice(a);
       if (a.replaceIdx === undefined) writeField(f);   // 把還沒確定的暫時文字換成整理好的正式文字
@@ -782,7 +820,8 @@
       else if (!f.segs.length && a.hadSpeech) { setState('🤔 我聽不出你說什麼'); setHint('聽到你有說話,但是聽不清楚內容。請<b>慢一點、一句一句說</b>,離麥克風近一點;或改用打字。', 'bad'); actions([{ label: '🎤 再說一次', main: true, fn: function () { start(f, {}); } }, { label: '⌨️ 改用打字', fn: function () { hidePanel(); f.el.focus(); } }]); }
       else if (reason === 'toomany') setHint('已經聽很久了,先幫你收起來。要繼續請再按「繼續說」。', '');
     };
-    setTimeout(finish, a.rec ? 650 : 0);
+    a.finishFn = finish;
+    setTimeout(finish, a.rec ? 3000 : 0);   // 最多等 3 秒讓辨識器把最後的字送回來(送完會提早收尾); 還是沒送來的暫時文字, 收尾時會留下來
   }
   function qualityAdvice(a) {
     var adv = [];
@@ -889,6 +928,6 @@
   global.KBVoice = {
     init: function (o) { o = o || {}; cfg.getContext = o.getContext || null; if (typeof o.aiPunct === 'function') cfg.aiPunct = o.aiPunct; if (o.autoEndMs) cfg.autoEndMs = o.autoEndMs; if (o.silenceMs) cfg.silenceMs = o.silenceMs; if (o.noSpeechMs) cfg.noSpeechMs = o.noSpeechMs; (o.fields || []).forEach(function (x) { attach(x.el, x); }); },
     attach: attach, refresh: refresh, stop: cancelAll, isActive: function () { return !!A; }, reset: reset, collect: collect, enabled: enabled, supported: supported,
-    _t: { setAiPunct: function (fn) { cfg.aiPunct = fn; }, setAutoEnd: function (v) { cfg.autoEnd = v; }, verifyPunct: verifyPunct, finishAiText: finishAiText, tidyPunct: tidyPunct, SPOKEN_WORDS: SPOKEN_WORDS, punctuate: punctuate, enderFor: enderFor, isQuestionText: isQuestionText, setAuto: function (v) { cfg.autoPunct = v; }, setProto: function (p) { cfg.proto = p; }, cfg: cfg, pickBest: pickBest, applyFixes: applyFixes, spokenPunct: spokenPunct, composeText: composeText, joinerFor: joinerFor, detectPitch: detectPitch, pitchRise: pitchRise, composedFor: composedFor, rebase: rebase, squeezeSpaces: squeezeSpaces, processSegmentText: processSegmentText, buildVocab: buildVocab, looksLikeQuestion: looksLikeQuestion, state: function () { return { A: A, fields: fields }; }, LEXICON: LEXICON, FIX: FIX }
+    _t: { collapseRuns: collapseRuns, mergeInterim: mergeInterim, setAiPunct: function (fn) { cfg.aiPunct = fn; }, setAutoEnd: function (v) { cfg.autoEnd = v; }, verifyPunct: verifyPunct, finishAiText: finishAiText, tidyPunct: tidyPunct, SPOKEN_WORDS: SPOKEN_WORDS, punctuate: punctuate, enderFor: enderFor, isQuestionText: isQuestionText, setAuto: function (v) { cfg.autoPunct = v; }, setProto: function (p) { cfg.proto = p; }, cfg: cfg, pickBest: pickBest, applyFixes: applyFixes, spokenPunct: spokenPunct, composeText: composeText, joinerFor: joinerFor, detectPitch: detectPitch, pitchRise: pitchRise, composedFor: composedFor, rebase: rebase, squeezeSpaces: squeezeSpaces, processSegmentText: processSegmentText, buildVocab: buildVocab, looksLikeQuestion: looksLikeQuestion, state: function () { return { A: A, fields: fields }; }, LEXICON: LEXICON, FIX: FIX }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
