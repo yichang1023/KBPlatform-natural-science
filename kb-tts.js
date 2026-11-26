@@ -574,6 +574,10 @@
    * 標點與段落之間停頓, 說書人用更大的起伏. 瀏覽器聲音沒有「語氣描述」可以送, 所以用語速、音高、停頓來模擬. */
   function synth() { return H.synth || global.speechSynthesis || null; }
   function Utter(t) { return H.Utter ? new H.Utter(t) : new global.SpeechSynthesisUtterance(t); }
+  // 手機瀏覽器(Android Chrome、iOS Safari)常有的毛病: 剛叫它「取消朗讀」就立刻叫它念新的一句, 這一句會被吃掉、完全不出聲也沒有任何事件
+  // (讀到一半換人聲、語氣、語音來源就會碰到)。所以記下最後一次取消的時間, 開口前至少隔 CANCEL_SETTLE 毫秒。
+  var lastCancelAt = 0, CANCEL_SETTLE = 320;
+  function synthCancel(s) { lastCancelAt = Date.now(); try { s.cancel(); } catch (e) {} }
   var MALE_RE = /zhiwei|danny|kangkang|yunjhe|yunxi|yunyang|yunjian|yunhao|ichiro|\bmale\b|\u7537/i;
   var TW_RE = /zh[-_]TW|zh[-_]Hant[-_]TW|Taiwan|\u81fa\u7063|\u53f0\u7063/i, NOT_TW_RE = /zh[-_]HK|zh[-_]CN|zh[-_]SG|yue|cantonese|Hong\s*Kong|Mainland|China|tracy|\u7ca4|\u9999\u6e2f|\u666e\u901a\u8bdd|\u666e\u901a\u8a71|\u4e2d\u56fd|\u4e2d\u570b|\u5927\u9678/i;
   function twVoices() {   // 台灣國語的聲音(男女都列, 依品質排序); 完全沒有台灣聲音才退而求其次用其他中文聲音
@@ -1204,13 +1208,32 @@
           if (fired[i + 1]) return;   // 下一句已經排在佇列裡, 瀏覽器會自己接著念
           after(un.gap, function () { fire(i + 1); });
         }
-        u.onstart = function () { if (!queuedBehind) noteBrLat(Date.now() - t0); if (un.gap <= BR_PRE_GAP) fire(i + 1, true); };
+        var started = false, tried = false, speakT = null, nt = null;
+        u.onstart = function () { started = true; if (nt) { clearTimeout(nt); nt = null; } if (!queuedBehind) noteBrLat(Date.now() - t0); if (un.gap <= BR_PRE_GAP) fire(i + 1, true); };
         u.onend = ended;
         u.onerror = function (e) { if (tok !== self.token) return; if (e && (e.error === 'interrupted' || e.error === 'canceled')) return; if (wd) { clearTimeout(wd); wd = null; } finished = true; say('朗讀失敗: ' + (e && e.error || '瀏覽器聲音無法播放')); done(); };
         us.push(u); self.u = us;   // 留著參照: Chrome 會把沒人參照的語音物件回收掉, onend 就永遠不會來
         var est = Math.round(un.text.length * 450 / Math.max(0.5, u.rate || 1)) + 5000;   // 保險: 有些瀏覽器的 onend 不會來, 超過預估時間就接著念下一個(排在別人後面的要多等前面那一句)
-        wd = setTimeout(function () { if (finished || tok !== self.token) return; try { s.cancel(); } catch (e) {} for (var j = i + 1; j < units.length; j++) fired[j] = false; ended(); }, queuedBehind ? est + 20000 : est);
-        s.speak(u);
+        function launch() {
+          speakT = null; if (finished || !live()) return;
+          t0 = Date.now();
+          try { if (s.paused && s.resume) s.resume(); } catch (e) {}   // 有些手機取消後會卡在「暫停」狀態
+          wd = setTimeout(function () { if (finished || tok !== self.token) return; synthCancel(s); for (var j = i + 1; j < units.length; j++) fired[j] = false; ended(); }, queuedBehind ? est + 20000 : est);
+          s.speak(u);
+          // 保險: 叫它念了 2.5 秒還沒聽到開始(被手機瀏覽器吃掉了), 就取消、換一個新的語音物件重念一次(只重試一次)
+          if (!queuedBehind && !tried) nt = setTimeout(function () {
+            nt = null; if (started || finished || !live()) return;
+            tried = true; if (wd) { clearTimeout(wd); wd = null; }
+            var old = u; old.onstart = old.onend = old.onerror = null; synthCancel(s);
+            u = Utter(un.text); ['voice', 'lang', 'rate', 'pitch', 'volume'].forEach(function (k) { if (old[k] !== undefined) { try { u[k] = old[k]; } catch (e) {} } });
+            u.onstart = old.__onstart; u.onend = ended; u.onerror = old.__onerror;
+            us.push(u); self.u = us;
+            speakT = setTimeout(launch, CANCEL_SETTLE * 2.5);
+          }, 2500);
+        }
+        u.__onstart = u.onstart; u.__onerror = u.onerror;
+        var settle = CANCEL_SETTLE - (Date.now() - lastCancelAt);
+        if (settle > 0 && !queuedBehind) speakT = setTimeout(launch, settle); else launch();
       }
       fire(0, false);
     }
@@ -1221,7 +1244,7 @@
       self.audio = null; self.chunkT0 = Date.now(); self.pausedAt = 0;
       if (self.engine === 'browser') speakBrowser(c, tok); else speakAi(c, tok);
     }
-    function cancelBrowser() { var s = synth(); if (s && s.cancel) { try { s.cancel(); } catch (e) {} } }
+    function cancelBrowser() { var s = synth(); if (s && s.cancel) synthCancel(s); }
     this.play = function () { if (self.state === 'playing') return; self.token++; self.i = self.state === 'paused' ? self.i : (o.from || 0); set('playing'); run(self.token); };
     this.pause = function () {
       if (self.state !== 'playing') return; self.pausedAt = Date.now(); set('paused'); self.token++; clearWait(); clearGap();
